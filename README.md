@@ -1,4 +1,4 @@
-# Find_My_Az_Management_Permissions
+# Find My Az Management Permissions
 
 **The tool accepts an Az Management access token as parameter and finds all the resources that pricipal can access and all the granular permission that principal has over each resource it has access to.**
 
@@ -9,10 +9,10 @@ This script uses an Azure Management API access token to:
   4. List all management groups and check the user's permissions on them.
 
 Usage:
-    `python azure_perms_audit.py --token <AZURE_MANAGEMENT_TOKEN> [--threads N] [--filter-type TYPE] [--json]`
+    `python FindMyAzPerms.py --token <AZURE_MANAGEMENT_TOKEN> [--threads N] [--filter-type TYPE] [--json]`
 
 Example:
-    `python azure_perms_audit.py --token eyJhbGciOi... --threads 8 --filter-type Microsoft.Compute/virtualMachines`
+    `python FindMyAzPerms.py --token eyJhbGciOi... --threads 8 --filter-type Microsoft.Compute/virtualMachines`
 
 Note:
 - The token should be an Azure Resource Manager token (https://management.azure.com).
