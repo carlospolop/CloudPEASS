@@ -9,10 +9,13 @@ This script uses an Azure Management API access token to:
   4. List all management groups and check the user's permissions on them.
 
 Usage:
-    `python FindMyAzPerms.py --token <AZURE_MANAGEMENT_TOKEN> [--threads N] [--filter-type TYPE] [--json]`
 
-Example:
-    `python FindMyAzPerms.py --token eyJhbGciOi... --threads 8 --filter-type Microsoft.Compute/virtualMachines`
+```bash
+python3 FindMyAzPerms.py --token <AZURE_MANAGEMENT_TOKEN> [--threads N] [--filter-type TYPE] [--json]
+# e.g.
+python3 FindMyAzPerms.py --token "$(az account get-access-token --resource-type arm | jq -r .accessToken)"
+python3 FindMyAzPerms.py --token eyJhbGciOi... --threads 8 --filter-type Microsoft.Compute/virtualMachines
+```
 
 Note:
 - The token should be an Azure Resource Manager token (https://management.azure.com).
