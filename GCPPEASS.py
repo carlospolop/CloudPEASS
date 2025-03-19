@@ -1004,8 +1004,6 @@ class GCPPEASS(CloudPEASS):
             for perm in perms.copy():
                 if " " + perm + " " in str(e):
                     perms.remove(perm)
-                    with open("/tmp/rem.text", "a") as f:
-                        f.write(perm+"\n")
                     return self.check_permissions(resource_id, perms, verbose)
         except Exception as e:
             print("Error:")
@@ -1176,8 +1174,8 @@ class GCPPEASS(CloudPEASS):
 
 
 if __name__ == "__main__":
-    #print("Not ready yet!")
-    #exit(1)
+    print("Not ready yet!")
+    exit(1)
 
     parser = argparse.ArgumentParser(description="GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.")
 
