@@ -6,6 +6,8 @@ The current goal of **Cloud PEASS** is simple: Once you manage to get **some cre
 
 The sensitive permissions and attacks are discovered based on the sensitive permissions documented in **[HackTricks Cloud](https://cloud.hacktricks.wiki/en/index.html) and also asking the HackTricks AI**.
 
+**Note that at the moment HackTricks AI will share information with OpenAI**, however, as we just share permission and resource names and not the actual data, it should be safe to use. If you don't want to use HackTricks AI, you can use the **`--not-use-hacktricks-ai`** flag.
+
 ## AzurePEASS
 
 AzurePEASS will check all **your permissions in Azure and in Entra ID** and will try to find **privilege escalation** paths and other potential attacks.
