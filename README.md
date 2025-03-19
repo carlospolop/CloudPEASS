@@ -1,4 +1,4 @@
-# Cloud PEASS
+# Cloud Privilege Escalation Awesome Script Suite
 
 **Still in development phase!**
 
