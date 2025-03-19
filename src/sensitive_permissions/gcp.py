@@ -9,7 +9,7 @@ very_sensitive_combinations = [
     
     ["artifactregistry.repositories.uploadArtifacts"],
 
-    ["clientauthconfig.clients.getWithSecret", "clientauthconfig.clients.listWithSecrets"]
+    ["clientauthconfig.clients.getWithSecret", "clientauthconfig.clients.listWithSecrets"],
 
     ["cloudbuild.repositories.accessReadToken"],
     ["cloudbuild.repositories.accessReadWriteToken"],
@@ -49,7 +49,7 @@ very_sensitive_combinations = [
     ["container.scheduledJobs.create"],
     ["container.scheduledJobs.update"],
     ["container.statefulSets.create"],
-    ["container.statefulSets.update"]
+    ["container.statefulSets.update"],
     ["container.secrets.get"],
     ["container.secrets.list"],
     ["container.pods.exec"],
@@ -97,7 +97,7 @@ sensitive_combinations = [
     ["bigquery.tables.getData"],
     ["cloudbuild.connections.fetchLinkableRepositories"],
     ["cloudkms.cryptoKeyVersions.useToDecrypt"],
-    ["cloudkms.cryptoKeyVersions.useToDecryptViaDelegation"]
+    ["cloudkms.cryptoKeyVersions.useToDecryptViaDelegation"],
     ["storage.objects.get"],
     ["storage.objects.delete"],
     ["appengine.memcache.addKey"],

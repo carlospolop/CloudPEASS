@@ -90,7 +90,8 @@ very_sensitive_combinations = [
     ["Microsoft.Compute/virtualMachines/loginAsAdmin/action"],
 
     ["Microsoft.KeyVault/vaults/secrets/getSecret/action"],
-    
+
+    ["Owner"]
 ]
 
 sensitive_combinations = [

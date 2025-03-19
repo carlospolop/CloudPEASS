@@ -2,8 +2,12 @@ import argparse
 import requests
 import jwt
 import time
+import os
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
+from colorama import Fore, Style, init, Back
+
+init(autoreset=True)
 
 from src.CloudPEASS.cloudpeass import CloudPEASS
 from src.sensitive_permissions.azure import very_sensitive_combinations, sensitive_combinations
@@ -45,7 +49,14 @@ class AzurePEASS(CloudPEASS):
         super().__init__(very_sensitive_combos, sensitive_combos, "Azure", not_use_ht_ai, num_threads, AZURE_MALICIOUS_RESPONSE_EXAMPLE, AZURE_SENSITIVE_RESPONSE_EXAMPLE, out_path)
 
         if not self.arm_token and not self.graph_token:
-            raise ValueError("At lest an ARM token or Graph token is needed")
+            print(f"{Fore.RED}At lest an ARM token or Graph token is needed. Exiting.")
+            exit(1)
+        
+        if not self.arm_token:
+            print(f"{Fore.RED}ARM token not provided. Skipping Azure permissions analysis")
+        
+        if not self.graph_token:
+            print(f"{Fore.RED}Graph token not provided. Skipping EntraID permissions analysis")
 
         if self.arm_token:
             self.check_jwt_token(self.arm_token, ["https://management.azure.com/", "https://management.core.windows.net/"])
@@ -65,9 +76,9 @@ class AzurePEASS(CloudPEASS):
                 raise ValueError(f"Invalid audience. Expected '{expected_audiences}', got '{decoded.get('aud')}'")
 
             # Check if token has expired
-            current_time = int(time.time())
+            current_time = int(time.time() + 30) # Extra 30 secs to account for clock skew
             if decoded.get("exp", 0) < current_time:
-                raise ValueError("Token has expired")
+                raise ValueError(f"Token {decoded.get('aud')} has expired")
 
             return True
 
@@ -151,44 +162,47 @@ class AzurePEASS(CloudPEASS):
 
     def get_resources_and_permissions(self):
         resources_data = []
-        subs = self.list_subscriptions()
 
-        def process_subscription(sub_id):
-            sub_resources = []
-            raw_resources = self.list_resources_in_subscription(sub_id)
+        if self.arm_token:
+            subs = self.list_subscriptions()
 
-            perms = self.get_permissions_for_resource(f"/subscriptions/{sub_id}")
-            if perms:
-                sub_resources.append({
-                    "id": f"/subscriptions/{sub_id}",
-                    "name": sub_id,
-                    "type": "subscription",
-                    "permissions": perms
-                })
+            def process_subscription(sub_id):
+                sub_resources = []
+                raw_resources = self.list_resources_in_subscription(sub_id)
 
-            for res in raw_resources:
-                res_id = res.get("id")
-                res_name = res.get("name")
-                res_type = res.get("type")
-                perms = self.get_permissions_for_resource(res_id)
-                sub_resources.append({
-                    "id": res_id,
-                    "name": res_name,
-                    "type": res_type,
-                    "permissions": perms
-                })
-            return sub_resources
+                perms = self.get_permissions_for_resource(f"/subscriptions/{sub_id}")
+                if perms:
+                    sub_resources.append({
+                        "id": f"/subscriptions/{sub_id}",
+                        "name": sub_id,
+                        "type": "subscription",
+                        "permissions": perms
+                    })
 
-        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            results = list(tqdm(executor.map(process_subscription, subs), total=len(subs), desc="Processing Subscriptions"))
+                for res in raw_resources:
+                    res_id = res.get("id")
+                    res_name = res.get("name")
+                    res_type = res.get("type")
+                    perms = self.get_permissions_for_resource(res_id)
+                    sub_resources.append({
+                        "id": res_id,
+                        "name": res_name,
+                        "type": res_type,
+                        "permissions": perms
+                    })
+                return sub_resources
 
-        for sub_result in results:
-            resources_data.extend(sub_result)
+            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                results = list(tqdm(executor.map(process_subscription, subs), total=len(subs), desc="Processing Subscriptions"))
 
-        print("Analyzing Permissions from EntraID...")
-        resources_data += self.EntraIDPEASS.get_entraid_memberships()
-        resources_data += self.EntraIDPEASS.get_eligible_roles()
-        resources_data += self.EntraIDPEASS.get_entraid_owns()
+            for sub_result in results:
+                resources_data.extend(sub_result)
+
+        if self.graph_token:
+            print("Getting Permissions from EntraID...")
+            resources_data += self.EntraIDPEASS.get_entraid_memberships()
+            resources_data += self.EntraIDPEASS.get_eligible_roles()
+            resources_data += self.EntraIDPEASS.get_entraid_owns()
 
         return resources_data
 
@@ -196,11 +210,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks.\nTo check for Azure permissions an ARM token is neded.\nTo check for Entra ID permissions a Graph token is needed.")
     parser.add_argument('--arm-token', help="Azure Management authentication token")
     parser.add_argument('--graph-token', help="Azure Graph authentication token")
-    parser.add_argument('--out', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
+    parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
     parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
     parser.add_argument('--not-use-hacktricks-ai', action="store_false", default=False, help="Don't use Hacktricks AI to analyze permissions")
 
     args = parser.parse_args()
 
-    azure_peass = AzurePEASS(args.arm_token, args.graph_token, very_sensitive_combinations, sensitive_combinations, not_use_ht_ai=args.not_use_hacktricks_ai, num_threads=args.threads, out_path=args.out)
+    arm_token = args.arm_token
+    arm_token = os.getenv("AZURE_ARM_TOKEN", arm_token)
+
+    graph_token = args.graph_token
+    graph_token = os.getenv("AZURE_ARM_TOKEN", graph_token)
+
+    azure_peass = AzurePEASS(arm_token, graph_token, very_sensitive_combinations, sensitive_combinations, not_use_ht_ai=args.not_use_hacktricks_ai, num_threads=args.threads, out_path=args.out_json_path)
     azure_peass.run_analysis()

@@ -5,11 +5,15 @@ from tqdm import tqdm
 import time
 import requests
 import fnmatch
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import pdb
+import faulthandler
 
 from colorama import Fore, Style, init, Back
 
 init(autoreset=True)
+faulthandler.enable()
 
 HACKTRICKS_AI_ENDPOINT = "https://www.hacktricks.ai/api/ht-api"
 
@@ -35,6 +39,7 @@ __CLOUD_SPECIFIC_EXAMPLE__
 
 ### CLARIFICATIONS
 Remember to indicate as many sensitive permissions as possible.
+Always recheck the permissions and their descriptions to ensure they are correct and avoid false possitives.
 If no malicious actions are found, please provide an empty JSON array: []
 
 """
@@ -60,9 +65,19 @@ __CLOUD_SPECIFIC_EXAMPLE__
 ### CLARIFICATIONS
 Remember to indicate as many malicious actions as possible, and provide the necessary commands to perform them.
 If more than one command is needed, just separate them with a newline character or a semi-colon.
+Always recheck the response to ensure it's correct and avoid false possitives.
 
 If no malicious actions are found, please provide an empty JSON array: []
 """
+
+
+def my_thread_excepthook(args):
+    print(f"Exception in thread {args.thread.name}: {args.exc_type.__name__}: {args.exc_value}")
+    # Start the post-mortem debugger session.
+    pdb.post_mortem(args.exc_traceback)
+
+threading.excepthook = my_thread_excepthook
+
 
 class CloudPEASS:
     def __init__(self, very_sensitive_combos, sensitive_combos, cloud_provider, not_use_ht_ai, num_threads, example_malicious_cloud_response, example_sensitive_cloud_response, out_path=None):
@@ -74,6 +89,8 @@ class CloudPEASS:
         self.out_path = out_path
         self.malicious_actions_response_format = MALICIOUS_ACTIONS_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_malicious_cloud_response)
         self.sensitive_response_format = SENSITIVE_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_sensitive_cloud_response)
+        self._rate_limit_lock = threading.Lock()
+        self._request_timestamps = []  
 
     def get_resources_and_permissions(self):
         """
@@ -98,7 +115,8 @@ class CloudPEASS:
         grouped = defaultdict(list)
         for resource in resources:
             perms_set = frozenset(resource["permissions"])
-            grouped[perms_set].append(resource)
+            if perms_set:
+                grouped[perms_set].append(resource)
         return grouped
 
     def analyze_sensitive_combinations(self, permissions):
@@ -182,7 +200,7 @@ class CloudPEASS:
 
 
 
-    def query_hacktricks_ai(self, msg, cont=0, min_interval=12):
+    def query_hacktricks_ai(self, msg, cont=0):
         """
         Query Hacktricks AI to analyze malicious actions for a message.
 
@@ -192,15 +210,38 @@ class CloudPEASS:
         Returns:
             dict: Analysis result containing impact description or None if nothing found.
         """
+        max_requests = 5
+        window = 61  # seconds
+
+        # **Enforce global rate limit across threads**
+        while True:
+            with self._rate_limit_lock:
+                now = time.time()
+                # **Remove timestamps that are outside the 60-second window**
+                self._request_timestamps = [
+                    t for t in self._request_timestamps if now - t < window
+                ]
+                if len(self._request_timestamps) < max_requests:
+                    # **Log the current request timestamp**
+                    self._request_timestamps.append(now)
+                    break  # allowed to proceed
+                else:
+                    # **Calculate wait time until the earliest timestamp exits the window**
+                    earliest = min(self._request_timestamps)
+                    wait_time = window - (now - earliest)
+            # **Wait outside the lock to allow other threads to update**
+            time.sleep(wait_time)
 
         start_time = time.time()
-        response = requests.post(HACKTRICKS_AI_ENDPOINT, json={"query": msg})
+        response = requests.post(HACKTRICKS_AI_ENDPOINT, json={"query": msg}, timeout=420)
         elapsed = time.time() - start_time
-        sleep_time = max(0, min_interval - elapsed) # Rate-limit (5 per min)
-        time.sleep(sleep_time) 
-        
+
         if response.status_code != 200:
             print(f"{Fore.RED}Error querying Hacktricks AI: {response.status_code}, {response.text}")
+            if cont < 3:
+                print(f"{Fore.YELLOW}Trying again...")
+                time.sleep(10)
+                return self.query_hacktricks_ai(msg, cont=cont+1)
             return None
 
         try:
@@ -213,37 +254,81 @@ class CloudPEASS:
             result = json.loads(result)
         except Exception as e:
             print(f"{Fore.RED}Error parsing response from Hacktricks AI: {e}")
-            if cont == 0:
+            if cont < 3:
                 print(f"{Fore.YELLOW}Trying again...")
                 time.sleep(10)
-                return self.query_hacktricks_ai(msg, cont=1)
+                return self.query_hacktricks_ai(msg, cont=cont+1)
             return None
 
         return result
 
+    def analyze_group(self, perms_set, resources_group):
+        sensitive_perms = self.analyze_sensitive_combinations(perms_set)
+
+        sensitive_perms_ai = {
+            "very_sensitive_perms": [],
+            "sensitive_perms": []
+        } if self.not_use_ht_ai else self.analyze_sensitive_combinations_ai(perms_set)
+
+        return {
+            "permissions": list(perms_set),
+            "resources": [r["id"] if "/" in r["id"] else r["id"] + ":" + r["type"] + ":" + r["name"] for r in resources_group],
+            "sensitive_perms": sensitive_perms,
+            "sensitive_perms_ai": sensitive_perms_ai
+        }
+    
+
+    def process_combo(self, combo, all_very_sensitive_perms, all_sensitive_perms, all_very_sensitive_perms_ai, all_sensitive_perms_ai):
+        perms = combo["permissions"]
+        hacktricks_analysis = self.find_attacks_from_permissions(perms)
+
+        if not hacktricks_analysis:
+            return None  # Skip if no analysis
+
+        perms_msg = ""
+        for perm in perms:
+            if perm in all_very_sensitive_perms or perm in all_very_sensitive_perms_ai:
+                perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
+            elif perm in all_sensitive_perms or perm in all_sensitive_perms_ai:
+                perms_msg += f"{Fore.RED}{perm}{Style.RESET_ALL}, "
+            else:
+                perms_msg += f"{Fore.WHITE}{perm}{Style.RESET_ALL}, "
+        perms_msg = perms_msg.rstrip(", ")
+
+        output_lines = [
+            f"{Fore.YELLOW}\nPermissions: {perms_msg}"
+        ]
+        for attack in hacktricks_analysis:
+            output_lines.extend([
+                f"{Fore.BLUE}\nTitle: {Fore.WHITE}{attack['title']}",
+                f"{Fore.BLUE}Description: {Fore.WHITE}{attack['description']}",
+                f"{Fore.BLUE}Commands: {Fore.WHITE}{attack['commands']}\n"
+            ])
+        
+        output_lines.append(Fore.LIGHTWHITE_EX + "-" * 80 + "\n" + Style.RESET_ALL)
+
+        return "\n".join(output_lines)
+
+
     def run_analysis(self):
-        print(f"{Fore.MAGENTA}\nGetting all your permissions, sit tight!")
+        print(f"{Fore.MAGENTA}\nGetting all your permissions...")
         resources = self.get_resources_and_permissions()
         grouped_resources = self.group_resources_by_permissions(resources)
+        all_very_sensitive_perms = set()
+        all_sensitive_perms = set()
+        all_very_sensitive_perms_ai = set()
+        all_sensitive_perms_ai = set()
 
         analysis_results = []
-        for perms_set, resources_group in tqdm(grouped_resources.items(), desc="Analyzing Permissions"):
-            sensitive_perms = self.analyze_sensitive_combinations(perms_set)
-            
-            if self.not_use_ht_ai:
-                sensitive_perms_ai = {
-                    "very_sensitive_perms": [],
-                    "sensitive_perms": []
-                }
-            else:
-                sensitive_perms_ai = self.analyze_sensitive_combinations_ai(perms_set)
-            
-            analysis_results.append({
-                "permissions": list(perms_set),
-                "resources": [r["id"] + ":" + r["type"] + ":" + r["name"] for r in resources_group],
-                "sensitive_perms": sensitive_perms,
-                "sensitive_perms_ai": sensitive_perms_ai
-            })
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            future_to_group = {
+                executor.submit(self.analyze_group, perms_set, resources_group): perms_set
+                for perms_set, resources_group in grouped_resources.items()
+            }
+
+            for future in tqdm(as_completed(future_to_group), total=len(future_to_group), desc="Analyzing Permissions"):
+                result = future.result()
+                analysis_results.append(result)
 
         if self.out_path:
             with open(self.out_path, "w") as f:
@@ -256,6 +341,10 @@ class CloudPEASS:
             perms = result["permissions"]
             sensitivity_ht = result["sensitive_perms"]
             sensitivity_ai = result["sensitive_perms_ai"]
+            all_very_sensitive_perms.update(sensitivity_ht["very_sensitive_perms"])
+            all_sensitive_perms.update(sensitivity_ht["sensitive_perms"])
+            all_very_sensitive_perms_ai.update(sensitivity_ai["very_sensitive_perms"])
+            all_sensitive_perms_ai.update(sensitivity_ai["sensitive_perms"])
 
             print(f"{Fore.WHITE}Resources: {Fore.CYAN}{f'{Fore.WHITE} , {Fore.CYAN}'.join(result['resources'])}")
             perms_msg = f"{Fore.WHITE}Permissions: "
@@ -279,6 +368,7 @@ class CloudPEASS:
             perms_msg = perms_msg.strip()
             if perms_msg.endswith(","):
                 perms_msg = perms_msg[:-1]
+            perms_msg += Style.RESET_ALL
             
             print(perms_msg)
             print("\n" + Fore.LIGHTWHITE_EX + "-" * 80 + "\n" + Style.RESET_ALL)
@@ -287,27 +377,24 @@ class CloudPEASS:
         if self.not_use_ht_ai:
             return
         
-        print(f"{Fore.MAGENTA}\nQuerying Hacktricks AI for malicious actions...")
-        for combo in tqdm(analysis_results, desc="Querying Hacktricks AI for attacks"):
-            perms = combo["permissions"]
-            hacktricks_analysis = self.find_attacks_from_permissions(perms)
-            if hacktricks_analysis:
-                # Prepare permissions colors
-                perms_msg = ""
-                for perm in perms:
-                    if perm in sensitivity_ht["very_sensitive_perms"] or perm in sensitivity_ai["very_sensitive_perms"]:
-                        perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
-                    elif perm in sensitivity_ht["sensitive_perms"] or perm in sensitivity_ai["sensitive_perms"]:
-                        perms_msg += f"{Fore.RED}{perm}{Style.RESET_ALL}, "
-                    else:
-                        perms_msg += f"{Fore.WHITE}{perm}{Style.RESET_ALL}, "
-                perms_msg = perms_msg.strip()
-                if perms_msg.endswith(","):
-                    perms_msg = perms_msg[:-1]
+        print(f"{Fore.MAGENTA}\nQuerying Hacktricks AI for attacks, sit tight!")
 
-                print(f"{Fore.YELLOW}\nPermissions: {', '.join(perms)}")
-                for attack in hacktricks_analysis:
-                    print(f"{Fore.BLUE}\nTitle: {Fore.WHITE}{attack['title']}")
-                    print(f"{Fore.BLUE}Description: {Fore.WHITE}{attack['description']}")
-                    print(f"{Fore.BLUE}Commands: {Fore.WHITE}{attack['commands']}\n")
+        results = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(self.process_combo, combo, all_very_sensitive_perms, all_sensitive_perms, all_very_sensitive_perms_ai, all_sensitive_perms_ai): combo
+                for combo in analysis_results
+            }
 
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Querying Hacktricks AI for attacks"):
+                result = future.result()
+                if result:
+                    results.append(result)
+
+        # Print aggregated results in a thread-safe manner
+        for res in results:
+            print(res)
+        
+        # Exit successfully
+        print(f"{Fore.GREEN}\nAnalysis completed successfully!")
+        exit(0)
