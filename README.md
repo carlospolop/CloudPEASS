@@ -6,9 +6,11 @@ The current goal of **Cloud PEASS** is simple: Once you manage to get **some cre
 
 The sensitive permissions and attacks are discovered based on the sensitive permissions documented in **[HackTricks Cloud](https://cloud.hacktricks.wiki/en/index.html) and also asking the HackTricks AI**.
 
-## Azure PEASS
+## AzurePEASS
 
-Azure PEASS will check all **your permissions in Azure and in Entra ID** and will try to find **privilege escalation** paths and other potential attacks.
+AzurePEASS will check all **your permissions in Azure and in Entra ID** and will try to find **privilege escalation** paths and other potential attacks.
+
+AzurePEASS will use different API endpoints to find all the resources a principal has access to and then get all the permissions of those resources. It will also check for **Entra ID permissions** in different scopes.
 
 Note that you will need to provide a token with access over the **ARM API** and another one with access over the **Graph API**.
 
@@ -57,11 +59,13 @@ $Headers.Authorization.Parameter
 python3 AzurePEASS.py [--arm-token <AZURE_MANAGEMENT_TOKEN>] [--graph-token <GRPAH_TOKEN>]
 ```
 
-## GCP PEASS
+## GCPPEASS
 
 **This is still in development and testing, not ready yet**
 
-GCP PEASS will check all **your permissions in GCP** and will try to find **privilege escalation** paths and other potential attacks.
+GCPPEASS will check all **your permissions in GCP** and will try to find **privilege escalation** paths and other potential attacks.
+
+GCPPEASS will **brute force all the permissions** over all the projects, folders and organizations the user can list and also over the given projects, folders or organizations via the CLI and then it's check for **potential attacks** (like privilege escalation). This could create false negatives, as the principal might have **permissions directly assigned to specific resources** that won't be able to see. Although, usually permissions are assigned at the project level, so this way we should be able to find most of the permissions. GCPPEASS also tries to **enumerate all the VMs, Storages, Functions and SAs** and brute force the permissions over them to reduce these false negatives.
 
 Note that you will need to provide a token with access over the **ARM API** and another one with access over the **Graph API**.
 

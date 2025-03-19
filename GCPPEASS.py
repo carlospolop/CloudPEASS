@@ -893,6 +893,21 @@ NOT_COMPUTE_PERMS = [
 	"compute.zones.list"
 ]
 
+NOT_SA_PERMS = [
+	"iam.serviceAccounts.create",
+    "iam.serviceAccounts.list"
+]
+
+NOT_STORAGE_PERMS = [
+    "storage.objects.getIamPolicy",
+	"storage.objects.setIamPolicy"
+]
+
+NOT_FUNCTIONS_PERMS = [
+    "cloudfunctions.functions.create",
+	"cloudfunctions.functions.list",
+	"cloudfunctions.locations.list"
+]
 
 class GCPPEASS(CloudPEASS):
     def __init__(self, credentials, project, folder, org, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path=None):
@@ -913,13 +928,15 @@ class GCPPEASS(CloudPEASS):
 
     def get_relevant_permissions(self, res_type=None):
         if res_type.lower() == "vm":
-            return [ p for p in self.all_gcp_perms if p.startswith("compute") and not p in NOT_COMPUTE_PERMS ]
-        if res_type.lower() == "function":
-            return [ p for p in self.all_gcp_perms if p.startswith("cloudfunctions") ]
-        if res_type.lower() == "storage":
-            return [ p for p in self.all_gcp_perms if p.startswith("storage") ]
-
-        return self.all_gcp_perms
+            return [p for p in self.all_gcp_perms if p.startswith("compute") and p not in NOT_COMPUTE_PERMS]
+        elif res_type.lower() == "function":
+            return [p for p in self.all_gcp_perms if p.startswith("cloudfunctions") and p not in NOT_FUNCTIONS_PERMS]
+        elif res_type.lower() == "storage":
+            return [p for p in self.all_gcp_perms if p.startswith("storage") and p not in NOT_STORAGE_PERMS]
+        elif res_type.lower() == "service_account":  # **New branch for service accounts**
+            return [p for p in self.all_gcp_perms if p.startswith("iam.serviceAccounts") and p not in NOT_SA_PERMS]
+        else:
+            return self.all_gcp_perms
 
     def check_permissions(self, resource_id, perms, verbose=False):
         """
@@ -932,6 +949,7 @@ class GCPPEASS(CloudPEASS):
         - functions
         - vms
         - storage
+        - Service account
         """
         if "/functions/" in resource_id:
             req = googleapiclient.discovery.build("cloudfunctions", "v1", credentials=self.credentials).projects().locations().functions().testIamPermissions(
@@ -950,6 +968,12 @@ class GCPPEASS(CloudPEASS):
                 bucket=resource_id.split("/")[-1],
                 permissions=perms,
             )
+        elif "/serviceAccounts/" in resource_id:
+            req = googleapiclient.discovery.build("iam", "v1", credentials=self.credentials) \
+				.projects().serviceAccounts().testIamPermissions(
+					resource=resource_id,
+					body={"permissions": perms}
+				)
         elif resource_id.startswith("projects/"):
             req = googleapiclient.discovery.build("cloudresourcemanager", "v3", credentials=self.credentials).projects().testIamPermissions(
                 resource=resource_id,
@@ -1056,6 +1080,19 @@ class GCPPEASS(CloudPEASS):
             return buckets
         except Exception:
             return []
+    
+    def list_service_accounts(self, project):
+        try:
+            service = googleapiclient.discovery.build("iam", "v1", credentials=self.credentials)
+            # The service account resource name will be like "projects/{project}/serviceAccounts/{email}"
+            response = service.projects().serviceAccounts().list(name=f"projects/{project}").execute()
+            accounts = []
+            for account in response.get('accounts', []):
+                accounts.append(account['name'])  # Use the full resource name
+            return accounts
+        except Exception as e:
+            print(f"{Fore.RED}Error listing service accounts for project {project}: {e}")
+            return []
 
     def get_resources_and_permissions(self):
         # Build a list of targets with type information
@@ -1086,6 +1123,8 @@ class GCPPEASS(CloudPEASS):
                 local_targets.append({"id": func, "type": "function"})
             for bucket in self.list_storages(proj):
                 local_targets.append({"id": bucket, "type": "storage"})
+            for sa in self.list_service_accounts(proj):
+                local_targets.append({"id": sa, "type": "service_account"})
             return local_targets
 
         # **Process projects concurrently using a thread pool**
@@ -1137,8 +1176,8 @@ class GCPPEASS(CloudPEASS):
 
 
 if __name__ == "__main__":
-    print("Not ready yet!")
-    exit(1)
+    #print("Not ready yet!")
+    #exit(1)
 
     parser = argparse.ArgumentParser(description="GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.")
 
