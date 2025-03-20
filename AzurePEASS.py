@@ -61,8 +61,7 @@ class AzurePEASS(CloudPEASS):
         if self.arm_token:
             self.check_jwt_token(self.arm_token, ["https://management.azure.com/", "https://management.core.windows.net/"])
 
-        # Check Graph token
-        if graph_token:
+        if self.graph_token:
             self.check_jwt_token(self.graph_token, ["https://graph.microsoft.com/", "00000003-0000-0000-c000-000000000000"])
 
     
@@ -220,7 +219,7 @@ if __name__ == "__main__":
     arm_token = os.getenv("AZURE_ARM_TOKEN", arm_token)
 
     graph_token = args.graph_token
-    graph_token = os.getenv("AZURE_ARM_TOKEN", graph_token)
+    graph_token = os.getenv("AZURE_GRAPH_TOKEN", graph_token)
 
     azure_peass = AzurePEASS(arm_token, graph_token, very_sensitive_combinations, sensitive_combinations, not_use_ht_ai=args.not_use_hacktricks_ai, num_threads=args.threads, out_path=args.out_json_path)
     azure_peass.run_analysis()

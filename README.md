@@ -58,7 +58,7 @@ $Headers.Authorization.Parameter
 
 # e.g.
 ## You can indicate the tokens via command line or just exporting the previous env variables is enough
-python3 AzurePEASS.py [--arm-token <AZURE_MANAGEMENT_TOKEN>] [--graph-token <GRPAH_TOKEN>]
+python3 AzurePEASS.py [--arm-token <AZURE_MANAGEMENT_TOKEN>] [--graph-token <AZURE_GRAPH_TOKEN>]
 ```
 
 ## GCPPEASS

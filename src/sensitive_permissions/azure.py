@@ -91,7 +91,7 @@ very_sensitive_combinations = [
 
     ["Microsoft.KeyVault/vaults/secrets/getSecret/action"],
 
-    ["Owner"]
+    ["Owner *"]
 ]
 
 sensitive_combinations = [

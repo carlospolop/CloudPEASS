@@ -180,7 +180,7 @@ class EntraIDPEASS():
                 "id": obj_id,
                 "name": name,
                 "type": odata_type,
-                "permissions": ["Owner"]
+                "permissions": [f"Owner of {obj_id} ({odata_type})"]
             })
         
         return sub_resources
