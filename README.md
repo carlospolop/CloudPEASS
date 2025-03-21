@@ -16,6 +16,8 @@ AzurePEASS will use different API endpoints to find all the resources a principa
 
 Note that you will need to provide a token with access over the **ARM API** and another one with access over the **Graph API**.
 
+Note also that some specific permissions and scopes are needed to get all the information, but **the most part of the permissions can be gathered without requiring any specific enumeration permission**.
+
 - Help:
 
 ```bash
