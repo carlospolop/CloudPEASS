@@ -1,15 +1,13 @@
 import argparse
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
 import google.oauth2.credentials
 import googleapiclient.discovery
-from tqdm import tqdm
 import re
 import os
-from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+from tqdm import tqdm
 from colorama import Fore, Style, init, Back
-
 from src.CloudPEASS.cloudpeass import CloudPEASS
 from src.sensitive_permissions.gcp import very_sensitive_combinations, sensitive_combinations
 
@@ -1193,8 +1191,11 @@ if __name__ == "__main__":
     parser.add_argument('--not-use-hacktricks-ai', action="store_false", default=False, help="Don't use Hacktricks AI to analyze permissions")
 
     args = parser.parse_args()
-
-    token = os.getenv("CLOUDSDK_AUTH_ACCESS_TOKEN", args.token).rstrip()
+    if args.token:
+        token = os.getenv("CLOUDSDK_AUTH_ACCESS_TOKEN", args.token).rstrip()
+    else:
+        token = None
+        
     sa_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", args.sa_credentials_path)
     creds = google.oauth2.credentials.Credentials(token) if token else \
         google.oauth2.service_account.Credentials.from_service_account_file(
