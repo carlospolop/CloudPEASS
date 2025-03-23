@@ -115,6 +115,13 @@ class CloudPEASS:
         grouped = defaultdict(list)
         for resource in resources:
             perms_set = frozenset(resource["permissions"])
+            deny_perms_set = set()
+            if "deny_perms" in resource:
+                deny_perms_set = frozenset(resource["deny_perms"])
+            
+            # Add in perms_set the deny permissions adding the prefix "-"
+            perms_set = perms_set.union({"-" + perm for perm in deny_perms_set})
+            
             if perms_set:
                 grouped[perms_set].append(resource)
         return grouped
@@ -124,8 +131,9 @@ class CloudPEASS:
         found_sensitive = set()
 
         # Check very sensitive combinations (with wildcard support)
+        ## Wildcards can be used in the our ahrdcoded patterns or also in AWS permissions, so both are checked
         for combo in self.very_sensitive_combos:
-            if all(any(fnmatch.fnmatch(perm, pattern) for perm in permissions) for pattern in combo):
+            if all(any(fnmatch.fnmatch(perm, pattern) or fnmatch.fnmatch(pattern, perm) for perm in permissions) for pattern in combo):
                 for pattern in combo:
                     for perm in permissions:
                         if fnmatch.fnmatch(perm, pattern):
@@ -133,7 +141,7 @@ class CloudPEASS:
 
         # Check sensitive combinations (with wildcard support)
         for combo in self.sensitive_combos:
-            if all(any(fnmatch.fnmatch(perm, pattern) for perm in permissions) for pattern in combo):
+            if all(any(fnmatch.fnmatch(perm, pattern) or fnmatch.fnmatch(pattern, perm) for perm in permissions) for pattern in combo):
                 for pattern in combo:
                     for perm in permissions:
                         if fnmatch.fnmatch(perm, pattern):
@@ -160,6 +168,7 @@ class CloudPEASS:
 
         query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
         query_text += "What malicious actions could an attacker perform with them to for example escalate privileges (escalate to another user, group or managed identity/role/service account or get more permissions somehow inside the cloud or inside the cloud service), access sensitive information from the could (env vars, conneciton strings, secrets, dumping buckets or disks... any kind of data storage)?"
+        query_text += "Note that permission starting with '-' are deny permissions.\n"
         query_text += self.malicious_actions_response_format
 
         result = self.query_hacktricks_ai(query_text)
@@ -195,7 +204,8 @@ class CloudPEASS:
     
     def analyze_sensitive_combinations_ai(self, permissions):
         query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
-        query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permision is a permission that allows to esalate privileges or read sensitive information for sure. A sensitive permission is a permission that could be used to escalate privileges or read sensitive information, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secres, API keys...) is not sensitive."
+        query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permision is a permission that allows to esalate privileges or read sensitive information for sure. A sensitive permission is a permission that could be used to escalate privileges or read sensitive information, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secres, API keys...) is not sensitive.\n"
+        query_text += "Note that permissions starting with '-' are deny permissions.\n"
         query_text += self.sensitive_response_format
 
         result = self.query_hacktricks_ai(query_text)

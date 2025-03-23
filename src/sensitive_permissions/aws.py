@@ -1,6 +1,7 @@
 
 
 very_sensitive_combinations = [
+    ["\\*"],
     ["iam:PassRole"],
 
     ["codebuild:StartBuild", "codebuild:StartBuildBatch"],
@@ -107,7 +108,7 @@ very_sensitive_combinations = [
 
     ["redshift:DescribeClusters", "redshift:GetClusterCredentialsWithIAM"],
 
-    ["route53:CreateHostedZone", "route53:ChangeResourceRecordSets", "acm-pca:IssueCertificate",  "acm-pca:GetCertificate"]
+    ["route53:CreateHostedZone", "route53:ChangeResourceRecordSets", "acm-pca:IssueCertificate",  "acm-pca:GetCertificate"],
 
     ["sns:AddPermission"],
 
@@ -155,7 +156,7 @@ sensitive_combinations = [
     ["apigateway:PutMethodResponse"],
     ["apigateway:UpdateRestApi"],
     ["apigateway:CreateApiKey"],
-    ["apigateway:UpdateApiKey"]
+    ["apigateway:UpdateApiKey"],
 
     ["chime:CreateApiKey"],
 
@@ -255,12 +256,12 @@ sensitive_combinations = [
 
     ["sns:Publish"],
     ["sns:Subscribe"],
-    ["sns:Unsubscribe"]
+    ["sns:Unsubscribe"],
     
     ["sqs:SendMessage"],
-    ["sqs:SendMessageBatch"]
+    ["sqs:SendMessageBatch"],
     ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility"],
-    ["sqs:PurgeQueue"]
+    ["sqs:PurgeQueue"],
 
     ["sso:DetachManagedPolicyFromPermissionSet"],
     ["sso:DetachCustomerManagedPolicyReferenceFromPermissionSet"],
