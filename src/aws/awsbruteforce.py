@@ -138,16 +138,10 @@ class AWSBruteForce():
                 if self.debug:
                     print(f"[DEBUG] Successful or resource not found: {output.strip()}")
                 perm_command = self.transform_command(f"{service}:{self.capitalize(command)}")
-                discovered = {
-                    "service": service,
-                    "command": command,
-                    "permission": perm_command,
-                    "cli": full_command
-                }
                 print(f"{Fore.YELLOW}[+] {Fore.WHITE}You can access: {Fore.YELLOW}{service} {command} {Fore.BLUE}({full_command}) {Fore.GREEN}({perm_command}){Fore.RESET}")
                 
                 with self.lock:
-                    self.found_permissions.append(discovered)
+                    self.found_permissions.append(perm_command)
 
             elif re.search(r'AccessDenied|ForbiddenException|UnauthorizedOperation|UnsupportedCommandException|AuthorizationException', output, re.I):
                 if self.debug:
@@ -260,7 +254,7 @@ class AWSBruteForce():
                         print(f"[DEBUG] Failed to get commands for {service}: {e}")
             pbar.close()
 
-        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+        with ThreadPoolExecutor(max_workers=self.num_threads*3) as executor:
             futures = [executor.submit(self.run_command, *args) for args in commands_to_run]
             pbar = tqdm(total=len(futures), desc="Running commands")
             for future in as_completed(futures):
