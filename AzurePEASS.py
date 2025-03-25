@@ -77,7 +77,7 @@ class AzurePEASS(CloudPEASS):
             # Check if token has expired
             current_time = int(time.time() + 30) # Extra 30 secs to account for clock skew
             if decoded.get("exp", 0) < current_time:
-                raise ValueError(f"Token {decoded.get('aud')} has expired")
+                raise ValueError(f"Token {decoded.get('exp')} has expired")
 
             return True
 
