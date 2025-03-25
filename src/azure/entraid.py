@@ -78,6 +78,9 @@ class EntraIDPEASS():
 
         try:
             member_objects = self.get_all_pages(memberOf_url)
+            # If None, we don't have access to "/me" and therefore we cannot acces Entra ID permissions (in any case this happens in MI tokens)
+            if member_objects is None:
+                return None
         except Exception as e:
             print(f"Failed to retrieve memberOf data: {e}")
             return sub_resources
@@ -173,10 +176,6 @@ class EntraIDPEASS():
         # Retrieve the current principal’s owned objects (service principals, apps, groups that the principal owns)
         owned_objects_url = "https://graph.microsoft.com/v1.0/me/ownedObjects?$select=id,displayName,appDisplayName"
         owned_objects = self.get_all_pages(owned_objects_url)
-
-        # if None, we don't have access to "/me" and therefore we cannot acces Entra ID permissions (in any case this happens in MI tokens)
-        if owned_objects is None:
-            return sub_resources
 
         # Process each owned object
         for obj in owned_objects:
