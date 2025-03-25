@@ -177,7 +177,7 @@ class CloudPEASS:
         if not result:
             return []
         
-        # Reched response to ensure it's correct and avoid false possitives
+        # Re-check response to ensure it's correct and avoid false possitives
         query_text = "### Context\n"
         query_text = f"You have been asked previously to provide the malicious actions that could be performed with the following {self.cloud_provider} permissions: {', '.join(permissions)}\n\n"
         query_text += "### Your response was:\n"
@@ -204,7 +204,7 @@ class CloudPEASS:
     
     def analyze_sensitive_combinations_ai(self, permissions):
         query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
-        query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permision is a permission that allows to esalate privileges or read sensitive information for sure. A sensitive permission is a permission that could be used to escalate privileges or read sensitive information, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secres, API keys...) is not sensitive.\n"
+        query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permision is a permission that allows to esalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets. A sensitive permission is a permission that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secrets, API keys...) is not sensitive.\n"
         query_text += "Note that permissions starting with '-' are deny permissions.\n"
         query_text += self.sensitive_response_format
 
@@ -338,6 +338,8 @@ class CloudPEASS:
 
 
     def run_analysis(self):
+        print(f"{Fore.GREEN}\nStarting CloudPEASS analysis for {self.cloud_provider}...")
+        print(f"{Fore.YELLOW}[{Fore.BLUE}i] If you want to learn cloud hacking, check out the trainings at {Fore.CYAN}https://training.hacktricks.xyz")
         print(f"{Fore.MAGENTA}\nGetting all your permissions...")
         resources = self.get_resources_and_permissions()
         grouped_resources = self.group_resources_by_permissions(resources)
@@ -364,6 +366,12 @@ class CloudPEASS:
 
         # Clearly Print the results with the requested color formatting
         print(f"{Fore.YELLOW}\nDetailed Analysis Results:\n")
+        print(f"{Fore.BLUE}Legend:")
+        print(f"{Fore.RED}  {Back.YELLOW}Very Sensitive Permissions{Style.RESET_ALL} - Permissions that allow to escalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets.")
+        print(f"{Fore.RED}  Sensitive Permissions{Style.RESET_ALL} - Permissions that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but they aren't enough by themselves.")
+        print(f"{Fore.WHITE}  Regular Permissions{Style.RESET_ALL} - Not so interesting permissions.")
+        print()
+        print()
         for result in analysis_results:
             perms = result["permissions"]
             sensitivity_ht = result["sensitive_perms"]
@@ -407,7 +415,7 @@ class CloudPEASS:
         print(f"{Fore.MAGENTA}\nQuerying Hacktricks AI for attacks, sit tight!")
 
         results = []
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=min(self.num_threads, len(analysis_results))) as executor:
             futures = {
                 executor.submit(self.process_combo, combo, all_very_sensitive_perms, all_sensitive_perms, all_very_sensitive_perms_ai, all_sensitive_perms_ai): combo
                 for combo in analysis_results

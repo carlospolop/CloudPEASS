@@ -1,7 +1,7 @@
 import subprocess
 import re
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from tqdm import tqdm
 import shutil
 
@@ -246,15 +246,18 @@ class AWSBruteForce():
                 pbar.update(1)
                 service = future_to_service[future]
                 try:
-                    commands = future.result()
+                    commands = future.result(timeout=30)
                     for command in commands:
                         commands_to_run.append((self.profile, self.region, service, command))
+                except TimeoutError:
+                    if self.debug:
+                        print(f"[DEBUG] Timeout getting commands for {service}")
                 except Exception as e:
                     if self.debug:
                         print(f"[DEBUG] Failed to get commands for {service}: {e}")
             pbar.close()
 
-        with ThreadPoolExecutor(max_workers=self.num_threads*3) as executor:
+        with ThreadPoolExecutor(max_workers=self.num_threads*4) as executor:
             futures = [executor.submit(self.run_command, *args) for args in commands_to_run]
             pbar = tqdm(total=len(futures), desc="Running commands")
             for future in as_completed(futures):

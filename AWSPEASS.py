@@ -13,6 +13,7 @@ init(autoreset=True)
 from src.CloudPEASS.cloudpeass import CloudPEASS
 from src.sensitive_permissions.aws import very_sensitive_combinations, sensitive_combinations
 from src.aws.awsbruteforce import AWSBruteForce
+from src.aws.awsmanagedpoliciesguesser import AWSManagedPoliciesGuesser
 
 AWS_MALICIOUS_RESPONSE_EXAMPLE = """[
     {
@@ -337,65 +338,6 @@ class AWSPEASS(CloudPEASS):
             "deny": list(deny_permissions)
         }
 
-    def get_resources_and_permissions(self):
-        """
-        Returns a list of resources and their permissions using different method.
-        For AWS, the resource is the principal (user or role) itself.
-        The resource object now includes:
-        - "permissions": allowed permissions
-        - "deny_perms": explicitly denied permissions
-        """
-        resources_data = []
-
-        # Try to get permissions from IAM policies
-        principal_perms = self.get_principal_permissions()
-        
-        # Now try to brute-force permissions using simulate-principal-policy, if allowed
-        simulated_permissions = aws_peass.simulate_permissions()
-
-        if simulated_permissions:
-            principal_perms["allow"].extend(simulated_permissions)
-        
-        principal_perms["allow"] = list(set(principal_perms["allow"]))
-
-        if "*" in principal_perms["allow"]:
-            print(f"{Fore.GREEN}Principal has full access (*). Skipping further analysis.")
-            exit(0)
-        
-        resources_data.append({
-            "id": self.principal_arn,
-            "name": self.principal_name,
-            "type": "",
-            "permissions": principal_perms["allow"],
-            "deny_perms": principal_perms["deny"]
-        })
-
-        brute_force = False
-        if resources_data[0]["permissions"]:
-            # Ask the user if he wants to brute-force permissions
-            print(f"{Fore.GREEN}Found permissions for the principal.")
-            brute_force = input(f"{Fore.YELLOW}Do you still want to brute-force permissions? (y/N) ")
-            if brute_force.lower() == "y":
-                brute_force = True
-        else:
-            print(f"{Fore.GREEN}No permissions found for the principal. Strating brute-force...")
-            brute_force = True
-        
-        if brute_force:
-            permissions = self.AWSBruteForce.brute_force_permissions()
-            if permissions:
-                resources_data.append(
-                    {
-                        "id": self.principal_arn,
-                        "name": self.principal_name,
-                        "type": "",
-                        "permissions": permissions,
-                        "deny_perms": []
-                    }
-                )
-        
-        return resources_data
-
     # New method: Download AWS permissions from the Policy Generator
     def download_aws_permissions(self) -> dict:
         url = "https://awspolicygen.s3.amazonaws.com/js/policies.js"
@@ -460,8 +402,123 @@ class AWSPEASS(CloudPEASS):
             pbar.close()
         return list(simulated_permissions)
 
+    def get_resources_and_permissions(self):
+        """
+        Returns a list of resources and their permissions using different methods:
+        - Try to read IAM policies
+        - Try to simulate permissions using simulate-principal-policy
+        - Brute-force permissions using AWSBruteForce
+        - If BF is used, try to guess permissions based on AWS managed policies
+
+        The resource object now includes:
+        - "permissions": allowed permissions
+        - "deny_perms": explicitly denied permissions
+        """
+        resources_data = []
+
+        # Try to get permissions from IAM policies
+        principal_perms = self.get_principal_permissions()
+        
+        # Now try to brute-force permissions using simulate-principal-policy, if allowed
+        simulated_permissions = aws_peass.simulate_permissions()
+
+        if simulated_permissions:
+            principal_perms["allow"].extend(simulated_permissions)
+        
+        principal_perms["allow"] = list(set(principal_perms["allow"]))
+
+        if "*" in principal_perms["allow"]:
+            print(f"{Fore.GREEN}Principal has full access (*). Skipping further analysis.")
+            exit(0)
+        
+        resources_data.append({
+            "id": "",
+            "name": "",
+            "type": "",
+            "permissions": principal_perms["allow"],
+            "deny_perms": principal_perms["deny"]
+        })
+
+        brute_force = False
+        if resources_data[0]["permissions"]:
+            # Ask the user if he wants to brute-force permissions
+            print(f"{Fore.GREEN}Found permissions for the principal.")
+            brute_force = input(f"{Fore.YELLOW}Do you still want to brute-force permissions? (y/N) ")
+            if brute_force.lower() == "y":
+                brute_force = True
+        else:
+            print(f"{Fore.GREEN}No permissions found for the principal. Strating brute-force...")
+            brute_force = True
+        
+        brute_force = True #deleteme
+        if brute_force:
+            bf_permissions = self.AWSBruteForce.brute_force_permissions()
+            if bf_permissions:
+                with open("/tmp/aws_permissions.txt", "w") as f:
+                    f.write("\n".join(bf_permissions))
+                resources_data.append(
+                    {
+                        "id": "",
+                        "name": "",
+                        "type": "",
+                        "permissions": bf_permissions,
+                        "deny_perms": []
+                    }
+                )
+        
+        if brute_force:
+            guess_permissions = input(f"{Fore.YELLOW}Do you want to guess permissions based on AWS managed policies? (Y/n) {Fore.RESET}")
+            if guess_permissions.lower() == "n":
+                return resources_data
+            
+            guesser = AWSManagedPoliciesGuesser(set(bf_permissions))
+            guessed_perms = guesser.guess_permissions()
+
+            if guessed_perms:
+                print()
+                print("Color legend:")
+                print(f"{Fore.GREEN}  Green: Permissions that you already have{Fore.RESET}")
+                print(f"{Fore.BLUE}  Blue: Permissions that were guessed based on AWS managed policies{Fore.RESET}")
+                print()
+
+            # Show each combination and ask the user which one to add
+            all_coms = []
+            i = 0
+            for key, value in guessed_perms.items():
+                i += 1
+                print(f"{Fore.YELLOW}[{i}]{Fore.WHITE} This combination has {Fore.YELLOW}{key}{Fore.WHITE} permissions not detected.\n    {Fore.WHITE}Policies: {Fore.CYAN}{', '.join(value['policies'])}\n    {Fore.WHITE}Permissions: {Fore.BLUE}{', '.join([f'{Fore.GREEN}{perm}{Fore.BLUE}' if perm in bf_permissions else perm for perm in value['permissions']])}{Fore.RESET}")
+                all_coms.append(value['permissions'])
+                print()
+
+            # Ask the user which combination to add
+            selected_comb = False
+            selected_combination = -1
+            while not selected_comb:
+                selected_combination = input(f"{Fore.YELLOW}Select a combination to add those permissions to check from 1 to {i} (1 is the recommended one) or -1 to not add any: {Fore.RESET}")
+                selected_combination = int(selected_combination)
+                if selected_combination < -1 or selected_combination == 0 or selected_combination > i:
+                    print(f"{Fore.RED}Invalid selection. Try again.{Fore.RESET}")
+                else:
+                    selected_comb = True
+            
+            if selected_combination != -1:
+                selected_combination -= 1
+                resources_data.append(
+                    {
+                        "id": "",
+                        "name": "",
+                        "type": "",
+                        "permissions": all_coms[selected_combination],
+                        "deny_perms": []
+                    }
+                )
+
+        return resources_data
 
 if __name__ == "__main__":
+    print("Not ready yet!")
+    exit(1)
+    
     parser = argparse.ArgumentParser(
         description="Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks.\n"
                     "AWSPEASS requires the name of the profile to use to connect to AWS."

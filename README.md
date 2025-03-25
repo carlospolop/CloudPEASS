@@ -71,7 +71,7 @@ GCPPEASS will check all **your permissions in GCP** and will try to find **privi
 
 GCPPEASS will **brute force all the permissions** over all the projects, folders and organizations the user can list and also over the given projects, folders or organizations via the CLI and then it's check for **potential attacks** (like privilege escalation). This could create false negatives, as the principal might have **permissions directly assigned to specific resources** that won't be able to see. Although, usually permissions are assigned at the project level, so this way we should be able to find most of the permissions. GCPPEASS also tries to **enumerate all the VMs, Storages, Functions and SAs** and brute force the permissions over them to reduce these false negatives.
 
-Note that you will need to provide a token with access over the **ARM API** and another one with access over the **Graph API**.
+Note that you will need to provide a **GCP access token**.
 
 - Help
 
@@ -107,4 +107,51 @@ export CLOUDSDK_AUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)
 # e.g.
 ## You can indicate the token via command line or just exporting the previous env variable is enough
 python3 GCPPEASS.py [--token <TOKEN>]
+```
+
+## AWSPEASS
+
+**This is still in development and testing, not ready yet**
+
+AWSPEASS will find as many **permissions as possible in AWS** and will try to find **privilege escalation** paths and other potential attacks.
+
+Methods to find permissions:
+
+- Try to check all the **IAM policies attached to your principal** (IAM permissions are required to do this)
+- Try to **simulate all the permissions of the principal** (one IAM permission is required to do this)
+- Try to **brute-force as many List, Get & Describe permissions** as possible using the **`aws cli`**. This doesn't require any specific permission, but it will be slower and won't be able to find other type of permissions (like `Put` or `Create` permissions).
+  - To reduce the bruteforce-timing you can indicate the **`--aws-services`** flag to brute-force only the services you are interested in.
+  - If brute-force is used, AWSPEASS integrates a version of **[aws-Perms2ManagedPolicies](https://github.com/carlospolop/aws-Perms2ManagedPolicies)** to try to **guess more permissions** based on the permissions found.
+
+Note that you will need to configure and **indicate the profile and region** to use to AWSPEASS.
+
+- Help
+
+```bash
+python3 AWSPEASS.py -h
+usage: AWSPEASS.py [-h] --profile PROFILE [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--debug] --region REGION [--aws-services AWS_SERVICES]
+
+Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEASS requires the name of the profile to use to connect to AWS.
+
+options:
+  -h, --help            show this help message and exit
+  --profile PROFILE     AWS profile to use
+  --out-json-path OUT_JSON_PATH
+                        Output JSON file path (e.g. /tmp/aws_results.json)
+  --threads THREADS     Number of threads to use
+  --not-use-hacktricks-ai
+                        Don't use Hacktricks AI to analyze permissions
+  --debug               Print more infromation when brute-forcing permissions
+  --region REGION       Indicate the region to use for brute-forcing permissions
+  --aws-services AWS_SERVICES
+                        Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-services
+                        s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)
+```
+
+- Usage
+
+```bash
+# e.g.
+python3 AWSPEASS.py --profile <AWS_PROFILE> --region <AWS_REGION>
+python3 AWSPEASS.py --profile <AWS_PROFILE> --region <AWS_REGION> --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb
 ```
