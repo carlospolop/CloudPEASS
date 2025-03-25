@@ -35,15 +35,18 @@ class EntraIDPEASS():
         while url:
             resp = requests.get(url, headers=self.headers)
             if resp.status_code != 200:
-                print(f"{Fore.RED}Graph API call failed: {url} -> {resp.status_code} {resp.text}.{Style.RESET_ALL}")
-                if resp.status_code == 403: # If 403, not enough scopes, just continue
-                    return results
+                if "/me request is only valid with delegated authentication" in resp.text:
+                    print(f"{Fore.RED}This is a MI token, it cannot access it's permissions in Entra ID (and it probably doesn't have any). Skipping.{Style.RESET_ALL}")
+                else:
+                    print(f"{Fore.RED}Graph API call failed: {url} -> {resp.status_code} {resp.text}.{Style.RESET_ALL}")
+                    if resp.status_code == 403: # If 403, not enough scopes, just continue
+                        return results
                 
-                if cont < 3:
-                    time.sleep(2)
-                    print(f"{Fore.YELLOW}Retrying...{Style.RESET_ALL}")
-                    cont += 1
-                    continue
+                    if cont < 3:
+                        time.sleep(2)
+                        print(f"{Fore.YELLOW}Retrying...{Style.RESET_ALL}")
+                        cont += 1
+                        continue
                 
             data = resp.json()
             results.extend(data.get("value", []))
