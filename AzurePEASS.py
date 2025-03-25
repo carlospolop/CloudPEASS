@@ -68,7 +68,7 @@ class AzurePEASS(CloudPEASS):
     def check_jwt_token(self, token, expected_audiences):
         try:
             # Decode the token without verifying the signature
-            decoded = jwt.decode(token, options={"verify_signature": False})
+            decoded = jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
 
             # Check if "aud" matches
             if decoded.get("aud") not in expected_audiences:
