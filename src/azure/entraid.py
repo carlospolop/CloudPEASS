@@ -37,6 +37,7 @@ class EntraIDPEASS():
             if resp.status_code != 200:
                 if "/me request is only valid with delegated authentication" in resp.text:
                     print(f"{Fore.RED}This is a MI token, it cannot access it's permissions in Entra ID (and it probably doesn't have any). Skipping.{Style.RESET_ALL}")
+                    return None
                 else:
                     print(f"{Fore.RED}Graph API call failed: {url} -> {resp.status_code} {resp.text}.{Style.RESET_ALL}")
                     if resp.status_code == 403: # If 403, not enough scopes, just continue
@@ -172,6 +173,10 @@ class EntraIDPEASS():
         # Retrieve the current principal’s owned objects (service principals, apps, groups that the principal owns)
         owned_objects_url = "https://graph.microsoft.com/v1.0/me/ownedObjects?$select=id,displayName,appDisplayName"
         owned_objects = self.get_all_pages(owned_objects_url)
+
+        # if None, we don't have access to "/me" and therefore we cannot acces Entra ID permissions (in any case this happens in MI tokens)
+        if owned_objects is None:
+            return sub_resources
 
         # Process each owned object
         for obj in owned_objects:

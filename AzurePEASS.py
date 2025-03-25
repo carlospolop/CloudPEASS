@@ -154,7 +154,7 @@ class AzurePEASS(CloudPEASS):
                         perms.update(data_actions - not_data_actions)
 
         else:
-            print(f"Unable to retrieve eligible roles: {resp_eligible.status_code} {resp_eligible.text}")
+            print(f"Unable to retrieve eligible roles: {resp_eligible.status_code} {resp_eligible.text} ( This is common, you need an Azure permission to list eligible roles )")
 
         return list(perms)
 
