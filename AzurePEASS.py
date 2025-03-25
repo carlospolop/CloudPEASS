@@ -199,7 +199,14 @@ class AzurePEASS(CloudPEASS):
 
         if self.graph_token:
             print("Getting Permissions from EntraID...")
-            resources_data += self.EntraIDPEASS.get_entraid_memberships()
+
+            # If None, then it's a MI token without access to get its Entra ID permissions (probably it doesn't have them)
+            ## Important: Keep this Entra ID check first
+            memberships = self.EntraIDPEASS.get_entraid_memberships()
+            if memberships is None:
+                return resources_data
+            
+            resources_data += memberships
             resources_data += self.EntraIDPEASS.get_eligible_roles()
             resources_data += self.EntraIDPEASS.get_entraid_owns()
 
