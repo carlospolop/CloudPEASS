@@ -454,8 +454,6 @@ class AWSPEASS(CloudPEASS):
         if brute_force:
             bf_permissions = self.AWSBruteForce.brute_force_permissions()
             if bf_permissions:
-                with open("/tmp/aws_permissions.txt", "w") as f:
-                    f.write("\n".join(bf_permissions))
                 resources_data.append(
                     {
                         "id": "",
@@ -518,7 +516,7 @@ class AWSPEASS(CloudPEASS):
 if __name__ == "__main__":
     print("Not ready yet!")
     exit(1)
-    
+
     parser = argparse.ArgumentParser(
         description="Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks.\n"
                     "AWSPEASS requires the name of the profile to use to connect to AWS."
