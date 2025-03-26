@@ -128,7 +128,7 @@ class AWSBruteForce():
     def capitalize(self, command):
         return ''.join(word.capitalize() for word in command.split('-'))
 
-    def run_command(self, profile, region, service, command, extra=''):
+    def run_command(self, profile, region, service, command, extra='', cont=0):
         full_command = f'aws --cli-connect-timeout 19 --profile {profile} --region {region} {service} {command} {extra}'
         try:
             result = subprocess.run(full_command, shell=True, capture_output=True, timeout=20)
@@ -174,8 +174,12 @@ class AWSBruteForce():
                         extra = f"{extra} {required_arg} {arn_string}"
                     else:
                         extra = f"{extra} {required_arg} {name_string}"
-
-                    self.run_command(profile, region, service, command, extra)
+                    
+                    if cont < 3:
+                        self.run_command(profile, region, service, command, extra, cont+1)
+                    else:
+                        if self.debug:
+                            print(f"[DEBUG] Prevented eternal loop of args from: {command}\n{output.strip()}")
 
             else:
                 if self.debug:

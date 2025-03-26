@@ -1172,9 +1172,6 @@ class GCPPEASS(CloudPEASS):
 
 
 if __name__ == "__main__":
-    print("Not ready yet!")
-    exit(1)
-
     parser = argparse.ArgumentParser(description="GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.")
 
     scope_group = parser.add_mutually_exclusive_group(required=False)

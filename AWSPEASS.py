@@ -366,8 +366,8 @@ class AWSPEASS(CloudPEASS):
                     allowed.add(result.get("EvalActionName"))
         except Exception as e:
             if "rate exceeded" in str(e).lower():
-                print(f"{Fore.RED}Rate limit exceeded. Waiting for 10 seconds...")
-                time.sleep(10)
+                print(f"{Fore.RED}Rate limit exceeded. Waiting for 25 seconds...")
+                time.sleep(25)
                 return self.simulate_batch(actions)
             print(f"{Fore.RED}Error simulating batch: {e}")
         return allowed
@@ -428,7 +428,7 @@ class AWSPEASS(CloudPEASS):
         principal_perms["allow"] = list(set(principal_perms["allow"]))
 
         if "*" in principal_perms["allow"]:
-            print(f"{Fore.GREEN}Principal has full access (*). Skipping further analysis.")
+            print(f"{Fore.GREEN}Principal has full access (*). You can do mostly everything. Skipping further analysis.")
             exit(0)
         
         resources_data.append({
@@ -514,8 +514,6 @@ class AWSPEASS(CloudPEASS):
         return resources_data
 
 if __name__ == "__main__":
-    print("Not ready yet!")
-    exit(1)
 
     parser = argparse.ArgumentParser(
         description="Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks.\n"

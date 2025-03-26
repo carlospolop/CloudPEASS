@@ -198,7 +198,7 @@ class AzurePEASS(CloudPEASS):
                 resources_data.extend(sub_result)
 
         if self.graph_token:
-            print("Getting Permissions from EntraID...")
+            print(f"{Fore.MAGENTA}Getting Permissions from EntraID...")
 
             # If None, then it's a MI token without access to get its Entra ID permissions (probably it doesn't have them)
             ## Important: Keep this Entra ID check first
