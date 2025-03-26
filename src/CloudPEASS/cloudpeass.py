@@ -39,7 +39,7 @@ __CLOUD_SPECIFIC_EXAMPLE__
 
 ### CLARIFICATIONS
 Remember to indicate as many sensitive permissions as possible.
-Always recheck the permissions and their descriptions to ensure they are correct and avoid false possitives.
+Always recheck the permissions and their descriptions to ensure they are correct and avoid false positives.
 If no malicious actions are found, please provide an empty JSON array: []
 
 """
@@ -65,7 +65,7 @@ __CLOUD_SPECIFIC_EXAMPLE__
 ### CLARIFICATIONS
 Remember to indicate as many malicious actions as possible, and provide the necessary commands to perform them.
 If more than one command is needed, just separate them with a newline character or a semi-colon.
-Always recheck the response to ensure it's correct and avoid false possitives.
+Always recheck the response to ensure it's correct and avoid false positives.
 
 If no malicious actions are found, please provide an empty JSON array: []
 """
@@ -167,7 +167,7 @@ class CloudPEASS:
         """
 
         query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
-        query_text += "What malicious actions could an attacker perform with them to for example escalate privileges (escalate to another user, group or managed identity/role/service account or get more permissions somehow inside the cloud or inside the cloud service), access sensitive information from the could (env vars, conneciton strings, secrets, dumping buckets or disks... any kind of data storage)?"
+        query_text += "What malicious actions could an attacker perform with them to for example escalate privileges (escalate to another user, group or managed identity/role/service account or get more permissions somehow inside the cloud or inside the cloud service), access sensitive information from the could (env vars, connection strings, secrets, dumping buckets or disks... any kind of data storage)?"
         query_text += "Note that permission starting with '-' are deny permissions.\n"
         query_text += self.malicious_actions_response_format
 
@@ -177,15 +177,15 @@ class CloudPEASS:
         if not result:
             return []
         
-        # Re-check response to ensure it's correct and avoid false possitives
+        # Re-check response to ensure it's correct and avoid false positives
         query_text = "### Context\n"
         query_text = f"You have been asked previously to provide the malicious actions that could be performed with the following {self.cloud_provider} permissions: {', '.join(permissions)}\n\n"
         query_text += "### Your response was:\n"
         query_text += json.dumps(result, indent=2)
         query_text += "\n\n### Indications\n"
-        query_text += "- Check the response to ensure it's correct and avoid false possitives.\n"
+        query_text += "- Check the response to ensure it's correct and avoid false positives.\n"
         query_text += "- Your new response should only contain valid potential attacks based on the given permissions and not attacks not related to the permissions.\n"
-        query_text += "- Answer with a new JSON keeping the valid attacks, removing the false possitives if any, and adding more attacks if someone was missed.\n"
+        query_text += "- Answer with a new JSON keeping the valid attacks, removing the false positives if any, and adding more attacks if someone was missed.\n"
         query_text += "- If no malicious actions are found, please provide an empty JSON array: []\n"
         query_text += self.malicious_actions_response_format
         result = self.query_hacktricks_ai(query_text)
@@ -204,7 +204,7 @@ class CloudPEASS:
     
     def analyze_sensitive_combinations_ai(self, permissions):
         query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
-        query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permision is a permission that allows to esalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets. A sensitive permission is a permission that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secrets, API keys...) is not sensitive.\n"
+        query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permission is a permission that allows to escalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets. A sensitive permission is a permission that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secrets, API keys...) is not sensitive.\n"
         query_text += "Note that permissions starting with '-' are deny permissions.\n"
         query_text += self.sensitive_response_format
 
