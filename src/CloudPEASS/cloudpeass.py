@@ -339,7 +339,7 @@ class CloudPEASS:
 
     def run_analysis(self):
         print(f"{Fore.GREEN}\nStarting CloudPEASS analysis for {self.cloud_provider}...")
-        print(f"{Fore.YELLOW}[{Fore.BLUE}i] If you want to learn cloud hacking, check out the trainings at {Fore.CYAN}https://training.hacktricks.xyz")
+        print(f"{Fore.YELLOW}[{Fore.BLUE}i{Fore.YELLOW}] If you want to learn cloud hacking, check out the trainings at {Fore.CYAN}https://training.hacktricks.xyz")
         print(f"{Fore.MAGENTA}\nGetting all your permissions...")
         resources = self.get_resources_and_permissions()
         grouped_resources = self.group_resources_by_permissions(resources)
