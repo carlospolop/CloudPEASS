@@ -154,7 +154,48 @@ class CloudPEASS:
             "sensitive_perms": found_sensitive
         }
 
-    def find_attacks_from_permissions(self, permissions):
+    def sumarize_resources(self, resources):
+        """
+        Summarize resources by reducing to 1 resource per type.
+
+        Args:
+            resources (list): List of resource dictionaries.
+
+        Returns:
+            dict: Summary of resources .
+        """
+
+        res = {}
+
+        if self.cloud_provider.lower() == "azure":
+            for r in resources:
+                if len(r.split("/")) == 3:
+                    res["subscription"] = r
+                elif len(r.split("/")) == 5:
+                    res["resource_group"] = r
+                else: 
+                    r_type = r.split("/providers/")[1].split("/")[0] # Microsoft.Storage
+                    res[r_type] = r
+        
+        elif self.cloud_provider.lower() == "gcp":
+            for r in resources:
+                if len(r.split("/")) == 2:
+                    res["project"] = r
+                else: 
+                    r_type = r.split("/")[2] # serviceAccounts
+                    res[r_type] = r
+        
+        elif self.cloud_provider.lower() == "aws":
+            pass
+
+        else:
+            raise ValueError("Unsupported cloud provider. Supported providers are: Azure, AWS, GCP.")
+        
+        return res
+
+
+
+    def find_attacks_from_permissions(self, permissions, resources):
         """
         Query Hacktricks AI to analyze malicious actions for a set of permissions.
 
@@ -166,9 +207,15 @@ class CloudPEASS:
             dict: Analysis result containing impact description or None if nothing found.
         """
 
-        query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
-        query_text += "What malicious actions could an attacker perform with them to for example escalate privileges (escalate to another user, group or managed identity/role/service account or get more permissions somehow inside the cloud or inside the cloud service), access sensitive information from the could (env vars, connection strings, secrets, dumping buckets or disks... any kind of data storage)?"
-        query_text += "Note that permission starting with '-' are deny permissions.\n"
+        sum_resources = self.sumarize_resources(resources)
+
+        query_text = "#### CONTEXT\n"
+        query_text += f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
+        if sum_resources:
+            query_text = f"Over the following resources: {', '.join(sum_resources.values())}\n"
+        query_text += "What malicious actions could an attacker perform with them to escalate privileges (escalate to another user, group or managed identity/role/service account or get more permissions somehow inside the cloud or inside the cloud service), access sensitive information from the could (env vars, connection strings, secrets, dumping buckets or disks... any kind of data storage)?"
+        if any(perm.startswith("-") for perm in permissions):
+            query_text += "Note that permissions starting with '-' are deny permissions.\n"
         query_text += self.malicious_actions_response_format
 
         result = self.query_hacktricks_ai(query_text)
@@ -307,7 +354,8 @@ class CloudPEASS:
 
     def process_combo(self, combo, all_very_sensitive_perms, all_sensitive_perms, all_very_sensitive_perms_ai, all_sensitive_perms_ai):
         perms = combo["permissions"]
-        hacktricks_analysis = self.find_attacks_from_permissions(perms)
+        resources = combo["resources"]
+        hacktricks_analysis = self.find_attacks_from_permissions(perms, resources)
 
         if not hacktricks_analysis:
             return None  # Skip if no analysis
