@@ -16,10 +16,10 @@ from src.sensitive_permissions.gcp import very_sensitive_combinations, sensitive
 init(autoreset=True)
 
 GCP_MALICIOUS_RESPONSE_EXAMPLE = """[
-    {
-        "Title": "Escalate Privileges via Compute Engine",
-        "Description": "With compute.instances.setIamPolicy permission, an attacker can grant itself a role with the previous permissions and escalate privileges abusing them. Here is an example adding roles/compute.admin to a Service.",
-        "Commands": "cat <<EOF > policy.json
+	{
+		"Title": "Escalate Privileges via Compute Engine",
+		"Description": "With compute.instances.setIamPolicy permission, an attacker can grant itself a role with the previous permissions and escalate privileges abusing them. Here is an example adding roles/compute.admin to a Service.",
+		"Commands": "cat <<EOF > policy.json
 bindings:
 - members:
   - serviceAccount:$SERVER_SERVICE_ACCOUNT
@@ -28,22 +28,22 @@ version: 1
 EOF
 
 gcloud compute instances set-iam-policy $INSTANCE policy.json --zone=$ZONE"
-    },
-    [...]
+	},
+	[...]
 ]"""
 
 GCP_SENSITIVE_RESPONSE_EXAMPLE = """[
-    {
-        "permission": "cloudfunctions.functions.sourceCodeSet",
-        "is_very_sensitive": true,
-        "is_sensitive": false,
-        "description": "An attacker with this permission could modify the code of a Function to ecalate privileges to the SA used by the function."
-    },
-    [...]
+	{
+		"permission": "cloudfunctions.functions.sourceCodeSet",
+		"is_very_sensitive": true,
+		"is_sensitive": false,
+		"description": "An attacker with this permission could modify the code of a Function to ecalate privileges to the SA used by the function."
+	},
+	[...]
 ]"""
 
 NOT_COMPUTE_PERMS = [
-    "compute.acceleratorTypes.get",
+	"compute.acceleratorTypes.get",
 	"compute.acceleratorTypes.list",
 	"compute.addresses.create",
 	"compute.addresses.createInternal",
@@ -893,316 +893,461 @@ NOT_COMPUTE_PERMS = [
 
 NOT_SA_PERMS = [
 	"iam.serviceAccounts.create",
-    "iam.serviceAccounts.list"
+	"iam.serviceAccounts.list"
 ]
 
 NOT_STORAGE_PERMS = [
-    "storage.objects.getIamPolicy",
+	"storage.objects.getIamPolicy",
 	"storage.objects.setIamPolicy"
 ]
 
 NOT_FUNCTIONS_PERMS = [
-    "cloudfunctions.functions.create",
+	"cloudfunctions.functions.create",
 	"cloudfunctions.functions.list",
 	"cloudfunctions.locations.list"
 ]
 
 class GCPPEASS(CloudPEASS):
-    def __init__(self, credentials, project, folder, org, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path=None):
-        self.credentials = credentials
-        self.project = project
-        self.folder = folder
-        self.org = org
-        self.all_gcp_perms = self.download_gcp_permissions()
+	def __init__(self, credentials, extra_token, project, folder, org, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path=None):
+		self.credentials = credentials
+		self.extra_token = extra_token
+		self.project = project
+		self.folder = folder
+		self.org = org
+		self.all_gcp_perms = self.download_gcp_permissions()
 
-        super().__init__(very_sensitive_combos, sensitive_combos, "GCP", not_use_ht_ai, num_threads,
-                         GCP_MALICIOUS_RESPONSE_EXAMPLE, GCP_SENSITIVE_RESPONSE_EXAMPLE, out_path)
+		super().__init__(very_sensitive_combos, sensitive_combos, "GCP", not_use_ht_ai, num_threads,
+						 GCP_MALICIOUS_RESPONSE_EXAMPLE, GCP_SENSITIVE_RESPONSE_EXAMPLE, out_path)
 
-    def download_gcp_permissions(self):
-        base_ref_page = requests.get("https://cloud.google.com/iam/docs/permissions-reference").text
-        permissions = re.findall('<td id="([^"]+)"', base_ref_page)
-        print(f"{Fore.GREEN}Gathered {len(permissions)} GCP permissions to check")
-        return permissions
+	def download_gcp_permissions(self):
+		base_ref_page = requests.get("https://cloud.google.com/iam/docs/permissions-reference").text
+		permissions = re.findall('<td id="([^"]+)"', base_ref_page)
+		print(f"{Fore.GREEN}Gathered {len(permissions)} GCP permissions to check")
+		return permissions
 
-    def get_relevant_permissions(self, res_type=None):
-        if res_type.lower() == "vm":
-            return [p for p in self.all_gcp_perms if p.startswith("compute") and p not in NOT_COMPUTE_PERMS]
-        elif res_type.lower() == "function":
-            return [p for p in self.all_gcp_perms if p.startswith("cloudfunctions") and p not in NOT_FUNCTIONS_PERMS]
-        elif res_type.lower() == "storage":
-            return [p for p in self.all_gcp_perms if p.startswith("storage") and p not in NOT_STORAGE_PERMS]
-        elif res_type.lower() == "service_account":  # **New branch for service accounts**
-            return [p for p in self.all_gcp_perms if p.startswith("iam.serviceAccounts") and p not in NOT_SA_PERMS]
-        else:
-            return self.all_gcp_perms
+	def get_relevant_permissions(self, res_type=None):
+		if res_type.lower() == "vm":
+			return [p for p in self.all_gcp_perms if p.startswith("compute") and p not in NOT_COMPUTE_PERMS]
+		elif res_type.lower() == "function":
+			return [p for p in self.all_gcp_perms if p.startswith("cloudfunctions") and p not in NOT_FUNCTIONS_PERMS]
+		elif res_type.lower() == "storage":
+			return [p for p in self.all_gcp_perms if p.startswith("storage") and p not in NOT_STORAGE_PERMS]
+		elif res_type.lower() == "service_account":  # **New branch for service accounts**
+			return [p for p in self.all_gcp_perms if p.startswith("iam.serviceAccounts") and p not in NOT_SA_PERMS]
+		else:
+			return self.all_gcp_perms
 
-    def check_permissions(self, resource_id, perms, verbose=False):
-        """
-        Test if the user has the indicated permissions on a resource.
+	def check_permissions(self, resource_id, perms, verbose=False):
+		"""
+		Test if the user has the indicated permissions on a resource.
 
-        Supported resource types:
-        - projects
-        - folders
-        - organizations
-        - functions
-        - vms
-        - storage
-        - Service account
-        """
-        if "/functions/" in resource_id:
-            req = googleapiclient.discovery.build("cloudfunctions", "v1", credentials=self.credentials).projects().locations().functions().testIamPermissions(
-                resource=resource_id,
-                body={"permissions": perms},
-            )
-        elif "/instances/" in resource_id:
-            req = googleapiclient.discovery.build("compute", "v1", credentials=self.credentials).instances().testIamPermissions(
-                project=resource_id.split("/")[1],
-                resource=resource_id.split("/")[-1],
-                zone=resource_id.split("/")[3],
-                body={"permissions": perms},
-            )
-        elif "/storage/" in resource_id:
-            req = googleapiclient.discovery.build("storage", "v1", credentials=self.credentials).buckets().testIamPermissions(
-                bucket=resource_id.split("/")[-1],
-                permissions=perms,
-            )
-        elif "/serviceAccounts/" in resource_id:
-            req = googleapiclient.discovery.build("iam", "v1", credentials=self.credentials) \
+		Supported resource types:
+		- projects
+		- folders
+		- organizations
+		- functions
+		- vms
+		- storage
+		- Service account
+		"""
+		if "/functions/" in resource_id:
+			req = googleapiclient.discovery.build("cloudfunctions", "v1", credentials=self.credentials).projects().locations().functions().testIamPermissions(
+				resource=resource_id,
+				body={"permissions": perms},
+			)
+		elif "/instances/" in resource_id:
+			req = googleapiclient.discovery.build("compute", "v1", credentials=self.credentials).instances().testIamPermissions(
+				project=resource_id.split("/")[1],
+				resource=resource_id.split("/")[-1],
+				zone=resource_id.split("/")[3],
+				body={"permissions": perms},
+			)
+		elif "/storage/" in resource_id:
+			req = googleapiclient.discovery.build("storage", "v1", credentials=self.credentials).buckets().testIamPermissions(
+				bucket=resource_id.split("/")[-1],
+				permissions=perms,
+			)
+		elif "/serviceAccounts/" in resource_id:
+			req = googleapiclient.discovery.build("iam", "v1", credentials=self.credentials) \
 				.projects().serviceAccounts().testIamPermissions(
 					resource=resource_id,
 					body={"permissions": perms}
 				)
-        elif resource_id.startswith("projects/"):
-            req = googleapiclient.discovery.build("cloudresourcemanager", "v3", credentials=self.credentials).projects().testIamPermissions(
-                resource=resource_id,
-                body={"permissions": perms},
-            )
-        elif resource_id.startswith("folders/"):
-            req = googleapiclient.discovery.build("cloudresourcemanager", "v3", credentials=self.credentials).folders().testIamPermissions(
-                resource=resource_id,
-                body={"permissions": perms},
-            )
-        elif resource_id.startswith("organizations/"):
-            req = googleapiclient.discovery.build("cloudresourcemanager", "v3", credentials=self.credentials).organizations().testIamPermissions(
-                resource=resource_id,
-                body={"permissions": perms},
-            )
-        else:
-            print(f"{Fore.RED}Unsupported resource type: {resource_id}")
-            return []
+		elif resource_id.startswith("projects/"):
+			req = googleapiclient.discovery.build("cloudresourcemanager", "v3", credentials=self.credentials).projects().testIamPermissions(
+				resource=resource_id,
+				body={"permissions": perms},
+			)
+		elif resource_id.startswith("folders/"):
+			req = googleapiclient.discovery.build("cloudresourcemanager", "v3", credentials=self.credentials).folders().testIamPermissions(
+				resource=resource_id,
+				body={"permissions": perms},
+			)
+		elif resource_id.startswith("organizations/"):
+			req = googleapiclient.discovery.build("cloudresourcemanager", "v3", credentials=self.credentials).organizations().testIamPermissions(
+				resource=resource_id,
+				body={"permissions": perms},
+			)
+		else:
+			print(f"{Fore.RED}Unsupported resource type: {resource_id}")
+			return []
 
-        have_perms = []
-        try:
-            returnedPermissions = req.execute()
-            have_perms = returnedPermissions.get("permissions", [])
-        except googleapiclient.errors.HttpError as e:
-            if "Cloud Resource Manager API has not been used" in str(e):
-                print(Fore.RED + str(e) + "\nTry to enable the service running: gcloud services enable cloudresourcemanager.googleapis.com")
-            # **If a permission is reported as invalid, remove it and retry**
-            for perm in perms.copy():
-                if " " + perm + " " in str(e):
-                    perms.remove(perm)
-                    return self.check_permissions(resource_id, perms, verbose)
-        except Exception as e:
-            print("Error:")
-            print(e)
+		have_perms = []
+		try:
+			returnedPermissions = req.execute()
+			have_perms = returnedPermissions.get("permissions", [])
+		except googleapiclient.errors.HttpError as e:
+			if "Cloud Resource Manager API has not been used" in str(e):
+				print(Fore.RED + str(e) + "\nTry to enable the service running: gcloud services enable cloudresourcemanager.googleapis.com")
+			# **If a permission is reported as invalid, remove it and retry**
+			for perm in perms.copy():
+				if " " + perm + " " in str(e):
+					perms.remove(perm)
+					return self.check_permissions(resource_id, perms, verbose)
+		except Exception as e:
+			print("Error:")
+			print(e)
 
-        if have_perms and verbose:
-            print(f"Found: {have_perms}")
+		if have_perms and verbose:
+			print(f"Found: {have_perms}")
 
-        return have_perms
+		return have_perms
 
 
-    def list_projects(self):
-        req = googleapiclient.discovery.build("cloudresourcemanager", "v1", credentials=self.credentials).projects().list()
-        try:
-            result = req.execute()
-            return [proj['projectId'] for proj in result.get('projects', [])]
-        except:
-            return []
+	def list_projects(self):
+		req = googleapiclient.discovery.build("cloudresourcemanager", "v1", credentials=self.credentials).projects().list()
+		try:
+			result = req.execute()
+			return [proj['projectId'] for proj in result.get('projects', [])]
+		except:
+			return []
 
-    def list_folders(self):
-        req = googleapiclient.discovery.build("cloudresourcemanager", "v2", credentials=self.credentials).folders().search(body={})
-        try:
-            result = req.execute()
-            return [folder['name'].split('/')[-1] for folder in result.get('folders', [])]
-        except:
-            return []
+	def list_folders(self):
+		req = googleapiclient.discovery.build("cloudresourcemanager", "v2", credentials=self.credentials).folders().search(body={})
+		try:
+			result = req.execute()
+			return [folder['name'].split('/')[-1] for folder in result.get('folders', [])]
+		except:
+			return []
 
-    def list_organizations(self):
-        req = googleapiclient.discovery.build("cloudresourcemanager", "v1", credentials=self.credentials).organizations().search(body={})
-        try:
-            result = req.execute()
-            return [org['name'].split('/')[-1] for org in result.get('organizations', [])]
-        except:
-            return []
+	def list_organizations(self):
+		req = googleapiclient.discovery.build("cloudresourcemanager", "v1", credentials=self.credentials).organizations().search(body={})
+		try:
+			result = req.execute()
+			return [org['name'].split('/')[-1] for org in result.get('organizations', [])]
+		except:
+			return []
 
-    def list_vms(self, project):
-        try:
-            request = googleapiclient.discovery.build("compute", "v1", credentials=self.credentials).instances().aggregatedList(project=project)
-            vms = []
-            while request is not None:
-                response = request.execute()
-                for zone, instances_scoped_list in response.get('items', {}).items():
-                    for instance in instances_scoped_list.get('instances', []):
-                        # Construct a unique target identifier for the VM
-                        zone_name = instance.get('zone', '').split('/')[-1]
-                        target_id = f"projects/{project}/zones/{zone_name}/instances/{instance['name']}"
-                        vms.append(target_id)
-                request = googleapiclient.discovery.build("compute", "v1", credentials=self.credentials).instances().aggregatedList_next(previous_request=request, previous_response=response)
-            return vms
-        except Exception:
-            return []
+	def list_vms(self, project):
+		try:
+			request = googleapiclient.discovery.build("compute", "v1", credentials=self.credentials).instances().aggregatedList(project=project)
+			vms = []
+			while request is not None:
+				response = request.execute()
+				for zone, instances_scoped_list in response.get('items', {}).items():
+					for instance in instances_scoped_list.get('instances', []):
+						# Construct a unique target identifier for the VM
+						zone_name = instance.get('zone', '').split('/')[-1]
+						target_id = f"projects/{project}/zones/{zone_name}/instances/{instance['name']}"
+						vms.append(target_id)
+				request = googleapiclient.discovery.build("compute", "v1", credentials=self.credentials).instances().aggregatedList_next(previous_request=request, previous_response=response)
+			return vms
+		except Exception:
+			return []
 
-    def list_functions(self, project):
-        try:
-            parent = f"projects/{project}/locations/-"
-            response = googleapiclient.discovery.build("cloudfunctions", "v1", credentials=self.credentials).projects().locations().functions().list(parent=parent).execute()
-            functions = []
-            for function in response.get('functions', []):
-                # The function name is already fully qualified
-                functions.append(function['name'])
-            return functions
-        except Exception:
-            return []
+	def list_functions(self, project):
+		try:
+			parent = f"projects/{project}/locations/-"
+			response = googleapiclient.discovery.build("cloudfunctions", "v1", credentials=self.credentials).projects().locations().functions().list(parent=parent).execute()
+			functions = []
+			for function in response.get('functions', []):
+				# The function name is already fully qualified
+				functions.append(function['name'])
+			return functions
+		except Exception:
+			return []
 
-    def list_storages(self, project):
-        try:
-            response = googleapiclient.discovery.build("storage", "v1", credentials=self.credentials).buckets().list(project=project).execute()
-            buckets = []
-            for bucket in response.get('items', []):
-                # Construct a unique target identifier for the Storage bucket
-                buckets.append(f"projects/{project}/storage/{bucket['name']}")
-            return buckets
-        except Exception:
-            return []
-    
-    def list_service_accounts(self, project):
-        try:
-            service = googleapiclient.discovery.build("iam", "v1", credentials=self.credentials)
-            # The service account resource name will be like "projects/{project}/serviceAccounts/{email}"
-            response = service.projects().serviceAccounts().list(name=f"projects/{project}").execute()
-            accounts = []
-            for account in response.get('accounts', []):
-                accounts.append(account['name'])  # Use the full resource name
-            return accounts
-        except Exception as e:
-            print(f"{Fore.RED}Error listing service accounts for project {project}: {e}")
-            return []
+	def list_storages(self, project):
+		try:
+			response = googleapiclient.discovery.build("storage", "v1", credentials=self.credentials).buckets().list(project=project).execute()
+			buckets = []
+			for bucket in response.get('items', []):
+				# Construct a unique target identifier for the Storage bucket
+				buckets.append(f"projects/{project}/storage/{bucket['name']}")
+			return buckets
+		except Exception:
+			return []
+	
+	def list_service_accounts(self, project):
+		try:
+			service = googleapiclient.discovery.build("iam", "v1", credentials=self.credentials)
+			# The service account resource name will be like "projects/{project}/serviceAccounts/{email}"
+			response = service.projects().serviceAccounts().list(name=f"projects/{project}").execute()
+			accounts = []
+			for account in response.get('accounts', []):
+				accounts.append(account['name'])  # Use the full resource name
+			return accounts
+		except Exception as e:
+			print(f"{Fore.RED}Error listing service accounts for project {project}: {e}")
+			return []
 
-    def get_resources_and_permissions(self):
-        # Build a list of targets with type information
+	def get_resources_and_permissions(self):
+		# Build a list of targets with type information
 
-        print("Listing projects, folders, and organizations...")
-        targets = []
-        if self.project:
-            targets.append({"id": f"projects/{self.project}", "type": "project"})
-        if self.folder:
-            targets.append({"id": f"folders/{self.folder}", "type": "folder"})
-        if self.org:
-            targets.append({"id": f"organizations/{self.org}", "type": "organization"})
+		print("Listing projects, folders, and organizations...")
+		targets = []
+		if self.project:
+			targets.append({"id": f"projects/{self.project}", "type": "project"})
+		if self.folder:
+			targets.append({"id": f"folders/{self.folder}", "type": "folder"})
+		if self.org:
+			targets.append({"id": f"organizations/{self.org}", "type": "organization"})
 
-        for proj in self.list_projects():
-            targets.append({"id": f"projects/{proj}", "type": "project"})
-        for folder in self.list_folders():
-            targets.append({"id": f"folders/{folder}", "type": "folder"})
-        for org in self.list_organizations():
-            targets.append({"id": f"organizations/{org}", "type": "organization"})
+		for proj in self.list_projects():
+			targets.append({"id": f"projects/{proj}", "type": "project"})
+		for folder in self.list_folders():
+			targets.append({"id": f"folders/{folder}", "type": "folder"})
+		for org in self.list_organizations():
+			targets.append({"id": f"organizations/{org}", "type": "organization"})
 
-        # For each project, add VMs, Cloud Functions, and Storage buckets
-        print("Trying to list VMs, Cloud Functions, and Storage buckets on each project...")
-        def process_project(proj):
-            local_targets = []
-            for vm in self.list_vms(proj):
-                local_targets.append({"id": vm, "type": "vm"})
-            for func in self.list_functions(proj):
-                local_targets.append({"id": func, "type": "function"})
-            for bucket in self.list_storages(proj):
-                local_targets.append({"id": bucket, "type": "storage"})
-            for sa in self.list_service_accounts(proj):
-                local_targets.append({"id": sa, "type": "service_account"})
-            return local_targets
+		# For each project, add VMs, Cloud Functions, and Storage buckets
+		print("Trying to list VMs, Cloud Functions, and Storage buckets on each project...")
+		def process_project(proj):
+			local_targets = []
+			for vm in self.list_vms(proj):
+				local_targets.append({"id": vm, "type": "vm"})
+			for func in self.list_functions(proj):
+				local_targets.append({"id": func, "type": "function"})
+			for bucket in self.list_storages(proj):
+				local_targets.append({"id": bucket, "type": "storage"})
+			for sa in self.list_service_accounts(proj):
+				local_targets.append({"id": sa, "type": "service_account"})
+			return local_targets
 
-        # **Process projects concurrently using a thread pool**
-        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            futures = {executor.submit(process_project, proj): proj for proj in self.list_projects()}
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Processing projects"):
-                targets.extend(future.result())
+		# **Process projects concurrently using a thread pool**
+		with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+			futures = {executor.submit(process_project, proj): proj for proj in self.list_projects()}
+			for future in tqdm(as_completed(futures), total=len(futures), desc="Processing projects"):
+				targets.extend(future.result())
 
-        # Start looking for permissions
-        found_permissions = []
-        lock = Lock()
+		# Start looking for permissions
+		found_permissions = []
+		lock = Lock()
 
-        # Function to process each target resource
-        def process_target(target):
-            # Get relevant permissions based on target type
-            relevant_perms = self.get_relevant_permissions(target["type"])
-            # Split permissions into chunks of 20
-            perms_chunks = [relevant_perms[i:i+20] for i in range(0, len(relevant_perms), 20)]
-            collected = []
+		# Function to process each target resource
+		def process_target(target):
+			# Get relevant permissions based on target type
+			relevant_perms = self.get_relevant_permissions(target["type"])
+			# Split permissions into chunks of 20
+			perms_chunks = [relevant_perms[i:i+20] for i in range(0, len(relevant_perms), 20)]
+			collected = []
 
-            # Use a thread pool to process each permission chunk concurrently
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                # Submit tasks for each chunk
-                futures = {executor.submit(self.check_permissions, target["id"], chunk): chunk for chunk in perms_chunks}
-                # Iterate over completed futures with a progress bar
-                for future in tqdm(as_completed(futures), total=len(futures), desc=f"Checking permissions for {target['id']}", leave=False):
-                    result = future.result()
-                    collected.extend(result)
+			# Use a thread pool to process each permission chunk concurrently
+			with ThreadPoolExecutor(max_workers=5) as executor:
+				# Submit tasks for each chunk
+				futures = {executor.submit(self.check_permissions, target["id"], chunk): chunk for chunk in perms_chunks}
+				# Iterate over completed futures with a progress bar
+				for future in tqdm(as_completed(futures), total=len(futures), desc=f"Checking permissions for {target['id']}", leave=False):
+					result = future.result()
+					collected.extend(result)
 
-            return {
-                "id": target["id"],
-                "name": target["id"].split("/")[-1],
-                "permissions": collected,
-                "type": target["type"]
-            }
+			return {
+				"id": target["id"],
+				"name": target["id"].split("/")[-1],
+				"permissions": collected,
+				"type": target["type"]
+			}
 
-        if not targets:
-            print(f"{Fore.RED}No targets found! Indicate a project, folder or organization manually. Exiting.")
-            exit(1)
-        
-        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            futures = {executor.submit(process_target, target): target for target in targets}
-            for future in tqdm(as_completed(futures), total=len(futures)):
-                res = future.result()
-                with lock:
-                    found_permissions.append(res)
+		if not targets:
+			print(f"{Fore.RED}No targets found! Indicate a project, folder or organization manually. Exiting.")
+			exit(1)
+		
+		with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+			futures = {executor.submit(process_target, target): target for target in targets}
+			for future in tqdm(as_completed(futures), total=len(futures)):
+				res = future.result()
+				with lock:
+					found_permissions.append(res)
 
-        return found_permissions
+		return found_permissions
+	
+	def print_whoami_info(self, use_extra=False):
+		"""
+		From the token, get the current user information to identify the context of the permissions and scopes.
+		"""
+		
+		user_info = {
+			"email": None,
+			"expires_in": None,
+			"audience": None,
+			"scopes": []
+		}
+
+		if use_extra:
+			token = self.extra_token
+		else:
+			token = self.credentials.token
+
+		resp = requests.post(
+			"https://www.googleapis.com/oauth2/v3/tokeninfo",
+			headers={"Content-Type": "application/x-www-form-urlencoded"},
+			data={"access_token": token}  # Assuming you have a valid access token
+		)
+		if resp.status_code != 200:
+			print(f"{Fore.RED}Error fetching user info. Token or credentials are invalid.")
+			exit(1)
+		
+		user_info = resp.json()
+		if "email" in user_info:
+			user_info["email"] = user_info["email"]
+			print(f"{Fore.BLUE}Current user: {Fore.WHITE}{user_info['email']}")
+		
+		if "expires_in" in user_info:
+			expires_in = user_info["expires_in"]
+			user_info["expires_in"] = expires_in
+			print(f"{Fore.BLUE}Token expires in: {Fore.WHITE}{expires_in} seconds")
+		
+		if "audience" in user_info:
+			audience = user_info["audience"]
+			user_info["audience"] = audience
+			print(f"{Fore.BLUE}Token audience: {Fore.WHITE}{audience}")
+		
+		scopes = []
+		if "scope" in user_info:
+			scopes = user_info["scope"].split()
+			user_info["scopes"] = scopes
+			print(f"{Fore.BLUE}Scopes: {Fore.WHITE}{', '.join(scopes)}")
+		
+		if any("/gmail" in s for s in scopes):
+			print(f"{Fore.GREEN}Note: You have Gmail API access.")
+			user_input = input(f"{Fore.YELLOW}Do you want to list emails? [Y/n]: {Fore.WHITE}")
+			if user_input.lower() != 'n':
+				self.list_gmail_emails(google.oauth2.credentials.Credentials(token))
+		
+		if any("/drive" in s for s in scopes):
+			print(f"{Fore.GREEN}Note: You have Drive API access.")
+			user_input = input(f"{Fore.YELLOW}Do you want to list files in Google Drive? [Y/n]: {Fore.WHITE}")
+			if user_input.lower() != 'n':
+				self.list_drive_files(google.oauth2.credentials.Credentials(token))
+		
+		if self.extra_token and token != self.extra_token and self.extra_token != self.credentials.token:
+			return self.print_whoami_info(True)
+			
+
+	def list_drive_files(self, creds):
+		"""
+		List files from the Google Drive account associated with the current token.
+		This requires the 'https://www.googleapis.com/auth/drive.readonly' scope.
+		"""
+		try:
+			service = googleapiclient.discovery.build("drive", "v3", credentials=creds)
+			page_token = None
+
+			while True:
+				results = service.files().list(
+					pageSize=10,
+					pageToken=page_token,
+					fields="nextPageToken, files(id, name)"
+				).execute()
+				files = results.get('files', [])
+
+				if not files:
+					print(f"{Fore.YELLOW}No files found in Google Drive.")
+					break
+
+				for file in files:
+					print(f"{Fore.BLUE}- {Fore.WHITE}{file['name']}")
+
+				page_token = results.get('nextPageToken')
+				if not page_token:
+					print(f"{Fore.GREEN}No more files to display.")
+					break
+
+				cont = input("Do you want to see more files? (y/N): ")
+				if cont.lower() != 'y':
+					break
+
+		except Exception as e:
+			print(f"{Fore.RED}Error listing files: {e}")
+
+
+	def list_gmail_emails(self, creds):
+		"""
+		List emails from the Gmail account associated with the current token.
+		This requires the 'https://www.googleapis.com/auth/gmail.readonly' scope.
+		"""
+		try:
+			service = googleapiclient.discovery.build("gmail", "v1", credentials=creds)
+			page_token = None
+
+			while True:
+				results = service.users().messages().list(
+					userId='me',
+					maxResults=10,
+					pageToken=page_token
+				).execute()
+				messages = results.get('messages', [])
+
+				if not messages:
+					print(f"{Fore.YELLOW}No emails found.")
+					break
+
+				for message in messages:
+					msg = service.users().messages().get(userId='me', id=message['id']).execute()
+					headers = msg['payload'].get('headers', [])
+					subject = next((header['value'] for header in headers if header['name'].lower() == 'subject'), "No Subject")
+					from_email = next((header['value'] for header in headers if header['name'].lower() == 'from'), "Unknown Sender")
+					print(f"{Fore.BLUE}Email Subject: {Fore.WHITE}{subject}")
+					print(f"{Fore.BLUE}From Email: {Fore.WHITE}{from_email}")
+					print(f"{Fore.BLUE}Snippet: {Fore.WHITE}{msg['snippet']}")
+					print("-" * 50)
+
+				page_token = results.get('nextPageToken')
+				if not page_token:
+					print(f"{Fore.GREEN}No more emails to display.")
+					break
+
+				cont = input("Do you want to see more emails? (y/N): ")
+				if cont.lower() != 'y':
+					break
+
+		except Exception as e:
+			print(f"{Fore.RED}Error listing emails: {e}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.")
+	parser = argparse.ArgumentParser(description="GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.")
 
-    scope_group = parser.add_mutually_exclusive_group(required=False)
-    scope_group.add_argument('--project', help="Project ID")
-    scope_group.add_argument('--folder', help="Folder ID")
-    scope_group.add_argument('--organization', help="Organization ID")
+	scope_group = parser.add_mutually_exclusive_group(required=False)
+	scope_group.add_argument('--project', help="Project ID")
+	scope_group.add_argument('--folder', help="Folder ID")
+	scope_group.add_argument('--organization', help="Organization ID")
 
-    auth_group = parser.add_mutually_exclusive_group(required=True)
-    auth_group.add_argument('--sa-credentials-path', help="Path to credentials.json")
-    auth_group.add_argument('--token', help="Raw access token")
+	auth_group = parser.add_mutually_exclusive_group(required=True)
+	auth_group.add_argument('--sa-credentials-path', help="Path to credentials.json")
+	auth_group.add_argument('--token', help="Raw access token")
 
-    parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/gcp_results.json)")
-    parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
-    parser.add_argument('--not-use-hacktricks-ai', action="store_false", default=False, help="Don't use Hacktricks AI to analyze permissions")
+	parser.add_argument('--extra-token', help="Extra token potentially with access over Gmail and/or Drive")
+	parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/gcp_results.json)")
+	parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
+	parser.add_argument('--not-use-hacktricks-ai', action="store_false", default=False, help="Don't use Hacktricks AI to analyze permissions")
 
-    args = parser.parse_args()
-    if args.token:
-        token = os.getenv("CLOUDSDK_AUTH_ACCESS_TOKEN", args.token).rstrip()
-    else:
-        token = None
-        
-    sa_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", args.sa_credentials_path)
-    creds = google.oauth2.credentials.Credentials(token) if token else \
-        google.oauth2.service_account.Credentials.from_service_account_file(
-            sa_credentials_path, scopes=["https://www.googleapis.com/auth/cloud-platform"])
+	args = parser.parse_args()
+	if args.token:
+		token = os.getenv("CLOUDSDK_AUTH_ACCESS_TOKEN", args.token).rstrip()
+	else:
+		token = None
+		
+	sa_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", args.sa_credentials_path)
+	creds = google.oauth2.credentials.Credentials(token) if token else \
+		google.oauth2.service_account.Credentials.from_service_account_file(
+			sa_credentials_path, scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
-    gcp_peass = GCPPEASS(
-        creds, args.project, args.folder, args.organization,
-        very_sensitive_combinations, sensitive_combinations,
-        not_use_ht_ai=args.not_use_hacktricks_ai,
-        num_threads=args.threads,
-        out_path=args.out_json_path
-    )
-    gcp_peass.run_analysis()
+	gcp_peass = GCPPEASS(
+		creds, args.extra_token, args.project, args.folder, args.organization,
+		very_sensitive_combinations, sensitive_combinations,
+		not_use_ht_ai=args.not_use_hacktricks_ai,
+		num_threads=args.threads,
+		out_path=args.out_json_path
+	)
+	gcp_peass.run_analysis()

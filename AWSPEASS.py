@@ -401,6 +401,24 @@ class AWSPEASS(CloudPEASS):
                 pbar.update(1)
             pbar.close()
         return list(simulated_permissions)
+    
+    def print_whoami_info(self):
+        """
+        Prints the current principal information (ARN, type, and name).
+        This is useful for debugging and understanding the context of the permissions being analyzed.
+        """
+        
+        try:
+            identity = self.sts_client.get_caller_identity()
+            principal_arn = identity.get("Arn")
+            principal_type, principal_name = self.parse_principal(principal_arn)
+            
+            print(f"{Fore.BLUE}Current Principal ARN: {Fore.WHITE}{principal_arn}")
+            print(f"{Fore.BLUE}Principal Type: {Fore.WHITE}{principal_type}")
+            print(f"{Fore.BLUE}Principal Name: {Fore.WHITE}{principal_name}")
+        
+        except Exception as e:
+            print(f"{Fore.RED}Error retrieving principal information: {e}")
 
     def get_resources_and_permissions(self):
         """

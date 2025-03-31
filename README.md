@@ -73,11 +73,74 @@ GCPPEASS will **brute force all the permissions** over all the projects, folders
 
 Note that you will need to provide a **GCP access token**.
 
+### "Backdoor" `gcloud` for Drive access
+
+The application `gcloud` logins into an application that supports the scope to access Google Drive. Actually, using `gcloud auth login --enable-gdrive-access` It's possible to generate a regular access token that can be used to access the Google Drive API. 
+
+In macOS (and in Linux and Windows I guess) it's possible to modify the code of the python library used by `gcloud` and change the code in `/opt/homebrew/Caskroom/google-cloud-sdk/458.0.1/google-cloud-sdk/lib/surface/auth/login.py` forcing the `gcloud` application to always request the `https://www.googleapis.com/auth/drive` scope when logging in. For this you can modifify the **`GetScopes`** function to always add the Google Drive scope:
+
+```python
+def GetScopes(args):
+  scopes = config.CLOUDSDK_SCOPES
+  # Add REAUTH scope in case the user has 2fact activated.
+  # This scope is only used here and when refreshing the access token.
+  scopes += (config.REAUTH_SCOPE,)
+
+  scopes += (auth_util.GOOGLE_DRIVE_SCOPE,)
+  if args.enable_gdrive_access:
+    scopes += (auth_util.GOOGLE_DRIVE_SCOPE,)
+  return scopes
+```
+
+### Generate Gmail & Drive token
+
+0. Find a project you own or create a new one in the Google Cloud Console:
+  - Find a project you have created
+  - Create a project
+  - Create an AppSheet function that will create a GCP project for you
+
+1. Start enbling the Gmail & Drive API in a GCP project: `gcloud services enable gmail.googleapis.com` and `gcloud services enable drive.googleapis.com`
+
+2. Go to `OAuth consent screen` in the web portal and configure an applciation called 'GCPPEASS' and set the users emaila ddress whenever an emaila ddress is needed.
+  - Select the `External` user type and add the users email address as `Test Address`.
+
+3. Create a client indicating the name `GCPPEASS` and the type `Desktop Applicaiton` and download the secret.
+
+4. Go to `Data access` and add the following scopes:
+  * https://www.googleapis.com/auth/gmail.readonly
+  * https://www.googleapis.com/auth/drive
+
+5. Run a code like the following one to login into the app and generate an access token:
+
+```python
+# python3 -m pip install google-auth-oauthlib
+from google_auth_oauthlib.flow import InstalledAppFlow
+
+# Define the scopes you need
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/drive"
+]
+
+# Path to your downloaded client secret JSON file
+CLIENT_SECRET_FILE = "/path/to/client_secret.json"
+
+# Initialize the OAuth flow
+flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
+
+# Run the local server flow to get user consent
+creds = flow.run_local_server(port=0)
+
+# Print the access token
+print("Access Token:", creds.token)
+```
+
 - Help
 
 ```bash
-python3 GCPPEASS.py -h
-usage: GCPPEASS.py [-h] [--project PROJECT | --folder FOLDER | --organization ORGANIZATION] (--sa-credentials-path SA_CREDENTIALS_PATH | --token TOKEN)
+python3 ./GCPPEASS.py --help
+usage: GCPPEASS.py [-h] [--project PROJECT | --folder FOLDER | --organization ORGANIZATION]
+                   (--sa-credentials-path SA_CREDENTIALS_PATH | --token TOKEN) [--extra-token EXTRA_TOKEN]
                    [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
 
 GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.
@@ -91,6 +154,8 @@ options:
   --sa-credentials-path SA_CREDENTIALS_PATH
                         Path to credentials.json
   --token TOKEN         Raw access token
+  --extra-token EXTRA_TOKEN
+                        Extra token potentially with access over Gmail and/or Drive
   --out-json-path OUT_JSON_PATH
                         Output JSON file path (e.g. /tmp/gcp_results.json)
   --threads THREADS     Number of threads to use
@@ -106,7 +171,8 @@ export CLOUDSDK_AUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)
 
 # e.g.
 ## You can indicate the token via command line or just exporting the previous env variable is enough
-python3 GCPPEASS.py [--token <TOKEN>]
+## Use an extra token to give GCPPEASS access to gmail and drive
+python3 GCPPEASS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--project <PROJECT_ID>] [--folder <FOLDER_ID>] [--organization <ORGANIZATION_ID>]
 ```
 
 ## AWSPEASS

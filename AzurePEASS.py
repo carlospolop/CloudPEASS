@@ -157,6 +157,50 @@ class AzurePEASS(CloudPEASS):
             print(f"Unable to retrieve eligible roles: {resp_eligible.status_code} {resp_eligible.text} ( This is common, you need an Azure permission to list eligible roles )")
 
         return list(perms)
+    
+    def print_whoami_info(self):
+        """
+        Prints the current principal information.
+        This is useful for debugging and understanding the context of the permissions being analyzed.
+        """
+
+        if self.arm_token:
+            try:
+                # Get also email and groups
+                decoded = jwt.decode(self.arm_token, options={"verify_signature": False, "verify_aud": False})
+                print(f"{Fore.BLUE}Current Principal ID (ARM Token): {Fore.WHITE}{decoded.get('oid', 'Unknown')}")
+                print(f"{Fore.BLUE}Current Audience (ARM Token): {Fore.WHITE}{decoded.get('aud', 'Unknown')}")
+                if 'upn' in decoded:
+                    print(f"{Fore.BLUE}User Principal Name (UPN) (ARM Token): {Fore.WHITE}{decoded.get('upn', 'Unknown')}")
+                if 'email' in decoded:
+                    print(f"{Fore.BLUE}Email (ARM Token): {Fore.WHITE}{decoded.get('email', 'Unknown')}")
+                if 'groups' in decoded:
+                    groups = decoded.get('groups', [])
+                    print(f"{Fore.BLUE}Groups (ARM Token): {Fore.WHITE}{', '.join(groups) if groups else 'None'}")
+                if 'exp' in decoded:
+                    expiration_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(decoded.get('exp')))
+                    print(f"{Fore.BLUE}Token Expiration Time (ARM Token): {Fore.WHITE}{expiration_time}")
+            except Exception as e:
+                print(f"{Fore.RED}Failed to decode ARM token: {str(e)}")
+        
+        if self.graph_token:
+            try:
+                # Decode the Graph token to get the current principal information
+                decoded = jwt.decode(self.graph_token, options={"verify_signature": False, "verify_aud": False})
+                print(f"{Fore.BLUE}Current Principal ID (Graph Token): {Fore.WHITE}{decoded.get('oid', 'Unknown')}")
+                print(f"{Fore.BLUE}Current Audience (Graph Token): {Fore.WHITE}{decoded.get('aud', 'Unknown')}")
+                if 'upn' in decoded:
+                    print(f"{Fore.BLUE}User Principal Name (UPN) (Graph Token): {Fore.WHITE}{decoded.get('upn', 'Unknown')}")
+                if 'email' in decoded:
+                    print(f"{Fore.BLUE}Email (Graph Token): {Fore.WHITE}{decoded.get('email', 'Unknown')}")
+                if 'groups' in decoded:
+                    groups = decoded.get('groups', [])
+                    print(f"{Fore.BLUE}Groups (Graph Token): {Fore.WHITE}{', '.join(groups) if groups else 'None'}")
+                if 'exp' in decoded:
+                    expiration_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(decoded.get('exp')))
+                    print(f"{Fore.BLUE}Token Expiration Time (Graph Token): {Fore.WHITE}{expiration_time}")
+            except Exception as e:
+                print(f"{Fore.RED}Failed to decode Graph token: {str(e)}")
 
 
     def get_resources_and_permissions(self):

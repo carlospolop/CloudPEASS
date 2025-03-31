@@ -101,6 +101,15 @@ class CloudPEASS:
         """
         raise NotImplementedError("Implement this method per cloud provider.")
 
+    def print_whoami_info(self):
+        """
+        Abstract method to print information about the principal used.
+
+        Returns:
+            dict: Informationa about the user or principal used to run the analysis.
+        """
+        raise NotImplementedError("Implement this method per cloud provider.")
+
     @staticmethod
     def group_resources_by_permissions(resources):
         """
@@ -388,6 +397,8 @@ class CloudPEASS:
     def run_analysis(self):
         print(f"{Fore.GREEN}\nStarting CloudPEASS analysis for {self.cloud_provider}...")
         print(f"{Fore.YELLOW}[{Fore.BLUE}i{Fore.YELLOW}] If you want to learn cloud hacking, check out the trainings at {Fore.CYAN}https://training.hacktricks.xyz")
+        print(f"{Fore.MAGENTA}\nGetting information about your principal...")
+        self.print_whoami_info()
         print(f"{Fore.MAGENTA}\nGetting all your permissions...")
         resources = self.get_resources_and_permissions()
         grouped_resources = self.group_resources_by_permissions(resources)
