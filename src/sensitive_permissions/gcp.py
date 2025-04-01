@@ -3,7 +3,13 @@
 very_sensitive_combinations = [
     ["iam.serviceAccounts.actAs"],
     ["*.setIamPolicy"],
-    ["*ServiceAccount*"],
+
+    ["iam.serviceAccounts.getAccessToken"],
+    ["iam.serviceAccountKeys.create"],
+    ["iam.serviceAccounts.implicitDelegation"],
+    ["iam.serviceAccounts.signBlob"],
+    ["iam.serviceAccounts.signJwt"],
+    ["iam.serviceAccounts.getOpenIdToken"],
 
     ["appengine.instances.enableDebug"],
     

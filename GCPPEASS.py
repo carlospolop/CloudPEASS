@@ -1183,39 +1183,44 @@ class GCPPEASS(CloudPEASS):
 			"scopes": []
 		}
 
+		token = None
 		if use_extra:
 			token = self.extra_token
 		else:
 			token = self.credentials.token
+			if not token: # Then SA json creds
+				user_info["email"] = self.credentials.service_account_email
+				user_info["scopes"] = self.credentials.scopes
 
-		resp = requests.post(
-			"https://www.googleapis.com/oauth2/v3/tokeninfo",
-			headers={"Content-Type": "application/x-www-form-urlencoded"},
-			data={"access_token": token}  # Assuming you have a valid access token
-		)
-		if resp.status_code != 200:
-			print(f"{Fore.RED}Error fetching user info. Token or credentials are invalid.")
-			exit(1)
-		
-		user_info = resp.json()
-		if "email" in user_info:
-			user_info["email"] = user_info["email"]
+		if token:
+			resp = requests.post(
+				"https://www.googleapis.com/oauth2/v3/tokeninfo",
+				headers={"Content-Type": "application/x-www-form-urlencoded"},
+				data={"access_token": token}  # Assuming you have a valid access token
+			)
+			if resp.status_code != 200:
+				print(f"{Fore.RED}Error fetching user info. Token or credentials are invalid.")
+				exit(1)
+			
+			user_info = resp.json()
+		if "email" in user_info and user_info["email"]:
 			print(f"{Fore.BLUE}Current user: {Fore.WHITE}{user_info['email']}")
 		
-		if "expires_in" in user_info:
+		if "expires_in" in user_info and user_info["expires_in"]:
 			expires_in = user_info["expires_in"]
-			user_info["expires_in"] = expires_in
 			print(f"{Fore.BLUE}Token expires in: {Fore.WHITE}{expires_in} seconds")
 		
-		if "audience" in user_info:
+		if "audience" in user_info and user_info["audience"]:
 			audience = user_info["audience"]
-			user_info["audience"] = audience
 			print(f"{Fore.BLUE}Token audience: {Fore.WHITE}{audience}")
 		
 		scopes = []
-		if "scope" in user_info:
+		if "scope" in user_info and user_info["scope"]:
 			scopes = user_info["scope"].split()
-			user_info["scopes"] = scopes
+			print(f"{Fore.BLUE}Scopes: {Fore.WHITE}{', '.join(scopes)}")
+		
+		if "scopes" in user_info and user_info["scopes"]:
+			scopes = user_info["scopes"]
 			print(f"{Fore.BLUE}Scopes: {Fore.WHITE}{', '.join(scopes)}")
 		
 		if any("/gmail" in s for s in scopes):
