@@ -182,6 +182,9 @@ class CloudPEASS:
                     res["subscription"] = r
                 elif len(r.split("/")) == 5:
                     res["resource_group"] = r
+                elif "#microsoft.graph" in r:
+                    r_type = r.split(":")[-1] # Microsoft.Graph object
+                    res[r_type] = r
                 else: 
                     r_type = r.split("/providers/")[1].split("/")[0] # Microsoft.Storage
                     res[r_type] = r
@@ -296,23 +299,23 @@ class CloudPEASS:
         max_requests = 5
         window = 61  # seconds
 
-        # **Enforce global rate limit across threads**
+        # Enforce global rate limit across threads
         while True:
             with self._rate_limit_lock:
                 now = time.time()
-                # **Remove timestamps that are outside the 60-second window**
+                # Remove timestamps that are outside the 60-second window
                 self._request_timestamps = [
                     t for t in self._request_timestamps if now - t < window
                 ]
                 if len(self._request_timestamps) < max_requests:
-                    # **Log the current request timestamp**
+                    # Log the current request timestamp
                     self._request_timestamps.append(now)
                     break  # allowed to proceed
                 else:
-                    # **Calculate wait time until the earliest timestamp exits the window**
+                    # Calculate wait time until the earliest timestamp exits the window
                     earliest = min(self._request_timestamps)
                     wait_time = window - (now - earliest)
-            # **Wait outside the lock to allow other threads to update**
+            # Wait outside the lock to allow other threads to update
             time.sleep(wait_time)
 
         start_time = time.time()
@@ -336,7 +339,7 @@ class CloudPEASS:
                 result = "\n".join(result.split("\n")[:-1])
             result = json.loads(result)
         except Exception as e:
-            print(f"{Fore.RED}Error parsing response from Hacktricks AI: {e}")
+            print(f"{Fore.RED}Error parsing response from Hacktricks AI: {e}\nResponse: {response.text}")
             if cont < 3:
                 print(f"{Fore.YELLOW}Trying again...")
                 time.sleep(10)
