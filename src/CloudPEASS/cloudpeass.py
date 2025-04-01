@@ -320,7 +320,15 @@ class CloudPEASS:
             time.sleep(wait_time)
 
         start_time = time.time()
-        response = requests.post(HACKTRICKS_AI_ENDPOINT, json={"query": msg}, timeout=420)
+        try:
+            response = requests.post(HACKTRICKS_AI_ENDPOINT, json={"query": msg}, timeout=420)
+        except requests.exceptions.ConnectionError as e:
+            print(f"{Fore.RED}Error connecting to Hacktricks AI: {e}")
+            if cont < 3:
+                print(f"{Fore.YELLOW}Trying again...")
+                time.sleep(10)
+                return self.query_hacktricks_ai(msg, cont=cont+1)
+            return None
         elapsed = time.time() - start_time
 
         if response.status_code != 200:
