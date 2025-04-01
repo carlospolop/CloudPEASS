@@ -40,6 +40,7 @@ __CLOUD_SPECIFIC_EXAMPLE__
 ### CLARIFICATIONS
 Remember to indicate as many sensitive permissions as possible.
 Always recheck the permissions and their descriptions to ensure they are correct and avoid false positives.
+Your response MUST be a valid JSON with the indicated format (an array of dicts with the keys "permission", "is_very_sensitive", "is_sensitive" and "description").
 If no malicious actions are found, please provide an empty JSON array: []
 
 """
@@ -66,7 +67,7 @@ __CLOUD_SPECIFIC_EXAMPLE__
 Remember to indicate as many malicious actions as possible, and provide the necessary commands to perform them.
 If more than one command is needed, just separate them with a newline character or a semi-colon.
 Always recheck the response to ensure it's correct and avoid false positives.
-
+Your response MUST be a valid JSON with the indicated format (an array of dicts with the keys "title", "description", "commands").
 If no malicious actions are found, please provide an empty JSON array: []
 """
 
@@ -341,8 +342,10 @@ class CloudPEASS:
         except Exception as e:
             print(f"{Fore.RED}Error parsing response from Hacktricks AI: {e}\nResponse: {response.text}")
             if cont < 3:
-                print(f"{Fore.YELLOW}Trying again...")
-                time.sleep(10)
+                if cont > 0:
+                    print(f"{Fore.YELLOW}Trying again...")
+                time.sleep(5)
+                msg += f"\n\n### Indications\n- You gave an wrongly formatted response. Fix the response so the format is like the expected JSON indicated.\n- Your invalid response was:\n\n{response.text}\n\n"
                 return self.query_hacktricks_ai(msg, cont=cont+1)
             return None
 
