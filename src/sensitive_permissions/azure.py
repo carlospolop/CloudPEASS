@@ -1,6 +1,21 @@
 
 
 very_sensitive_combinations = [
+    ["microsoft.directory/servicePrincipals/credentials/update"],
+    ["microsoft.directory/servicePrincipals/synchronizationCredentials/manage"],
+    ["microsoft.directory/servicePrincipals/owners/update"],
+    ["microsoft.directory/servicePrincipals/getPasswordSingleSignOnCredentials", "microsoft.directory/servicePrincipals/managePasswordSingleSignOnCredentials"],
+    ["microsoft.directory/groups/allProperties/update"],
+    ["microsoft.directory/groups/owners/update"],
+    ["microsoft.directory/groups/members/update"],
+    ["microsoft.directory/groups/dynamicMembershipRule/update"],
+    ["microsoft.directory/users/password/update"],
+    ["microsoft.directory/users/basic/update"],
+    ["microsoft.directory/devices/registeredOwners/update"],
+    ["microsoft.directory/devices/registeredUsers/update"],
+    ["microsoft.directory/deviceLocalCredentials/password/read"],
+
+
     ["Microsoft.Authorization/roleAssignments/write"],
     ["Microsoft.Authorization/roleDefinitions/Write"],
     ["Microsoft.Authorization/elevateAccess/action"],
@@ -95,6 +110,9 @@ very_sensitive_combinations = [
 ]
 
 sensitive_combinations = [
+    ["microsoft.directory/bitlockerKeys/key/read"],
+    ["*/update"],
+
     ["*/write"],
     ["*/action"],
     ["Microsoft.Web/sites/hostruntime/vfs/read"],
