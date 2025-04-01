@@ -1,6 +1,10 @@
 
 
 very_sensitive_combinations = [
+    ["microsoft.directory/applications/credentials/update"],
+    ["microsoft.directory/applications.myOrganization/credentials/update"],
+    ["microsoft.directory/applications/owners/update"],
+    ["microsoft.directory/applications/allProperties/update"],
     ["microsoft.directory/servicePrincipals/credentials/update"],
     ["microsoft.directory/servicePrincipals/synchronizationCredentials/manage"],
     ["microsoft.directory/servicePrincipals/owners/update"],
