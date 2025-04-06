@@ -3,5 +3,5 @@ google-auth
 google-api-python-client
 tqdm
 colorama
-python-jwt==3.3.3
+jwt
 boto3
