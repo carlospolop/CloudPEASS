@@ -86,6 +86,58 @@ FOCI_APPS = [
 ]
 
 
+EMAIL_FOCI_APPS = [ # Mail.Read
+    "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
+    "27922004-5251-4030-b22d-91ecd9a37ea4"
+]
+
+SHAREPOINT_FOCI_APPS = [ # Sites.Read.All
+    "cf36b471-5b44-428c-9ce7-313bf84528de",
+    "ab9b8c07-8f02-4f72-87fa-80105867a763",
+    "af124e86-4e96-495a-b70a-90f90ab96707",
+    "b26aadf8-566f-4478-926f-589f601d9c74",
+    "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
+    "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d"
+]
+
+TEAMS_FOCI_APPS = [ # Team.ReadBasic.All
+    "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
+]
+
+ONEDRIVE_FOCI_APPS = [
+    "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+    "ab9b8c07-8f02-4f72-87fa-80105867a763",
+    "d7b530a4-7680-4c23-a8bf-c52c121d2e87"
+]
+
+ONENOTE_FOCI_APPS = [ # Notes.Read
+    "57336123-6e14-4acc-8dcf-287b6088aa28"
+]
+
+CONTACTS_FOCI_APPS = [ # Contacts.Read
+    "00b41c95-dab0-4487-9791-b9d2c32c80f2",
+    "0ec893e0-5785-4de6-99da-4ed124e5296c",
+    "57336123-6e14-4acc-8dcf-287b6088aa28",
+    "af124e86-4e96-495a-b70a-90f90ab96707",
+    "b26aadf8-566f-4478-926f-589f601d9c74",
+    "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
+    "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
+    "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d",
+    "0ec893e0-5785-4de6-99da-4ed124e5296c"
+]
+
+TASKS_FOCI_APPS = [ # Tasks.ReadWrite (no one with Tasks.Read)
+    "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+    "00b41c95-dab0-4487-9791-b9d2c32c80f2",
+    "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+    "0ec893e0-5785-4de6-99da-4ed124e5296c",
+    "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
+    "0ec893e0-5785-4de6-99da-4ed124e5296c"
+
+]
+
+
+
 class AzurePEASS(CloudPEASS):
     def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path=None):
         self.foci_refresh_token = foci_refresh_token
@@ -144,7 +196,6 @@ class AzurePEASS(CloudPEASS):
     def list_subscriptions(self):
         url = "https://management.azure.com/subscriptions?api-version=2020-01-01"
         resp = requests.get(url, headers={"Authorization": f"Bearer {self.arm_token}"})
-        resp.raise_for_status()
         subs = [sub["subscriptionId"] for sub in resp.json().get("value", [])]
         return subs
 
@@ -159,7 +210,6 @@ class AzurePEASS(CloudPEASS):
         while "nextLink" in data:
             next_url = data["nextLink"]
             resp = requests.get(next_url, headers={"Authorization": f"Bearer {self.arm_token}"})
-            resp.raise_for_status()
             data = resp.json()
             resources.extend(data.get("value", []))
         return resources
@@ -259,19 +309,220 @@ class AzurePEASS(CloudPEASS):
                 print(f"{Fore.RED}Failed to decode Graph token: {str(e)}")
         
         if self.foci_refresh_token:
-            print(f"{Fore.YELLOW}\nEnumerating SharePoint files:")
-            sharepoint_token = self.get_tokens_from_foci(["https://graph.microsoft.com/.default"])
+            
+            # SHAREPOINT
+            """print(f"{Fore.YELLOW}\nEnumerating SharePoint files (Thanks to JoelGMSec for the scopes):")
+            sharepoint_token = self.get_tokens_from_foci(["Sites.Read.All"], SHAREPOINT_FOCI_APPS)
+            
+            # If not token, ask to check every FOCI app
+            if not sharepoint_token:
+                print(f"{Fore.RED}I couldn't obtain a token with 'Sites.Read.All' scope from known FOCI apps.")
+                user_input = input("Do you want to try checking every FOCI app (y/N): ")
+                if user_input.lower() == 'y':
+                    mail_read_token = self.get_tokens_from_foci(["Sites.Read.All"])
+                    if not mail_read_token:
+                        print(f"{Fore.RED}I couldn't obtain a token with 'Sites.Read.All' scope from any FOCI app.")
+            
             if sharepoint_token:
-                self.enumerate_sharepoint_files(sharepoint_token)
-            else:
-                print(f"{Fore.RED}Couldn't obtain SharePoint token from FOCI.")
-
+                self.enumerate_sharepoint_files(sharepoint_token)"""
+            
+            
+            # EMAILS
             print(f"{Fore.YELLOW}\nEnumerating Emails:")
-            outlook_token = self.get_tokens_from_foci(["https://graph.microsoft.com/.default", "https://outlook.office.com/.default"])
-            if outlook_token:
-                self.enumerate_emails(outlook_token)
+            mail_read_token = self.get_tokens_from_foci(["Mail.Read"], EMAIL_FOCI_APPS)
+            
+            # If not token, ask to check every FOCI app
+            if not mail_read_token:
+                print(f"{Fore.RED}I couldn't obtain a token with 'Mail.Read' scope from known FOCI apps.")
+                user_input = input("Do you want to try checking every FOCI app (y/N): ")
+                if user_input.lower() == 'y':
+                    mail_read_token = self.get_tokens_from_foci(["Mail.Read"])
+                    if not mail_read_token:
+                        print(f"{Fore.RED}I couldn't obtain a token with 'Mail.Read' scope from any FOCI app.")
+            
+            if mail_read_token:
+                self.enumerate_emails(mail_read_token)
+
+            # TEAMS
+            print(f"{Fore.YELLOW}\nEnumerating Teams Conversations:")
+            teams_token = self.get_tokens_from_foci(["Team.ReadBasic.All"], TEAMS_FOCI_APPS)
+            
+            # If token is not found, try all FOCI apps.
+            if not teams_token:
+                print(f"{Fore.RED}I couldn't obtain a token with 'Team.ReadBasic.All' scope from known FOCI apps.")
+                user_input = input("Do you want to try checking every FOCI app (y/N): ")
+                if user_input.lower() == 'y':
+                    teams_token = self.get_tokens_from_foci(["Team.ReadBasic.All"])
+                    if not teams_token:
+                        print(f"{Fore.RED}I couldn't obtain a token with 'Team.ReadBasic.All' scope from any FOCI app.")
+            
+            if teams_token:
+                self.enumerate_teams_conversations(teams_token)
+            
+            
+            """# ONEDRIVE
+            print(f"{Fore.YELLOW}\nEnumerating onedrive:")
+            onedrive_token = self.get_tokens_from_foci(["Files.Read"], ONEDRIVE_FOCI_APPS)
+            
+            # If token is not found, try all FOCI apps.
+            if not onedrive_token:
+                print(f"{Fore.RED}I couldn't obtain a token with 'Files.Read' scope from known FOCI apps.")
+                user_input = input("Do you want to try checking every FOCI app (y/N): ")
+                if user_input.lower() == 'y':
+                    onedrive_token = self.get_tokens_from_foci(["Files.Read"])
+                    if not onedrive_token:
+                        print(f"{Fore.RED}I couldn't obtain a token with 'Files.Read' scope from any FOCI app.")
+            
+            if onedrive_token:
+                self.enumerate_onedrive(onedrive_token)"""
+            
+
+            # ONENOTE
+            if self.foci_refresh_token:
+                print(f"{Fore.YELLOW}\nEnumerating OneNote Notebooks and Sections:")
+                onenote_token = self.get_tokens_from_foci(["Notes.Read"], ONENOTE_FOCI_APPS)
+                
+                # If token retrieval fails, try all FOCI apps
+                if not onenote_token:
+                    print(f"{Fore.RED}I couldn't obtain a token with 'Notes.Read' scope from known FOCI apps.")
+                    user_input = input("Do you want to try checking every FOCI app (y/N): ")
+                    if user_input.lower() == 'y':
+                        onenote_token = self.get_tokens_from_foci(["Notes.Read"])
+                        if not onenote_token:
+                            print(f"{Fore.RED}I couldn't obtain a token with 'Notes.Read' scope from any FOCI app.")
+                
+                # If token is successfully retrieved, enumerate OneNote content
+                if onenote_token:
+                    self.enumerate_onenote_content(onenote_token)
+
+            # CONTACTS
+            if self.foci_refresh_token:
+                print(f"{Fore.YELLOW}\nEnumerating Contacts:")
+                contacts_token = self.get_tokens_from_foci(["Contacts.Read"], CONTACTS_FOCI_APPS)
+                
+                # If token retrieval fails, try all FOCI apps
+                if not contacts_token:
+                    print(f"{Fore.RED}I couldn't obtain a token with **Contacts.Read** scope from known FOCI apps.")
+                    user_input = input("Do you want to try checking every FOCI app (y/N): ")
+                    if user_input.lower() == 'y':
+                        contacts_token = self.get_tokens_from_foci(["Contacts.Read"])
+                        if not contacts_token:
+                            print(f"{Fore.RED}I couldn't obtain a token with **Contacts.Read** scope from any FOCI app.")
+                
+                if contacts_token:
+                    self.enumerate_contacts(contacts_token)
+            
+            # TASKS
+            print(f"{Fore.YELLOW}\nEnumerating Tasks:")
+            tasks_token = self.get_tokens_from_foci(["Tasks.ReadWrite"], TASKS_FOCI_APPS)
+            
+            # If token retrieval fails, try all FOCI apps
+            if not tasks_token:
+                print(f"{Fore.RED}I couldn't obtain a token with 'Tasks.ReadWrite' scope from known FOCI apps.")
+                user_input = input("Do you want to try checking every FOCI app (y/N): ")
+                if user_input.lower() == 'y':
+                    tasks_token = self.get_tokens_from_foci(["Tasks.Read"])
+                    if not tasks_token:
+                        tasks_token = self.get_tokens_from_foci(["Tasks.ReadWrite"])
+                        if not tasks_token:
+                            print(f"{Fore.RED}I couldn't obtain a token with 'Tasks.ReadWrite' scope from any FOCI app.")
+            
+            if tasks_token:
+                self.enumerate_tasks(tasks_token)
+            
+
+    def enumerate_tasks(self, tasks_token):
+        headers = {'Authorization': f'Bearer {tasks_token}'}
+        lists_url = 'https://graph.microsoft.com/v1.0/me/todo/lists?$top=10'
+
+        while lists_url:
+            resp = requests.get(lists_url, headers=headers)
+            data = resp.json()
+            
+            for todo_list in data.get('value', []):
+                print(f"{Fore.BLUE}- List: {Fore.WHITE}{todo_list['displayName']}")
+                # Enumerate tasks within the current To-Do list
+                tasks_url = f"https://graph.microsoft.com/v1.0/me/todo/lists/{todo_list['id']}/tasks?$top=10"
+                tasks_resp = requests.get(tasks_url, headers=headers)
+                tasks_data = tasks_resp.json()
+                
+                for task in tasks_data.get('value', []):
+                    title = task.get('title', 'No Title')
+                    status = task.get('status', 'N/A')
+                    importance = task.get('importance', 'N/A')
+                    body = task.get('body', {}).get("content", "")
+                    print(f"    {Fore.CYAN}- Task: {Fore.WHITE}{title} ({Fore.CYAN}Status: {Fore.WHITE}{status}) ({Fore.CYAN}Importance: {Fore.WHITE}{importance})")
+                    if body:
+                        print(f"        {Fore.CYAN}Body: {Fore.WHITE}{str(body)}")
+            
+            # Handle pagination for To-Do lists
+            if '@odata.nextLink' in data:
+                cont = input("Show more To-Do lists? (y/n): ")
+                if cont.lower() != 'y':
+                    break
+                lists_url = data['@odata.nextLink']
             else:
-                print(f"{Fore.RED}Couldn't obtain Outlook token from FOCI.")
+                break
+    
+    def enumerate_contacts(self, contacts_token):
+        headers = {'Authorization': f'Bearer {contacts_token}'}
+        contacts_url = 'https://graph.microsoft.com/v1.0/me/contacts?$top=10'
+        
+        while contacts_url:
+            resp = requests.get(contacts_url, headers=headers)
+            data = resp.json()
+            
+            for contact in data.get('value', []):
+                name = contact.get('displayName', contact.get('givenName', 'No Name'))
+                phones = list(set(contact.get('homePhones', []) + [contact.get('mobilePhone', "")] + contact.get('businessPhones', [])))
+                emails = contact.get('emailAddresses', [])
+                print(f"{Fore.BLUE}Name: {Fore.WHITE}{str(name)}")
+                print(f"{Fore.BLUE}Phones: {Fore.WHITE}{str(phones)}")
+                print(f"{Fore.BLUE}Emails: {Fore.WHITE}{str(emails)}")
+                print("-" * 50)
+            
+            # Handle pagination if there's more data
+            if '@odata.nextLink' in data:
+                cont = input("Show more Contacts? (y/N): ")
+                if cont.lower() != 'y':
+                    break
+                contacts_url = data['@odata.nextLink']
+            else:
+                break
+    
+    def enumerate_onenote_content(self, onenote_token):
+        headers = {'Authorization': f'Bearer {onenote_token}'}
+        notebooks_url = 'https://graph.microsoft.com/v1.0/me/onenote/notebooks?$top=10'
+        
+        # Loop through notebooks pages if paginated
+        while notebooks_url:
+            resp = requests.get(notebooks_url, headers=headers)
+            data = resp.json()
+            
+            for notebook in data.get('value', []):
+                print(f"{Fore.BLUE}Notebook: {Fore.WHITE}{notebook['displayName']}")
+                print(f"{Fore.BLUE}Role: {Fore.WHITE}{notebook['userRole']}")
+                print(f"{Fore.BLUE}Is Shared?: {Fore.WHITE}{notebook['isShared']}")
+                print(f"{Fore.BLUE}Last Modified: {Fore.WHITE}{notebook['lastModifiedDateTime']}")
+                print(f"{Fore.BLUE}Created by: {Fore.WHITE}{notebook['createdBy']['user']['displayName']}")
+                print("-" * 50)
+                
+                # **Enumerate Sections within each Notebook**
+                sections_url = f"https://graph.microsoft.com/v1.0/me/onenote/notebooks/{notebook['id']}/sections"
+                sections_resp = requests.get(sections_url, headers=headers)
+                sections_data = sections_resp.json()
+                
+                for section in sections_data.get('value', []):
+                    print(f"    {Fore.BLUE}- Section: {section['displayName']} (ID: {section['id']})")
+            
+            # Check if there's more data to paginate
+            if '@odata.nextLink' in data:
+                cont = input("Show more OneNote Notebooks? (y/N): ")
+                if cont.lower() != 'y':
+                    break
+                notebooks_url = data['@odata.nextLink']
+            else:
+                break
 
     def enumerate_sharepoint_files(self, sharepoint_token):
         headers = {'Authorization': f'Bearer {sharepoint_token}'}
@@ -279,13 +530,12 @@ class AzurePEASS(CloudPEASS):
 
         while site_url:
             resp = requests.get(site_url, headers=headers)
-            resp.raise_for_status()
             data = resp.json()
             for item in data.get('value', []):
                 print(f"{Fore.CYAN}- {item['name']} ({item['webUrl']})")
 
             if 'nextLink' in data:
-                cont = input("Show more SharePoint files? (y/n): ")
+                cont = input("Show more SharePoint files? (y/N): ")
                 if cont.lower() != 'y':
                     break
                 site_url = data['nextLink']
@@ -298,19 +548,80 @@ class AzurePEASS(CloudPEASS):
 
         while mail_url:
             resp = requests.get(mail_url, headers=headers)
-            resp.raise_for_status()
             data = resp.json()
             for message in data.get('value', []):
-                print(f"{Fore.GREEN}- From: {message['from']['emailAddress']['address']} | Subject: {message['subject']}")
+                print(f"{Fore.BLUE}Email Subject: {Fore.WHITE}{message['subject']}")
+                print(f"{Fore.BLUE}From Email: {Fore.WHITE}{message['from']['emailAddress']['address']}")
+                print(f"{Fore.BLUE}Snippet: {Fore.WHITE}{message['bodyPreview']}")
+                print(f"{Fore.BLUE}Link: {Fore.WHITE}{message['webLink']}")
+                print("-" * 50)
 
-            if 'nextLink' in data:
-                cont = input("Show more Emails? (y/n): ")
+            if '@odata.nextLink' in data:
+                cont = input("Show more Emails? (y/N): ")
                 if cont.lower() != 'y':
                     break
-                mail_url = data['nextLink']
+                mail_url = data['@odata.nextLink']
+            else:
+                break
+    
+    def enumerate_teams_conversations(self, teams_token):
+        headers = {'Authorization': f'Bearer {teams_token}'}
+        
+        # Enumerate Teams Chats
+        print(f"{Fore.RED}There isn't any known FOCI app capable of giving any of the scopes: Chat.ReadBasic, Chat.Read, Chat.ReadWrite. Therefore, I cannot list chats:({Fore.WHITE}")
+        """chats_url = 'https://graph.microsoft.com/v1.0/me/chats?$top=10'
+        print(f"{Fore.YELLOW}\nEnumerating Teams Chats:")
+        while chats_url:
+            resp = requests.get(chats_url, headers=headers)
+            data = resp.json()
+            for chat in data.get('value', []):
+                chat_type = chat.get('chatType', 'unknown')
+                print(f"{Fore.CYAN}- Chat ID: {chat['id']} **Type:** {chat_type}")
+            if '@odata.nextLink' in data:
+                cont = input("Show more Teams Chats? (y/N): ")
+                if cont.lower() != 'y':
+                    break
+                chats_url = data['@odata.nextLink']
+            else:
+                break"""
+
+        # Enumerate Joined Teams (Groups)
+        print(f"{Fore.GREE}However, it's possible to enumerate the Team groups you are part of.{Fore.RESET}")
+        teams_url = 'https://graph.microsoft.com/v1.0/me/joinedTeams'
+        while teams_url:
+            resp = requests.get(teams_url, headers=headers)
+            data = resp.json()
+            for team in data.get('value', []):
+                print(f"{Fore.BLUE}Team: {Fore.WHITE}{team['displayName']}")
+                print(f"{Fore.BLUE}Description: {Fore.WHITE}{team['description']}")
+                print("-" * 50)
+            if '@odata.nextLink' in data:
+                cont = input("Show more Joined Teams? (y/N): ")
+                if cont.lower() != 'y':
+                    break
+                teams_url = data['@odata.nextLink']
             else:
                 break
 
+    def enumerate_onedrive(self, onedrive_token):
+        headers = {'Authorization': f'Bearer {onedrive_token}'}
+        site_url = 'https://graph.microsoft.com/v1.0/sites/root/drive/root/children?$top=10'
+        print(f"{Fore.YELLOW}\nListing Word and Excel files:")
+        while site_url:
+            resp = requests.get(site_url, headers=headers)
+            data = resp.json()
+            for item in data.get('value', []):
+                name = item.get('name', '').lower()
+                # **Filter for Word and Excel file extensions**
+                if name.endswith(('.doc', '.docx', '.xls', '.xlsx')):
+                    print(f"{Fore.CYAN}- {item['name']} ({item['webUrl']})")
+            if 'nextLink' in data:
+                cont = input("Show more Office files? (y/n): ")
+                if cont.lower() != 'y':
+                    break
+                site_url = data['nextLink']
+            else:
+                break
 
     def get_resources_and_permissions(self):
         resources_data = []
@@ -376,18 +687,21 @@ class AzurePEASS(CloudPEASS):
         tokens = app.acquire_token_by_refresh_token(foci_refresh_token, scopes=scopes)
         return tokens
     
-    def get_tokens_from_foci(self, scopes):
+    def get_tokens_from_foci(self, scopes, app_ids=[]):
         """
         Get a token using FOCI apps for the required resource/scopes.
         """
 
-        for app_id in FOCI_APPS:
+        a = True
+        app_ids = app_ids if app_ids else FOCI_APPS
+        for app_id in app_ids:
             token = self.get_accesstoken_from_foci(
                 app_id,
                 scopes
             ).get("access_token")
             if token:
-                return token
+                if a:
+                    return token
         
         return None
 
