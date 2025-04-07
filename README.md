@@ -189,6 +189,8 @@ Methods to find permissions:
   - To reduce the bruteforce-timing you can indicate the **`--aws-services`** flag to brute-force only the services you are interested in.
   - If brute-force is used, AWSPEASS integrates a version of **[aws-Perms2ManagedPolicies](https://github.com/carlospolop/aws-Perms2ManagedPolicies)** to try to **guess more permissions** based on the permissions found.
 
+**Opsec**: AWSPEASS will try to get the name of the principal given by calling an API that won't generate logs in CloudTrail. Then, based on the name of the principal and the ID of the AWS acount it will try to guess if it belongs to a **Canary service** or not and will **ask the user if he wants to continue if it finds it suspicious**.
+
 Note that you will need to configure and **indicate the profile and region** to use to AWSPEASS.
 
 - Help

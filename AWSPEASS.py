@@ -7,6 +7,9 @@ import requests  # Needed for downloading AWS permissions for simulation
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from colorama import Fore, init
+import re
+import math
+import subprocess
 
 init(autoreset=True)
 
@@ -402,6 +405,92 @@ class AWSPEASS(CloudPEASS):
             pbar.close()
         return list(simulated_permissions)
     
+    def shannon_entropy(self, s):
+        """
+        Calculate the Shannon entropy of a string.
+        """
+        frequencies = {}
+        for char in s:
+            frequencies[char] = frequencies.get(char, 0) + 1
+        entropy = 0.0
+        for freq in frequencies.values():
+            p = freq / len(s)
+            entropy -= p * math.log(p, 2)
+        return entropy
+    
+    def is_canary_user(self, arn, name):
+        """
+        Checks if the current principal is a canary user.
+        A canary user is an IAM user with a specific name pattern.
+        """
+
+        reason = ""
+        is_canary = False
+
+        # Check if the principal name contains any canary names
+        if any(acc_id in arn for acc_id in ["534261010715", "717712589309"]):
+            reason = "Canary AWS account detected. Probability: High."
+            is_canary = True
+        
+        # Check if the principal name contains any canary names
+        if any(canary_names in arn.lower() for canary_names in ["canarytokens", "spacecrab", "canary", "spacesiren", ]):
+            reason = "Canary name detected. Probability: High."
+            is_canary = True
+        
+        # Check if the name is a UUID
+        if len(name) == 36 and name.count("-") == 4:
+            reason = "UUID detected. Probability: Medium."
+            is_canary = True
+            if re.match(r"^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89aAbB][a-f0-9]{3}-[a-f0-9]{12}$", name):
+                reason = "SpaceSiren UUID detected. Probability: High."
+
+        # Check the entropy of the name
+        if len(name) >= 8:
+            entropy_value = self.shannon_entropy(name)
+            # Adjust the threshold as necessary.
+            if entropy_value > 3.85:
+                reason = "High entropy (random) name detected. Probability: Medium."
+                is_canary = True        
+
+        return is_canary, reason
+    
+    def get_identity_without_logs(self):
+        """
+        Retrieves the current principal's identity without logging it.
+        This is useful for avoiding detection.
+        """
+
+        arn = ""
+        principal_name = ""
+        principal_type = ""
+        
+        # Use awscli to call aws cliand get the name from the error printed
+        result = subprocess.run(f"aws --profile {self.profile_name} sts assume-role --role-arn arn:aws:iam::123456789012:role/AWSPEASS --role-session-name session_name", shell=True, capture_output=True, timeout=20)
+        output = result.stdout.decode() + result.stderr.decode()
+
+        # Make sure we don't detect this
+        output = output.replace("arn:aws:iam::123456789012:role/AWSPEASS", "")
+
+        if "arn:aws:iam::" in output.lower():
+            # Extract the name from the error message
+            match_user = re.search(r"arn:aws:iam::[0-9]{12}:user/([^ ]*) ", output)
+            if match_user:
+                arn = match_user.group(0)
+                principal_name = match_user.group(1)
+                principal_type = "user"
+            
+            match_role = re.search(r"arn:aws:iam::[0-9]{12}:(role|assumed-role)/([^ ]*) ", output)
+            if match_role:
+                arn = match_role.group(0)
+                principal_name = match_role.group(2)
+                principal_type = "role"
+        
+        else:
+            print(f"{Fore.RED}Error: Unable to retrieve principal ARN without generating logs.")
+        
+        return arn, principal_name, principal_type
+        
+    
     def print_whoami_info(self):
         """
         Prints the current principal information (ARN, type, and name).
@@ -409,13 +498,31 @@ class AWSPEASS(CloudPEASS):
         """
         
         try:
-            identity = self.sts_client.get_caller_identity()
-            principal_arn = identity.get("Arn")
-            principal_type, principal_name = self.parse_principal(principal_arn)
+            principal_arn, principal_arn, principal_type = self.get_identity_without_logs()
+            if not principal_arn:
+                user_input = input(f"{Fore.RED}Do you want to try using STS API (this will generate a log)? (y/N) {Fore.RESET}")
+                if user_input.lower() != "y":
+                    print(f"{Fore.RED}Exiting...")
+                    exit(0)
+                
+                # If we couldn't get the principal ARN, use the STS client to get it
+                identity = self.sts_client.get_caller_identity()
+                principal_arn = identity.get("Arn")
+                principal_type, principal_name = self.parse_principal(principal_arn)
             
             print(f"{Fore.BLUE}Current Principal ARN: {Fore.WHITE}{principal_arn}")
             print(f"{Fore.BLUE}Principal Type: {Fore.WHITE}{principal_type}")
             print(f"{Fore.BLUE}Principal Name: {Fore.WHITE}{principal_name}")
+
+            # Check if the principal is a canary user
+            is_canary, reason = self.is_canary_user(principal_arn, principal_name)
+            print(f"{Fore.BLUE}Is Canary User: {Fore.WHITE}{is_canary}")
+            if is_canary:
+                print(f"{Fore.RED}Is Canary Reason: {reason}")
+                user_input = input(f"{Fore.RED}It looks like the credentials could belong to a canary user. Do you want to continue? (y/N) {Fore.RESET}")
+                if user_input.lower() != "y":
+                    print(f"{Fore.RED}Exiting...")
+                    exit(0)
         
         except Exception as e:
             print(f"{Fore.RED}Error retrieving principal information: {e}")
