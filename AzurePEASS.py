@@ -6,6 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from colorama import Fore, Style, init, Back
+import msal
 
 init(autoreset=True)
 
@@ -41,8 +42,63 @@ AZURE_SENSITIVE_RESPONSE_EXAMPLE = """[
     [...]
 ]"""
 
+
+
+FOCI_APPS = [
+    "04b07795-8ddb-461a-bbee-02f9e1bf7b46", # Azure CLI keep first
+    "1950a258-227b-4e31-a9cf-717495945fc2",
+    "cf36b471-5b44-428c-9ce7-313bf84528de",
+    "2d7f3606-b07d-41d1-b9d2-0d0c9296a6e8",
+    "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+    "c0d2a505-13b8-4ae0-aa9e-cddd5eab0b12",
+    "00b41c95-dab0-4487-9791-b9d2c32c80f2",
+    "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+    "ab9b8c07-8f02-4f72-87fa-80105867a763",
+    "27922004-5251-4030-b22d-91ecd9a37ea4",
+    "26a7ee05-5602-4d76-a7ba-eae8b7b67941",
+    "0ec893e0-5785-4de6-99da-4ed124e5296c",
+    "22098786-6e16-43cc-a27d-191a01a1e3b5",
+    "4813382a-8fa7-425e-ab75-3b753aab3abb",
+    "4e291c71-d680-4d0e-9640-0a3358e31177",
+    "57fcbcfa-7cee-4eb1-8b25-12d2030b4ee0",
+    "57336123-6e14-4acc-8dcf-287b6088aa28",
+    "66375f6b-983f-4c2c-9701-d680650f588f",
+    "844cca35-0656-46ce-b636-13f48b0eecbd",
+    "872cd9fa-d31f-45e0-9eab-6e460a02d1f1",
+    "87749df4-7ccf-48f8-aa87-704bad0e0e16",
+    "9ba1a5c7-f17a-4de9-a1f1-6178c8d51223",
+    "a569458c-7f2b-45cb-bab9-b7dee514d112",
+    "af124e86-4e96-495a-b70a-90f90ab96707",
+    "b26aadf8-566f-4478-926f-589f601d9c74",
+    "be1918be-3fe3-4be9-b32b-b542fc27f02e",
+    "cab96880-db5b-4e15-90a7-f3f1d62ffe39",
+    "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
+    "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
+    "dd47d17a-3194-4d86-bfd5-c6ae6f5651e3",
+    "e9b154d0-7658-433b-bb25-6b8e0a8a7c59",
+    "f44b1140-bc5e-48c6-8dc0-5cf5a53c0e34",
+    "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d",
+    "0ec893e0-5785-4de6-99da-4ed124e5296c",
+    "ecd6b820-32c2-49b6-98a6-444530e5a77a",
+    "e9c51622-460d-4d3d-952d-966a5b1da34c",
+    "c1c74fed-04c9-4704-80dc-9f79a2e515cb",
+    "eb20f3e3-3dce-4d2c-b721-ebb8d4414067"
+]
+
+
 class AzurePEASS(CloudPEASS):
-    def __init__(self, arm_token, graph_token, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path=None):
+    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path=None):
+        self.foci_refresh_token = foci_refresh_token
+        self.tenant_id = tenant_id
+
+        if self.foci_refresh_token:
+            if not self.tenant_id:
+                print(f"{Fore.RED}Tenant ID is required when using FOCI refresh token. Indicate it with --tenant-id. Exiting.")
+                exit(1)
+            # Get ARM and Graph tokens from FOCI refresh token
+            arm_token = self.get_tokens_from_foci(["https://management.azure.com/.default"])
+            graph_token = self.get_tokens_from_foci(["https://graph.microsoft.com/.default"])
+
         self.arm_token= arm_token
         self.graph_token = graph_token
         self.EntraIDPEASS = EntraIDPEASS(graph_token, num_threads)
@@ -59,10 +115,10 @@ class AzurePEASS(CloudPEASS):
             print(f"{Fore.RED}Graph token not provided. Skipping EntraID permissions analysis")
 
         if self.arm_token:
-            self.check_jwt_token(self.arm_token, ["https://management.azure.com/", "https://management.core.windows.net/"])
+            self.check_jwt_token(self.arm_token, ["https://management.azure.com/", "https://management.core.windows.net/", "https://management.azure.com"])
 
         if self.graph_token:
-            self.check_jwt_token(self.graph_token, ["https://graph.microsoft.com/", "00000003-0000-0000-c000-000000000000"])
+            self.check_jwt_token(self.graph_token, ["https://graph.microsoft.com/", "00000003-0000-0000-c000-000000000000", "https://graph.microsoft.com"])
 
     
     def check_jwt_token(self, token, expected_audiences):
@@ -201,6 +257,59 @@ class AzurePEASS(CloudPEASS):
                     print(f"{Fore.BLUE}Token Expiration Time (Graph Token): {Fore.WHITE}{expiration_time}")
             except Exception as e:
                 print(f"{Fore.RED}Failed to decode Graph token: {str(e)}")
+        
+        if self.foci_refresh_token:
+            print(f"{Fore.YELLOW}\nEnumerating SharePoint files:")
+            sharepoint_token = self.get_tokens_from_foci(["https://graph.microsoft.com/.default"])
+            if sharepoint_token:
+                self.enumerate_sharepoint_files(sharepoint_token)
+            else:
+                print(f"{Fore.RED}Couldn't obtain SharePoint token from FOCI.")
+
+            print(f"{Fore.YELLOW}\nEnumerating Emails:")
+            outlook_token = self.get_tokens_from_foci(["https://graph.microsoft.com/.default", "https://outlook.office.com/.default"])
+            if outlook_token:
+                self.enumerate_emails(outlook_token)
+            else:
+                print(f"{Fore.RED}Couldn't obtain Outlook token from FOCI.")
+
+    def enumerate_sharepoint_files(self, sharepoint_token):
+        headers = {'Authorization': f'Bearer {sharepoint_token}'}
+        site_url = 'https://graph.microsoft.com/v1.0/sites/root/drive/root/children?$top=10'
+
+        while site_url:
+            resp = requests.get(site_url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            for item in data.get('value', []):
+                print(f"{Fore.CYAN}- {item['name']} ({item['webUrl']})")
+
+            if 'nextLink' in data:
+                cont = input("Show more SharePoint files? (y/n): ")
+                if cont.lower() != 'y':
+                    break
+                site_url = data['nextLink']
+            else:
+                break
+
+    def enumerate_emails(self, outlook_token):
+        headers = {'Authorization': f'Bearer {outlook_token}'}
+        mail_url = 'https://graph.microsoft.com/v1.0/me/messages?$top=10'
+
+        while mail_url:
+            resp = requests.get(mail_url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            for message in data.get('value', []):
+                print(f"{Fore.GREEN}- From: {message['from']['emailAddress']['address']} | Subject: {message['subject']}")
+
+            if 'nextLink' in data:
+                cont = input("Show more Emails? (y/n): ")
+                if cont.lower() != 'y':
+                    break
+                mail_url = data['nextLink']
+            else:
+                break
 
 
     def get_resources_and_permissions(self):
@@ -255,11 +364,40 @@ class AzurePEASS(CloudPEASS):
             resources_data += self.EntraIDPEASS.get_entraid_owns()
 
         return resources_data
+    
+    def get_accesstoken_from_foci(self, client_id, scopes):
+        """
+        Get access token from FOCI refresh token using MSAL.
+        """
+
+        app = msal.PublicClientApplication(
+                client_id=client_id, authority=f"https://login.microsoftonline.com/{self.tenant_id}"
+            )
+        tokens = app.acquire_token_by_refresh_token(foci_refresh_token, scopes=scopes)
+        return tokens
+    
+    def get_tokens_from_foci(self, scopes):
+        """
+        Get a token using FOCI apps for the required resource/scopes.
+        """
+
+        for app_id in FOCI_APPS:
+            token = self.get_accesstoken_from_foci(
+                app_id,
+                scopes
+            ).get("access_token")
+            if token:
+                return token
+        
+        return None
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks.\nTo check for Azure permissions an ARM token is neded.\nTo check for Entra ID permissions a Graph token is needed.")
+    parser.add_argument('--tenant-id', help="Indicate teh tenant id")
     parser.add_argument('--arm-token', help="Azure Management authentication token")
     parser.add_argument('--graph-token', help="Azure Graph authentication token")
+    parser.add_argument('--foci-refresh-token', help="FOCI Refresh Token")
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
     parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
     parser.add_argument('--not-use-hacktricks-ai', action="store_false", default=False, help="Don't use Hacktricks AI to analyze permissions")
@@ -272,5 +410,7 @@ if __name__ == "__main__":
     graph_token = args.graph_token
     graph_token = os.getenv("AZURE_GRAPH_TOKEN", graph_token)
 
-    azure_peass = AzurePEASS(arm_token, graph_token, very_sensitive_combinations, sensitive_combinations, not_use_ht_ai=args.not_use_hacktricks_ai, num_threads=args.threads, out_path=args.out_json_path)
+    foci_refresh_token = args.foci_refresh_token
+
+    azure_peass = AzurePEASS(arm_token, graph_token, foci_refresh_token, args.tenant_id, very_sensitive_combinations, sensitive_combinations, not_use_ht_ai=args.not_use_hacktricks_ai, num_threads=args.threads, out_path=args.out_json_path)
     azure_peass.run_analysis()
