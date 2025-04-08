@@ -10,6 +10,8 @@ from colorama import Fore, init
 import re
 import math
 import subprocess
+import base64
+import binascii
 
 init(autoreset=True)
 
@@ -45,6 +47,7 @@ class AWSPEASS(CloudPEASS):
 
         # Initialize session using the profile
         self.session = boto3.Session(profile_name=self.profile_name, region_name=self.region)
+        self.credentials = self.session.get_credentials()
 
         # Initialize AWSBruteForce using the profile and region
         self.AWSBruteForce = AWSBruteForce(debug, self.region, self.profile_name, aws_services)
@@ -428,24 +431,24 @@ class AWSPEASS(CloudPEASS):
         is_canary = False
 
         # Check if the principal name contains any canary names
-        if any(acc_id in arn for acc_id in ["534261010715", "717712589309"]):
+        if any(acc_id in arn for acc_id in ["534261010715", "717712589309", "266735846894"]):
             reason = "Canary AWS account detected. Probability: High."
             is_canary = True
         
         # Check if the principal name contains any canary names
-        if any(canary_names in arn.lower() for canary_names in ["canarytokens", "spacecrab", "canary", "spacesiren", ]):
+        elif any(canary_names in arn.lower() for canary_names in ["canarytokens", "spacecrab", "canary", "spacesiren", ]):
             reason = "Canary name detected. Probability: High."
             is_canary = True
         
         # Check if the name is a UUID
-        if len(name) == 36 and name.count("-") == 4:
+        elif len(name) == 36 and name.count("-") == 4:
             reason = "UUID detected. Probability: Medium."
             is_canary = True
             if re.match(r"^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89aAbB][a-f0-9]{3}-[a-f0-9]{12}$", name):
                 reason = "SpaceSiren UUID detected. Probability: High."
 
         # Check the entropy of the name
-        if len(name) >= 8:
+        elif len(name) >= 8:
             entropy_value = self.shannon_entropy(name)
             # Adjust the threshold as necessary.
             if entropy_value > 3.85:
@@ -460,16 +463,20 @@ class AWSPEASS(CloudPEASS):
         This is useful for avoiding detection.
         """
 
+        # NOT USED BECAUSE THIS NOW GENERATES LOGS ALSO ON THE AWS ACCOUNT OF THE USER
+
         arn = ""
         principal_name = ""
         principal_type = ""
+
+        cmd = f"""aws sns publish --profile {self.profile_name} --topic-arn "arn:aws:sns:us-east-1:791397163361:AWSPEASSTopic" --message "Hello from AWSPEASS." --region us-east-1"""
         
-        # Use awscli to call aws cliand get the name from the error printed
-        result = subprocess.run(f"aws --profile {self.profile_name} sts assume-role --role-arn arn:aws:iam::123456789012:role/AWSPEASS --role-session-name session_name", shell=True, capture_output=True, timeout=20)
+        # Use awscli to call aws cli and get the arn of the principal from the error printed
+        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=20)
         output = result.stdout.decode() + result.stderr.decode()
 
         # Make sure we don't detect this
-        output = output.replace("arn:aws:iam::123456789012:role/AWSPEASS", "")
+        output = output.replace("arn:aws:sns:us-east-1:791397163361:AWSPEASSTopic", "")
 
         if "arn:aws:iam::" in output.lower():
             # Extract the name from the error message
@@ -489,6 +496,23 @@ class AWSPEASS(CloudPEASS):
             print(f"{Fore.RED}Error: Unable to retrieve principal ARN without generating logs.")
         
         return arn, principal_name, principal_type
+    
+    def AWSAccount_from_AWSKeyID(self, AWSKeyID):
+        # From https://medium.com/@TalBeerySec/a-short-note-on-aws-key-id-f88cc4317489
+        trimmed_AWSKeyID = AWSKeyID[4:] #remove KeyID prefix
+        x = base64.b32decode(trimmed_AWSKeyID) #base32 decode
+        y = x[0:6]
+
+        z = int.from_bytes(y, byteorder='big', signed=False)
+        mask = int.from_bytes(binascii.unhexlify(b'7fffffffff80'), byteorder='big', signed=False)
+
+        e = (z & mask)>>7
+        
+        is_canary = False
+        if e in [534261010715, 717712589309, 266735846894]:
+            is_canary = True
+        
+        return e, is_canary
         
     
     def print_whoami_info(self):
@@ -498,17 +522,18 @@ class AWSPEASS(CloudPEASS):
         """
         
         try:
-            principal_arn, principal_arn, principal_type = self.get_identity_without_logs()
-            if not principal_arn:
-                user_input = input(f"{Fore.RED}Do you want to try using STS API (this will generate a log)? (y/N) {Fore.RESET}")
+            acc_id, is_canary = self.AWSAccount_from_AWSKeyID(self.credentials.access_key.strip())
+            if is_canary:
+                print(f"\n{Fore.RED}It looks like the credentials could belong to a canary user based on the AWS account ID ({acc_id}).{Fore.RESET}")
+                user_input = input(f"{Fore.RED}Do you want to continue? (y/N) {Fore.RESET}")
                 if user_input.lower() != "y":
                     print(f"{Fore.RED}Exiting...")
                     exit(0)
-                
-                # If we couldn't get the principal ARN, use the STS client to get it
-                identity = self.sts_client.get_caller_identity()
-                principal_arn = identity.get("Arn")
-                principal_type, principal_name = self.parse_principal(principal_arn)
+            
+            # If we couldn't get the principal ARN, use the STS client to get it
+            identity = self.sts_client.get_caller_identity()
+            principal_arn = identity.get("Arn")
+            principal_type, principal_name = self.parse_principal(principal_arn)
             
             print(f"{Fore.BLUE}Current Principal ARN: {Fore.WHITE}{principal_arn}")
             print(f"{Fore.BLUE}Principal Type: {Fore.WHITE}{principal_type}")
@@ -518,11 +543,8 @@ class AWSPEASS(CloudPEASS):
             is_canary, reason = self.is_canary_user(principal_arn, principal_name)
             print(f"{Fore.BLUE}Is Canary User: {Fore.WHITE}{is_canary}")
             if is_canary:
-                print(f"{Fore.RED}Is Canary Reason: {reason}")
-                user_input = input(f"{Fore.RED}It looks like the credentials could belong to a canary user. Do you want to continue? (y/N) {Fore.RESET}")
-                if user_input.lower() != "y":
-                    print(f"{Fore.RED}Exiting...")
-                    exit(0)
+                print(f"{Fore.RED}Is Canary Reason: {Fore.WHITE}{reason}{Fore.RESET}")
+                
         
         except Exception as e:
             print(f"{Fore.RED}Error retrieving principal information: {e}")
