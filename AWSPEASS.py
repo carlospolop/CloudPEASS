@@ -544,6 +544,9 @@ class AWSPEASS(CloudPEASS):
             print(f"{Fore.BLUE}Is Canary User: {Fore.WHITE}{is_canary}")
             if is_canary:
                 print(f"{Fore.RED}Is Canary Reason: {Fore.WHITE}{reason}{Fore.RESET}")
+                print(f"{Fore.RED}[!] {Fore.YELLOW}If this is a canary, you will probably trigger alerts in the company in less than 5mins...{Fore.RESET}")
+                time.sleep(2)
+                print(f"I will continue in the meantime...")
                 
         
         except Exception as e:
