@@ -907,6 +907,8 @@ NOT_FUNCTIONS_PERMS = [
 	"cloudfunctions.locations.list"
 ]
 
+DISABLED_CLOUDRESOURCEMANAGER = set()
+
 class GCPPEASS(CloudPEASS):
 	def __init__(self, credentials, extra_token, project, folder, org, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path=None):
 		self.credentials = credentials
@@ -932,7 +934,7 @@ class GCPPEASS(CloudPEASS):
 			return [p for p in self.all_gcp_perms if p.startswith("cloudfunctions") and p not in NOT_FUNCTIONS_PERMS]
 		elif res_type.lower() == "storage":
 			return [p for p in self.all_gcp_perms if p.startswith("storage") and p not in NOT_STORAGE_PERMS]
-		elif res_type.lower() == "service_account":  # **New branch for service accounts**
+		elif res_type.lower() == "service_account":
 			return [p for p in self.all_gcp_perms if p.startswith("iam.serviceAccounts") and p not in NOT_SA_PERMS]
 		else:
 			return self.all_gcp_perms
@@ -950,6 +952,14 @@ class GCPPEASS(CloudPEASS):
 		- storage
 		- Service account
 		"""
+
+		global DISABLED_CLOUDRESOURCEMANAGER
+
+		have_perms = []
+
+		if resource_id in DISABLED_CLOUDRESOURCEMANAGER:
+			return have_perms
+
 		if "/functions/" in resource_id:
 			req = googleapiclient.discovery.build("cloudfunctions", "v1", credentials=self.credentials).projects().locations().functions().testIamPermissions(
 				resource=resource_id,
@@ -990,20 +1000,29 @@ class GCPPEASS(CloudPEASS):
 			)
 		else:
 			print(f"{Fore.RED}Unsupported resource type: {resource_id}")
-			return []
+			return have_perms
 
-		have_perms = []
 		try:
 			returnedPermissions = req.execute()
 			have_perms = returnedPermissions.get("permissions", [])
 		except googleapiclient.errors.HttpError as e:
 			if "Cloud Resource Manager API has not been used" in str(e):
-				print(Fore.RED + str(e) + "\nTry to enable the service running: gcloud services enable cloudresourcemanager.googleapis.com")
-			# **If a permission is reported as invalid, remove it and retry**
+				# It might be possible that from the time a thread gets here, a different one has already added this
+				if not resource_id in DISABLED_CLOUDRESOURCEMANAGER:
+					DISABLED_CLOUDRESOURCEMANAGER.add(resource_id)
+					print(Fore.RED + "\nCloudresourcemanager found disabled in " + resource_id + "\nTry to enable the service running: gcloud services enable cloudresourcemanager.googleapis.com\n" + "Full error: " + str(e) + Fore.RESET)
+				return have_perms
+			
+			# If a permission is reported as invalid, remove it and retry
+			retry = False
 			for perm in perms.copy():
 				if " " + perm + " " in str(e):
+					retry = True
 					perms.remove(perm)
-					return self.check_permissions(resource_id, perms, verbose)
+			
+			if retry:
+				return self.check_permissions(resource_id, perms, verbose)
+		
 		except Exception as e:
 			print("Error:")
 			print(e)
@@ -1124,7 +1143,7 @@ class GCPPEASS(CloudPEASS):
 				local_targets.append({"id": sa, "type": "service_account"})
 			return local_targets
 
-		# **Process projects concurrently using a thread pool**
+		# Process projects concurrently using a thread pool
 		with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
 			futures = {executor.submit(process_project, proj): proj for proj in self.list_projects()}
 			for future in tqdm(as_completed(futures), total=len(futures), desc="Processing projects"):
