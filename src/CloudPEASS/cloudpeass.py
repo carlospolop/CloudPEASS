@@ -66,8 +66,8 @@ __CLOUD_SPECIFIC_EXAMPLE__
 ### CLARIFICATIONS
 Remember to indicate as many malicious actions as possible that can be performed with the given set of permissions, and provide the necessary commands to perform them.
 If more than one command is needed, just separate them with a newline character or a semi-colon.
+Do not report attacks that require permissions not indicated,that would be a false possitive.
 Always recheck the response to ensure it's correct and avoid false positives.
-Do not report attacks that require permissions not indicated.
 Your response MUST be a valid JSON with the indicated format (an array of dicts with the keys "title", "description", "commands").
 If no malicious actions are found, please provide an empty JSON array: []
 """
