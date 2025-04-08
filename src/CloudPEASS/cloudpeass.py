@@ -485,6 +485,10 @@ class CloudPEASS:
         # Proceed with Hacktricks AI check if enabled
         if self.not_use_ht_ai:
             return
+
+        if not analysis_results:
+            print(f"{Fore.RED}No permissions found. Existing.")
+            exit(0)
         
         print(f"{Fore.MAGENTA}\nQuerying Hacktricks AI for attacks, sit tight!")
 

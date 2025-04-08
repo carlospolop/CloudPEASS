@@ -402,12 +402,12 @@ class AzurePEASS(CloudPEASS):
                 
                 # If token retrieval fails, try all FOCI apps
                 if not contacts_token:
-                    print(f"{Fore.RED}I couldn't obtain a token with **Contacts.Read** scope from known FOCI apps.")
+                    print(f"{Fore.RED}I couldn't obtain a token with Contacts.Read scope from known FOCI apps.")
                     user_input = input("Do you want to try checking every FOCI app (y/N): ")
                     if user_input.lower() == 'y':
                         contacts_token = self.get_tokens_from_foci(["Contacts.Read"])
                         if not contacts_token:
-                            print(f"{Fore.RED}I couldn't obtain a token with **Contacts.Read** scope from any FOCI app.")
+                            print(f"{Fore.RED}I couldn't obtain a token with Contacts.Read scope from any FOCI app.")
                 
                 if contacts_token:
                     self.enumerate_contacts(contacts_token)
@@ -507,7 +507,7 @@ class AzurePEASS(CloudPEASS):
                 print(f"{Fore.BLUE}Created by: {Fore.WHITE}{notebook['createdBy']['user']['displayName']}")
                 print("-" * 50)
                 
-                # **Enumerate Sections within each Notebook**
+                # Enumerate Sections within each Notebook
                 sections_url = f"https://graph.microsoft.com/v1.0/me/onenote/notebooks/{notebook['id']}/sections"
                 sections_resp = requests.get(sections_url, headers=headers)
                 sections_data = sections_resp.json()
@@ -576,7 +576,7 @@ class AzurePEASS(CloudPEASS):
             data = resp.json()
             for chat in data.get('value', []):
                 chat_type = chat.get('chatType', 'unknown')
-                print(f"{Fore.CYAN}- Chat ID: {chat['id']} **Type:** {chat_type}")
+                print(f"{Fore.CYAN}- Chat ID: {chat['id']} Type: {chat_type}")
             if '@odata.nextLink' in data:
                 cont = input("Show more Teams Chats? (y/N): ")
                 if cont.lower() != 'y':
@@ -586,7 +586,7 @@ class AzurePEASS(CloudPEASS):
                 break"""
 
         # Enumerate Joined Teams (Groups)
-        print(f"{Fore.GREE}However, it's possible to enumerate the Team groups you are part of.{Fore.RESET}")
+        print(f"{Fore.GREEN}However, it's possible to enumerate the Team groups you are part of.{Fore.RESET}")
         teams_url = 'https://graph.microsoft.com/v1.0/me/joinedTeams'
         while teams_url:
             resp = requests.get(teams_url, headers=headers)
@@ -612,7 +612,7 @@ class AzurePEASS(CloudPEASS):
             data = resp.json()
             for item in data.get('value', []):
                 name = item.get('name', '').lower()
-                # **Filter for Word and Excel file extensions**
+                # Filter for Word and Excel file extensions
                 if name.endswith(('.doc', '.docx', '.xls', '.xlsx')):
                     print(f"{Fore.CYAN}- {item['name']} ({item['webUrl']})")
             if 'nextLink' in data:
@@ -706,25 +706,125 @@ class AzurePEASS(CloudPEASS):
         return None
 
 
+def generate_foci_token(username, password, tenant_id, client_id, scope="https://management.azure.com/.default"):
+    """
+    Generate a FOCI refresh token using Azure AD API via MSAL.
+    
+    This function authenticates using the provided username and password
+    with the Azure AD application identified by client_id in the given tenant_id.
+    
+    It then retrieves an access token for Microsoft Management (scope: https://management.azure.com/.default).
+    
+    The returned token is used as the FOCI refresh token.
+    """
+    # Create the authority URL using the tenant id.
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+
+    if not "@" in username:
+        # Service Principal Flow
+        app = msal.ConfidentialClientApplication(
+            username,
+            client_credential=password,
+            authority=authority
+        )
+        token_response = app.acquire_token_for_client(scopes=[scope])
+
+        if "access_token" in token_response:
+            return token_response["access_token"]
+        else:
+            print(f"{Fore.RED}Error acquiring token with those credentials:", token_response.get("error_description"))
+            exit(1)
+    
+    else:
+        # Initialize the MSAL PublicClientApplication with the client id and authority.
+        app = msal.PublicClientApplication(client_id, authority=authority)
+        
+        # Acquire token using username/password flow
+        token_response = app.acquire_token_by_username_password(
+            username=username,
+            password=password,
+            scopes=[scope]
+        )
+    
+        if "refresh_token" in token_response:
+            return token_response["refresh_token"]
+        else:
+            print(f"{Fore.RED}Error acquiring token with those credentials:", token_response.get("error_description"))
+            exit(1)
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks.\nTo check for Azure permissions an ARM token is neded.\nTo check for Entra ID permissions a Graph token is needed.")
-    parser.add_argument('--tenant-id', help="Indicate teh tenant id")
+    parser = argparse.ArgumentParser(
+        description="Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks.\n"
+                    "To check for Azure permissions an ARM token is needed.\n"
+                    "To check for Entra ID permissions a Graph token is needed."
+    )
+    # Basic token and tenant parameters
+    parser.add_argument('--tenant-id', help="Indicate the tenant id")
+    parser.add_argument('--client-id', default="04b07795-8ddb-461a-bbee-02f9e1bf7b46", help="Azure App client ID for authentication (Default Azure CLI)")
     parser.add_argument('--arm-token', help="Azure Management authentication token")
     parser.add_argument('--graph-token', help="Azure Graph authentication token")
-    parser.add_argument('--foci-refresh-token', help="FOCI Refresh Token")
+    parser.add_argument('--foci-refresh-token', default=None, help="FOCI Refresh Token")
+    
+    # Username and password parameters for token generation
+    parser.add_argument('--username', help="Username for authentication")
+    parser.add_argument('--password', help="Password for authentication")
+    
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
     parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
     parser.add_argument('--not-use-hacktricks-ai', action="store_false", default=False, help="Don't use Hacktricks AI to analyze permissions")
-
+    
     args = parser.parse_args()
+    
+    tenant_id = args.tenant_id
+    client_id = args.client_id
 
-    arm_token = args.arm_token
-    arm_token = os.getenv("AZURE_ARM_TOKEN", arm_token)
-
-    graph_token = args.graph_token
-    graph_token = os.getenv("AZURE_GRAPH_TOKEN", graph_token)
-
+    # Get tokens from environment variables if not supplied as arguments
+    arm_token = args.arm_token or os.getenv("AZURE_ARM_TOKEN")
+    graph_token = args.graph_token or os.getenv("AZURE_GRAPH_TOKEN")
     foci_refresh_token = args.foci_refresh_token
 
-    azure_peass = AzurePEASS(arm_token, graph_token, foci_refresh_token, args.tenant_id, very_sensitive_combinations, sensitive_combinations, not_use_ht_ai=args.not_use_hacktricks_ai, num_threads=args.threads, out_path=args.out_json_path)
+    if args.username and not args.password:
+        print(f"{Fore.RED}Password is required when using username. Exiting.")
+        exit(1)
+    
+    if args.password and not args.username:
+        print(f"{Fore.RED}Username is required when using password. Exiting.")
+        exit(1)
+    
+    if args.username and not tenant_id:
+        if "@" in args.username:
+            tenant_id = args.username.split("@")[-1]
+
+    if (foci_refresh_token or args.username) and not tenant_id:
+        print(f"{Fore.RED}Tenant ID is required when using FOCI refresh token or username. Exiting.")
+        exit(1)
+
+    # Automatically generate the FOCI refresh token if username and password are provided and no token exists.
+    if not foci_refresh_token and args.username and args.password:
+        foci_token = generate_foci_token(args.username, args.password, tenant_id, client_id)
+        
+        # If username, we get a FOCI refresh token
+        if "@" in args.username:
+            foci_refresh_token = foci_token
+            print(f"{Fore.GREEN}Generated FOCI Refresh Token")
+        
+        # If SP, we just get an access token for management
+        else:
+            arm_token = foci_token
+            print(f"{Fore.GREEN}Generated Management Access Token")
+        
+    
+    # Initialize and run the AzurePEASS analysis
+    azure_peass = AzurePEASS(
+        arm_token,
+        graph_token,
+        foci_refresh_token,
+        tenant_id,
+        very_sensitive_combinations,  # Ensure these variables are defined in your context
+        sensitive_combinations,       # Ensure these variables are defined in your context
+        not_use_ht_ai=args.not_use_hacktricks_ai,
+        num_threads=args.threads,
+        out_path=args.out_json_path
+    )
     azure_peass.run_analysis()
