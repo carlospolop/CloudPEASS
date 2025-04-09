@@ -752,6 +752,10 @@ def generate_foci_token(username, password, tenant_id, scope="https://management
         
             if "refresh_token" in token_response:
                 return token_response["refresh_token"]
+            
+            elif "error_codes" in token_response and 50126 in token_response["error_codes"]:
+                print(f"{Fore.RED}Invalid credentials given. Existing")
+                exit(1)
 
         print(f"{Fore.RED}Error acquiring token with those credentials:", token_response.get("error_description"))
         exit(1)
