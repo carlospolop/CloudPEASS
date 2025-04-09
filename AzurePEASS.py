@@ -706,7 +706,7 @@ class AzurePEASS(CloudPEASS):
         return None
 
 
-def generate_foci_token(username, password, tenant_id, client_id, scope="https://management.azure.com/.default"):
+def generate_foci_token(username, password, tenant_id, scope="https://management.azure.com/.default"):
     """
     Generate a FOCI refresh token using Azure AD API via MSAL.
     
@@ -736,21 +736,25 @@ def generate_foci_token(username, password, tenant_id, client_id, scope="https:/
             exit(1)
     
     else:
-        # Initialize the MSAL PublicClientApplication with the client id and authority.
-        app = msal.PublicClientApplication(client_id, authority=authority)
+        for client_id in FOCI_APPS:
+            # Initialize the MSAL PublicClientApplication with the client id and authority.
+            app = msal.PublicClientApplication(client_id, authority=authority)
+            
+            # Acquire token using username/password flow
+            try:
+                token_response = app.acquire_token_by_username_password(
+                    username=username,
+                    password=password,
+                    scopes=[scope]
+                )
+            except Exception as e:
+                continue
         
-        # Acquire token using username/password flow
-        token_response = app.acquire_token_by_username_password(
-            username=username,
-            password=password,
-            scopes=[scope]
-        )
-    
-        if "refresh_token" in token_response:
-            return token_response["refresh_token"]
-        else:
-            print(f"{Fore.RED}Error acquiring token with those credentials:", token_response.get("error_description"))
-            exit(1)
+            if "refresh_token" in token_response:
+                return token_response["refresh_token"]
+
+        print(f"{Fore.RED}Error acquiring token with those credentials:", token_response.get("error_description"))
+        exit(1)
 
 
 if __name__ == "__main__":
@@ -761,7 +765,6 @@ if __name__ == "__main__":
     )
     # Basic token and tenant parameters
     parser.add_argument('--tenant-id', help="Indicate the tenant id")
-    parser.add_argument('--client-id', default="04b07795-8ddb-461a-bbee-02f9e1bf7b46", help="Azure App client ID for authentication (Default Azure CLI)")
     parser.add_argument('--arm-token', help="Azure Management authentication token")
     parser.add_argument('--graph-token', help="Azure Graph authentication token")
     parser.add_argument('--foci-refresh-token', default=None, help="FOCI Refresh Token")
@@ -777,7 +780,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     tenant_id = args.tenant_id
-    client_id = args.client_id
 
     # Get tokens from environment variables if not supplied as arguments
     arm_token = args.arm_token or os.getenv("AZURE_ARM_TOKEN")
@@ -802,7 +804,7 @@ if __name__ == "__main__":
 
     # Automatically generate the FOCI refresh token if username and password are provided and no token exists.
     if not foci_refresh_token and args.username and args.password:
-        foci_token = generate_foci_token(args.username, args.password, tenant_id, client_id)
+        foci_token = generate_foci_token(args.username, args.password, tenant_id)
         
         # If username, we get a FOCI refresh token
         if "@" in args.username:
