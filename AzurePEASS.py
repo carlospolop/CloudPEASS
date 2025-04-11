@@ -86,23 +86,35 @@ FOCI_APPS = [
 ]
 
 
-EMAIL_FOCI_APPS = [ # Mail.Read
-    "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
-    "27922004-5251-4030-b22d-91ecd9a37ea4"
-]
+EMAIL_FOCI_APPS = { # Mails.Read
+    "Mail.ReadWrite": [
+        "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+        "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+        "57336123-6e14-4acc-8dcf-287b6088aa28",
+        "00b41c95-dab0-4487-9791-b9d2c32c80f2"
+    ],
+    "Mail.Read": [
+        "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
+        "27922004-5251-4030-b22d-91ecd9a37ea4"
+    ]
+}
 
-SHAREPOINT_FOCI_APPS = [ # Sites.Read.All
-    "cf36b471-5b44-428c-9ce7-313bf84528de",
-    "ab9b8c07-8f02-4f72-87fa-80105867a763",
-    "af124e86-4e96-495a-b70a-90f90ab96707",
-    "b26aadf8-566f-4478-926f-589f601d9c74",
-    "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
-    "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d"
-]
+SHAREPOINT_FOCI_APPS = { # Sites.Read.All
+    "Sites.Read.All": [
+        "cf36b471-5b44-428c-9ce7-313bf84528de",
+        "ab9b8c07-8f02-4f72-87fa-80105867a763",
+        "af124e86-4e96-495a-b70a-90f90ab96707",
+        "b26aadf8-566f-4478-926f-589f601d9c74",
+        "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
+        "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d"
+    ]
+}
 
-TEAMS_FOCI_APPS = [ # Team.ReadBasic.All
-    "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
-]
+TEAMS_FOCI_APPS = { # Team.ReadBasic.All
+    "Team.ReadBasic.All": [
+        "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
+    ]
+}
 
 ONEDRIVE_FOCI_APPS = [
     "d3590ed6-52b3-4102-aeff-aad2292ab01c",
@@ -110,32 +122,59 @@ ONEDRIVE_FOCI_APPS = [
     "d7b530a4-7680-4c23-a8bf-c52c121d2e87"
 ]
 
-ONENOTE_FOCI_APPS = [ # Notes.Read
-    "57336123-6e14-4acc-8dcf-287b6088aa28"
-]
+ONENOTE_FOCI_APPS = { # Notes.Read
+    "Notes.ReadWrite.All": [
+        "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+        "0ec893e0-5785-4de6-99da-4ed124e5296c",
+        "ecd6b820-32c2-49b6-98a6-444530e5a77a"
+    ],
+    "Notes.Create": [
+        "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+    ],
+    "Notes.Read": [
+        "57336123-6e14-4acc-8dcf-287b6088aa28"
+    ]
+}
 
-CONTACTS_FOCI_APPS = [ # Contacts.Read
-    "00b41c95-dab0-4487-9791-b9d2c32c80f2",
-    "0ec893e0-5785-4de6-99da-4ed124e5296c",
-    "57336123-6e14-4acc-8dcf-287b6088aa28",
-    "af124e86-4e96-495a-b70a-90f90ab96707",
-    "b26aadf8-566f-4478-926f-589f601d9c74",
-    "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
-    "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
-    "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d",
-    "0ec893e0-5785-4de6-99da-4ed124e5296c"
-]
+CONTACTS_FOCI_APPS = { # Contacts.Read
+    "Contacts.ReadWrite.Shared": [
+        "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
+    ],
+    "Contacts.ReadWrite": [
+        "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+    ],
+    "Contacts.Read": [
+        "57336123-6e14-4acc-8dcf-287b6088aa28",
+        "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
+        "00b41c95-dab0-4487-9791-b9d2c32c80f2",
+        "0ec893e0-5785-4de6-99da-4ed124e5296c",
+        "af124e86-4e96-495a-b70a-90f90ab96707",
+        "b26aadf8-566f-4478-926f-589f601d9c74",
+        "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
+        "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d"
+    ]
+}
 
-TASKS_FOCI_APPS = [ # Tasks.ReadWrite (no one with Tasks.Read)
-    "d3590ed6-52b3-4102-aeff-aad2292ab01c",
-    "00b41c95-dab0-4487-9791-b9d2c32c80f2",
-    "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
-    "0ec893e0-5785-4de6-99da-4ed124e5296c",
-    "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
-    "0ec893e0-5785-4de6-99da-4ed124e5296c"
+TASKS_FOCI_APPS = { # Tasks.ReadWrite (no one with Tasks.Read)
+    "Tasks.ReadWrite": [
+        "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+        "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+        "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
+        "00b41c95-dab0-4487-9791-b9d2c32c80f2",
+        "0ec893e0-5785-4de6-99da-4ed124e5296c"
+    ],
 
-]
+    "Calendars.Read": [
+        "57336123-6e14-4acc-8dcf-287b6088aa28",
+        "af124e86-4e96-495a-b70a-90f90ab96707",
+        "b26aadf8-566f-4478-926f-589f601d9c74"
+    ],
 
+    "Contacts.Read": [
+        "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
+        "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d"
+    ]
+}
 
 
 class AzurePEASS(CloudPEASS):
@@ -313,122 +352,65 @@ class AzurePEASS(CloudPEASS):
             # SHAREPOINT
             """print(f"{Fore.YELLOW}\nEnumerating SharePoint files (Thanks to JoelGMSec for the scopes):")
             sharepoint_token = self.get_tokens_from_foci(["Sites.Read.All"], SHAREPOINT_FOCI_APPS)
-            
-            # If not token, ask to check every FOCI app
-            if not sharepoint_token:
-                print(f"{Fore.RED}I couldn't obtain a token with 'Sites.Read.All' scope from known FOCI apps.")
-                user_input = input("Do you want to try checking every FOCI app (y/N): ")
-                if user_input.lower() == 'y':
-                    mail_read_token = self.get_tokens_from_foci(["Sites.Read.All"])
-                    if not mail_read_token:
-                        print(f"{Fore.RED}I couldn't obtain a token with 'Sites.Read.All' scope from any FOCI app.")
-            
+
             if sharepoint_token:
                 self.enumerate_sharepoint_files(sharepoint_token)"""
             
             
             # EMAILS
             print(f"{Fore.YELLOW}\nEnumerating Emails:")
-            mail_read_token = self.get_tokens_from_foci(["Mail.Read"], EMAIL_FOCI_APPS)
-            
-            # If not token, ask to check every FOCI app
-            if not mail_read_token:
-                print(f"{Fore.RED}I couldn't obtain a token with 'Mail.Read' scope from known FOCI apps.")
-                user_input = input("Do you want to try checking every FOCI app (y/N): ")
-                if user_input.lower() == 'y':
-                    mail_read_token = self.get_tokens_from_foci(["Mail.Read"])
-                    if not mail_read_token:
-                        print(f"{Fore.RED}I couldn't obtain a token with 'Mail.Read' scope from any FOCI app.")
-            
+            mail_read_token = self.get_tokens_from_foci_with_scope(EMAIL_FOCI_APPS)
+
             if mail_read_token:
                 self.enumerate_emails(mail_read_token)
+            else:
+                print(f"{Fore.RED}No FOCI app with Mail.Read scope found. Skipping email enumeration.{Fore.WHITE}")
 
             # TEAMS
             print(f"{Fore.YELLOW}\nEnumerating Teams Conversations:")
-            teams_token = self.get_tokens_from_foci(["Team.ReadBasic.All"], TEAMS_FOCI_APPS)
-            
-            # If token is not found, try all FOCI apps.
-            if not teams_token:
-                print(f"{Fore.RED}I couldn't obtain a token with 'Team.ReadBasic.All' scope from known FOCI apps.")
-                user_input = input("Do you want to try checking every FOCI app (y/N): ")
-                if user_input.lower() == 'y':
-                    teams_token = self.get_tokens_from_foci(["Team.ReadBasic.All"])
-                    if not teams_token:
-                        print(f"{Fore.RED}I couldn't obtain a token with 'Team.ReadBasic.All' scope from any FOCI app.")
-            
+            teams_token = self.get_tokens_from_foci_with_scope(TEAMS_FOCI_APPS)
+
             if teams_token:
                 self.enumerate_teams_conversations(teams_token)
+            else:
+                print(f"{Fore.RED}No FOCI app with Teams scopes found. Skipping Teams conversations enumeration.{Fore.WHITE}")
             
             
             """# ONEDRIVE
             print(f"{Fore.YELLOW}\nEnumerating onedrive:")
             onedrive_token = self.get_tokens_from_foci(["Files.Read"], ONEDRIVE_FOCI_APPS)
-            
-            # If token is not found, try all FOCI apps.
-            if not onedrive_token:
-                print(f"{Fore.RED}I couldn't obtain a token with 'Files.Read' scope from known FOCI apps.")
-                user_input = input("Do you want to try checking every FOCI app (y/N): ")
-                if user_input.lower() == 'y':
-                    onedrive_token = self.get_tokens_from_foci(["Files.Read"])
-                    if not onedrive_token:
-                        print(f"{Fore.RED}I couldn't obtain a token with 'Files.Read' scope from any FOCI app.")
-            
+
             if onedrive_token:
                 self.enumerate_onedrive(onedrive_token)"""
             
 
             # ONENOTE
-            if self.foci_refresh_token:
-                print(f"{Fore.YELLOW}\nEnumerating OneNote Notebooks and Sections:")
-                onenote_token = self.get_tokens_from_foci(["Notes.Read"], ONENOTE_FOCI_APPS)
-                
-                # If token retrieval fails, try all FOCI apps
-                if not onenote_token:
-                    print(f"{Fore.RED}I couldn't obtain a token with 'Notes.Read' scope from known FOCI apps.")
-                    user_input = input("Do you want to try checking every FOCI app (y/N): ")
-                    if user_input.lower() == 'y':
-                        onenote_token = self.get_tokens_from_foci(["Notes.Read"])
-                        if not onenote_token:
-                            print(f"{Fore.RED}I couldn't obtain a token with 'Notes.Read' scope from any FOCI app.")
-                
-                # If token is successfully retrieved, enumerate OneNote content
-                if onenote_token:
-                    self.enumerate_onenote_content(onenote_token)
+            print(f"{Fore.YELLOW}\nEnumerating OneNote Notebooks and Sections:")
+            onenote_token = self.get_tokens_from_foci_with_scope(ONENOTE_FOCI_APPS)
+
+            # If token is successfully retrieved, enumerate OneNote content
+            if onenote_token:
+                self.enumerate_onenote_content(onenote_token)
+            else:
+                print(f"{Fore.RED}No FOCI app with OneNote scopes found. Skipping OneNote enumeration.{Fore.WHITE}")
 
             # CONTACTS
-            if self.foci_refresh_token:
-                print(f"{Fore.YELLOW}\nEnumerating Contacts:")
-                contacts_token = self.get_tokens_from_foci(["Contacts.Read"], CONTACTS_FOCI_APPS)
-                
-                # If token retrieval fails, try all FOCI apps
-                if not contacts_token:
-                    print(f"{Fore.RED}I couldn't obtain a token with Contacts.Read scope from known FOCI apps.")
-                    user_input = input("Do you want to try checking every FOCI app (y/N): ")
-                    if user_input.lower() == 'y':
-                        contacts_token = self.get_tokens_from_foci(["Contacts.Read"])
-                        if not contacts_token:
-                            print(f"{Fore.RED}I couldn't obtain a token with Contacts.Read scope from any FOCI app.")
-                
-                if contacts_token:
-                    self.enumerate_contacts(contacts_token)
+            print(f"{Fore.YELLOW}\nEnumerating Contacts:")
+            contacts_token = self.get_tokens_from_foci_with_scope(CONTACTS_FOCI_APPS)
+
+            if contacts_token:
+                self.enumerate_contacts(contacts_token)
+            else:
+                print(f"{Fore.RED}No FOCI app with Contacts scopes found. Skipping Contacts enumeration.{Fore.WHITE}")
             
             # TASKS
             print(f"{Fore.YELLOW}\nEnumerating Tasks:")
-            tasks_token = self.get_tokens_from_foci(["Tasks.ReadWrite"], TASKS_FOCI_APPS)
-            
-            # If token retrieval fails, try all FOCI apps
-            if not tasks_token:
-                print(f"{Fore.RED}I couldn't obtain a token with 'Tasks.ReadWrite' scope from known FOCI apps.")
-                user_input = input("Do you want to try checking every FOCI app (y/N): ")
-                if user_input.lower() == 'y':
-                    tasks_token = self.get_tokens_from_foci(["Tasks.Read"])
-                    if not tasks_token:
-                        tasks_token = self.get_tokens_from_foci(["Tasks.ReadWrite"])
-                        if not tasks_token:
-                            print(f"{Fore.RED}I couldn't obtain a token with 'Tasks.ReadWrite' scope from any FOCI app.")
+            tasks_token = self.get_tokens_from_foci_with_scope(TASKS_FOCI_APPS)
             
             if tasks_token:
                 self.enumerate_tasks(tasks_token)
+            else:
+                print(f"{Fore.RED}No FOCI app with Tasks scopes found. Skipping Tasks enumeration.{Fore.WHITE}")
             
 
     def enumerate_tasks(self, tasks_token):
@@ -686,13 +668,27 @@ class AzurePEASS(CloudPEASS):
             )
         tokens = app.acquire_token_by_refresh_token(foci_refresh_token, scopes=scopes)
         return tokens
+
+    def get_tokens_from_foci_with_scope(self, scope_app_ids={}):
+        """
+        Get a token using FOCI apps for the required resource/scopes.
+        """
+
+        for scope, app_id in scope_app_ids.items():
+            token = self.get_tokens_from_foci(
+                [scope],
+                app_ids=app_id
+            )
+            if token:
+                return token
+        
+        return None
     
     def get_tokens_from_foci(self, scopes, app_ids=[]):
         """
         Get a token using FOCI apps for the required resource/scopes.
         """
 
-        a = True
         app_ids = app_ids if app_ids else FOCI_APPS
         for app_id in app_ids:
             token = self.get_accesstoken_from_foci(
@@ -700,8 +696,7 @@ class AzurePEASS(CloudPEASS):
                 scopes
             ).get("access_token")
             if token:
-                if a:
-                    return token
+                return token
         
         return None
 
