@@ -13,6 +13,7 @@ init(autoreset=True)
 from src.CloudPEASS.cloudpeass import CloudPEASS
 from src.sensitive_permissions.azure import very_sensitive_combinations, sensitive_combinations
 from src.azure.entraid import EntraIDPEASS
+from src.azure.definitions import SHAREPOINT_FOCI_APPS, ONEDRIVE_FOCI_APPS, EMAIL_FOCI_APPS, TEAMS_FOCI_APPS, ONENOTE_FOCI_APPS, CONTACTS_FOCI_APPS, TASKS_FOCI_APPS, FOCI_APPS
 
 AZURE_MALICIOUS_RESPONSE_EXAMPLE = """[
     {
@@ -42,139 +43,6 @@ AZURE_SENSITIVE_RESPONSE_EXAMPLE = """[
     [...]
 ]"""
 
-
-
-FOCI_APPS = [
-    "04b07795-8ddb-461a-bbee-02f9e1bf7b46", # Azure CLI keep first
-    "1950a258-227b-4e31-a9cf-717495945fc2",
-    "cf36b471-5b44-428c-9ce7-313bf84528de",
-    "2d7f3606-b07d-41d1-b9d2-0d0c9296a6e8",
-    "d3590ed6-52b3-4102-aeff-aad2292ab01c",
-    "c0d2a505-13b8-4ae0-aa9e-cddd5eab0b12",
-    "00b41c95-dab0-4487-9791-b9d2c32c80f2",
-    "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
-    "ab9b8c07-8f02-4f72-87fa-80105867a763",
-    "27922004-5251-4030-b22d-91ecd9a37ea4",
-    "26a7ee05-5602-4d76-a7ba-eae8b7b67941",
-    "0ec893e0-5785-4de6-99da-4ed124e5296c",
-    "22098786-6e16-43cc-a27d-191a01a1e3b5",
-    "4813382a-8fa7-425e-ab75-3b753aab3abb",
-    "4e291c71-d680-4d0e-9640-0a3358e31177",
-    "57fcbcfa-7cee-4eb1-8b25-12d2030b4ee0",
-    "57336123-6e14-4acc-8dcf-287b6088aa28",
-    "66375f6b-983f-4c2c-9701-d680650f588f",
-    "844cca35-0656-46ce-b636-13f48b0eecbd",
-    "872cd9fa-d31f-45e0-9eab-6e460a02d1f1",
-    "87749df4-7ccf-48f8-aa87-704bad0e0e16",
-    "9ba1a5c7-f17a-4de9-a1f1-6178c8d51223",
-    "a569458c-7f2b-45cb-bab9-b7dee514d112",
-    "af124e86-4e96-495a-b70a-90f90ab96707",
-    "b26aadf8-566f-4478-926f-589f601d9c74",
-    "be1918be-3fe3-4be9-b32b-b542fc27f02e",
-    "cab96880-db5b-4e15-90a7-f3f1d62ffe39",
-    "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
-    "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
-    "dd47d17a-3194-4d86-bfd5-c6ae6f5651e3",
-    "e9b154d0-7658-433b-bb25-6b8e0a8a7c59",
-    "f44b1140-bc5e-48c6-8dc0-5cf5a53c0e34",
-    "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d",
-    "0ec893e0-5785-4de6-99da-4ed124e5296c",
-    "ecd6b820-32c2-49b6-98a6-444530e5a77a",
-    "e9c51622-460d-4d3d-952d-966a5b1da34c",
-    "c1c74fed-04c9-4704-80dc-9f79a2e515cb",
-    "eb20f3e3-3dce-4d2c-b721-ebb8d4414067"
-]
-
-
-EMAIL_FOCI_APPS = { # Mails.Read
-    "Mail.ReadWrite": [
-        "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
-        "d3590ed6-52b3-4102-aeff-aad2292ab01c",
-        "57336123-6e14-4acc-8dcf-287b6088aa28",
-        "00b41c95-dab0-4487-9791-b9d2c32c80f2"
-    ],
-    "Mail.Read": [
-        "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
-        "27922004-5251-4030-b22d-91ecd9a37ea4"
-    ]
-}
-
-SHAREPOINT_FOCI_APPS = { # Sites.Read.All
-    "Sites.Read.All": [
-        "cf36b471-5b44-428c-9ce7-313bf84528de",
-        "ab9b8c07-8f02-4f72-87fa-80105867a763",
-        "af124e86-4e96-495a-b70a-90f90ab96707",
-        "b26aadf8-566f-4478-926f-589f601d9c74",
-        "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
-        "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d"
-    ]
-}
-
-TEAMS_FOCI_APPS = { # Team.ReadBasic.All
-    "Team.ReadBasic.All": [
-        "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
-    ]
-}
-
-ONEDRIVE_FOCI_APPS = [
-    "d3590ed6-52b3-4102-aeff-aad2292ab01c",
-    "ab9b8c07-8f02-4f72-87fa-80105867a763",
-    "d7b530a4-7680-4c23-a8bf-c52c121d2e87"
-]
-
-ONENOTE_FOCI_APPS = { # Notes.Read
-    "Notes.ReadWrite.All": [
-        "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
-        "0ec893e0-5785-4de6-99da-4ed124e5296c",
-        "ecd6b820-32c2-49b6-98a6-444530e5a77a"
-    ],
-    "Notes.Create": [
-        "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-    ],
-    "Notes.Read": [
-        "57336123-6e14-4acc-8dcf-287b6088aa28"
-    ]
-}
-
-CONTACTS_FOCI_APPS = { # Contacts.Read
-    "Contacts.ReadWrite.Shared": [
-        "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
-    ],
-    "Contacts.ReadWrite": [
-        "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-    ],
-    "Contacts.Read": [
-        "57336123-6e14-4acc-8dcf-287b6088aa28",
-        "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
-        "00b41c95-dab0-4487-9791-b9d2c32c80f2",
-        "0ec893e0-5785-4de6-99da-4ed124e5296c",
-        "af124e86-4e96-495a-b70a-90f90ab96707",
-        "b26aadf8-566f-4478-926f-589f601d9c74",
-        "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
-        "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d"
-    ]
-}
-
-TASKS_FOCI_APPS = { # Tasks.ReadWrite (no one with Tasks.Read)
-    "Tasks.ReadWrite": [
-        "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
-        "d3590ed6-52b3-4102-aeff-aad2292ab01c",
-        "d7b530a4-7680-4c23-a8bf-c52c121d2e87",
-        "00b41c95-dab0-4487-9791-b9d2c32c80f2",
-        "0ec893e0-5785-4de6-99da-4ed124e5296c"
-    ],
-
-    "Calendars.Read": [
-        "57336123-6e14-4acc-8dcf-287b6088aa28",
-        "af124e86-4e96-495a-b70a-90f90ab96707",
-        "b26aadf8-566f-4478-926f-589f601d9c74"
-    ],
-
-    "Contacts.Read": [
-        "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
-        "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d"
-    ]
-}
 
 
 class AzurePEASS(CloudPEASS):
@@ -348,14 +216,19 @@ class AzurePEASS(CloudPEASS):
                 print(f"{Fore.RED}Failed to decode Graph token: {str(e)}")
         
         if self.foci_refresh_token:
-            
             # SHAREPOINT
-            """print(f"{Fore.YELLOW}\nEnumerating SharePoint files (Thanks to JoelGMSec for the scopes):")
-            sharepoint_token = self.get_tokens_from_foci(["Sites.Read.All"], SHAREPOINT_FOCI_APPS)
+            print(f"{Fore.YELLOW}\nEnumerating SharePoint files | max depth 3 | top 10 {Fore.RESET}(Thanks to {Fore.BLUE}JoelGMSec{Fore.RESET} for the idea):")
+            sharepoint_token = self.get_tokens_from_foci_with_scope(SHAREPOINT_FOCI_APPS)
 
             if sharepoint_token:
-                self.enumerate_sharepoint_files(sharepoint_token)"""
+                self.enumerate_sharepoint_sites(sharepoint_token)
             
+            # ONEDRIVE
+            print(f"{Fore.YELLOW}\nEnumerating onedrive | max depth 3 | top 10:")
+            onedrive_token = self.get_tokens_from_foci_with_scope(ONEDRIVE_FOCI_APPS)
+
+            if onedrive_token:
+                self.enumerate_onedrive(onedrive_token, max_depth=3)
             
             # EMAILS
             print(f"{Fore.YELLOW}\nEnumerating Emails:")
@@ -374,15 +247,6 @@ class AzurePEASS(CloudPEASS):
                 self.enumerate_teams_conversations(teams_token)
             else:
                 print(f"{Fore.RED}No FOCI app with Teams scopes found. Skipping Teams conversations enumeration.{Fore.WHITE}")
-            
-            
-            """# ONEDRIVE
-            print(f"{Fore.YELLOW}\nEnumerating onedrive:")
-            onedrive_token = self.get_tokens_from_foci(["Files.Read"], ONEDRIVE_FOCI_APPS)
-
-            if onedrive_token:
-                self.enumerate_onedrive(onedrive_token)"""
-            
 
             # ONENOTE
             print(f"{Fore.YELLOW}\nEnumerating OneNote Notebooks and Sections:")
@@ -506,21 +370,78 @@ class AzurePEASS(CloudPEASS):
             else:
                 break
 
-    def enumerate_sharepoint_files(self, sharepoint_token):
-        headers = {'Authorization': f'Bearer {sharepoint_token}'}
-        site_url = 'https://graph.microsoft.com/v1.0/sites/root/drive/root/children?$top=10'
+    def enumerate_sharepoint_sites(self, token):
+        url = "https://graph.microsoft.com/v1.0/me/followedSites"
+        self.sharepoint_list_sites(url, token, depth=1, max_depth=3)
 
-        while site_url:
-            resp = requests.get(site_url, headers=headers)
-            data = resp.json()
-            for item in data.get('value', []):
-                print(f"{Fore.CYAN}- {item['name']} ({item['webUrl']})")
+    def sharepoint_list_sites(self, url, token, depth, max_depth):
+        headers = {'Authorization': f'Bearer {token}'}
+        # Indentation for hierarchical display (using tabs)
+        indent = "  " * (depth - 1)
+        while url:
+            response = requests.get(url, headers=headers)
+            data = response.json()
+            for site in data.get("value", []):
+                # Some sites may use "displayName" instead of "name"
+                name = site.get("displayName") or site.get("name", "Unnamed")
+                web_url = site.get("webUrl", "No URL provided")
+                site_id = site.get("id")
+                print(f"{indent}- {Fore.YELLOW}Site:{Fore.RESET} {name} | {Fore.BLUE}{web_url}")
+                # Enumerate documents in the site's default document library
+                self.sharepoint_list_documents(site_id, token, indent=indent+"  ")
+                # Recursive enumeration for subsites (if within allowed depth)
+                if depth < max_depth:
+                    subsites_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/sites?$top=10"
+                    self.sharepoint_list_sites(subsites_url, token, depth + 1, max_depth)
+            # Pagination Handling for sites
+            next_link = data.get('@odata.nextLink') or data.get('nextLink')
+            if next_link:
+                url = next_link
+            else:
+                break
 
-            if 'nextLink' in data:
-                cont = input("Show more SharePoint files? (y/N): ")
-                if cont.lower() != 'y':
-                    break
-                site_url = data['nextLink']
+    def sharepoint_list_documents(self, site_id, token, indent=""):
+        headers = {'Authorization': f'Bearer {token}'}
+        # List items in the default document library ("drive") of the site
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/children?$top=10"
+        print(f"{indent}Documents:")
+        while url:
+            response = requests.get(url, headers=headers)
+            data = response.json()
+            for item in data.get("value", []):
+                item_name = item.get("name", "Unnamed item")
+                # Identify folders vs files
+                if "folder" in item:
+                    print(f"{indent}  - {Fore.MAGENTA}Folder: {Fore.RESET}{item_name}")
+                    # Optionally, recursively enumerate folder contents
+                    self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent=indent+"    ")
+                else:
+                    print(f"{indent}  - File: {item_name}")
+            # Pagination Handling for documents
+            next_link = data.get('@odata.nextLink') or data.get('nextLink')
+            if next_link:
+                url = next_link
+            else:
+                break
+
+    def sharepoint_list_folder_contents(self, site_id, token, folder_id, indent=""):
+        headers = {'Authorization': f'Bearer {token}'}
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/items/{folder_id}/children?$top=10"
+        while url:
+            response = requests.get(url, headers=headers)
+            data = response.json()
+            for item in data.get("value", []):
+                item_name = item.get("name", "Unnamed item")
+                if "folder" in item:
+                    print(f"{indent}- {Fore.BLUE}Folder: {Fore.RESET}{item_name}")
+                    self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent=indent+"  ")
+                else:
+                    size = item.get("size", "Unknown")
+                    last_modified = item.get("lastModifiedDateTime", "Unknown")
+                    print(f"{indent}- {Fore.GREEN}File: {Fore.RESET}{item_name} | {Fore.CYAN}Size:{Fore.RESET} {size} bytes | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}")
+            next_link = data.get('@odata.nextLink') or data.get('nextLink')
+            if next_link:
+                url = next_link
             else:
                 break
 
@@ -585,23 +506,45 @@ class AzurePEASS(CloudPEASS):
             else:
                 break
 
-    def enumerate_onedrive(self, onedrive_token):
-        headers = {'Authorization': f'Bearer {onedrive_token}'}
-        site_url = 'https://graph.microsoft.com/v1.0/sites/root/drive/root/children?$top=10'
-        print(f"{Fore.YELLOW}\nListing Word and Excel files:")
-        while site_url:
-            resp = requests.get(site_url, headers=headers)
-            data = resp.json()
+    def enumerate_onedrive(self, onedrive_token, max_depth=3):
+        # Root URL to list items in the root folder
+        root_url = "https://graph.microsoft.com/v1.0/me/drive/root/children?$top=10"
+        self._list_items(root_url, onedrive_token, depth=1, max_depth=max_depth)
+
+    def _list_items(self, url, token, depth, max_depth):
+        headers = {'Authorization': f'Bearer {token}'}
+        # Indentation for hierarchical display
+        indent = "  " * (depth - 1)
+        while url:
+            response = requests.get(url, headers=headers)
+            data = response.json()
             for item in data.get('value', []):
-                name = item.get('name', '').lower()
-                # Filter for Word and Excel file extensions
-                if name.endswith(('.doc', '.docx', '.xls', '.xlsx')):
-                    print(f"{Fore.CYAN}- {item['name']} ({item['webUrl']})")
-            if 'nextLink' in data:
-                cont = input("Show more Office files? (y/n): ")
-                if cont.lower() != 'y':
-                    break
-                site_url = data['nextLink']
+                name = item.get('name', 'Unnamed')
+                last_modified = item.get('lastModifiedDateTime', 'Unknown')
+                web_url = item.get('webUrl', 'Unknown')
+                # Determine the type of the item
+                if 'folder' in item:
+                    child_count = item['folder'].get('childCount', 0)
+                    special_folder = item['folder'].get('specialFolder', {}).get('name', '')
+                    if special_folder:
+                        msg = f"{indent}- {Fore.MAGENTA}Folder: {Fore.RESET}{name} | {Fore.CYAN}Special folder:{Fore.RESET} {special_folder} | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}"
+                    else:
+                        msg = f"{indent}- {Fore.MAGENTA}Folder: {Fore.RESET}{name} | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}"
+                    print(msg)
+                    
+                    # Recursive call for folder contents if max_depth is not reached
+                    if depth < max_depth:
+                        folder_children_url = f"https://graph.microsoft.com/v1.0/me/drive/items/{item['id']}/children?$top=50"
+                        self._list_items(folder_children_url, token, depth + 1, max_depth)
+                
+                else:
+                    size = item.get('size', 'Unknown')
+                    print(f"{indent}- {Fore.GREEN}File: {Fore.RESET}{name} | {Fore.CYAN}Size: {Fore.RESET}{size} | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}")
+            
+            # Handle pagination: continue if a next page exists
+            next_link = data.get('@odata.nextLink') or data.get('nextLink')
+            if next_link:
+                url = next_link
             else:
                 break
 
@@ -666,7 +609,7 @@ class AzurePEASS(CloudPEASS):
         app = msal.PublicClientApplication(
                 client_id=client_id, authority=f"https://login.microsoftonline.com/{self.tenant_id}"
             )
-        tokens = app.acquire_token_by_refresh_token(foci_refresh_token, scopes=scopes)
+        tokens = app.acquire_token_by_refresh_token(foci_refresh_token, scopes=scopes, )
         return tokens
 
     def get_tokens_from_foci_with_scope(self, scope_app_ids={}):

@@ -18,21 +18,30 @@ Note that you will need to provide a token with access over the **ARM API** and 
 
 Note also that some specific permissions and scopes are needed to get all the information, but **the most part of the permissions can be gathered without requiring any specific enumeration permission**.
 
+**M356**: If you provide AzurePEASS with a **FOCI refresh token or some credentials** (username and password), it'll also be able to enumerate several Microsoft 365 services: **Sharepoint, OneDrive, Outlook, Teams, OneNote, Contacts, Tasks**. Note that the enumeration is not exhaustive and it's not the goal of the tool to be. The goal of the tool is just to let you know if there is any data in these services so you can check them manualy later.
+
 - Help:
 
 ```bash
-python3 AzurePEASS.py -h
-usage: AzurePEASS.py [-h] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
+python3 ./AzurePEASS.py --help
+usage: AzurePEASS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--foci-refresh-token FOCI_REFRESH_TOKEN] [--username USERNAME]
+                     [--password PASSWORD] [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
 
 Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To check for Azure permissions an ARM token
-is neded. To check for Entra ID permissions a Graph token is needed.
+is needed. To check for Entra ID permissions a Graph token is needed.
 
 options:
   -h, --help            show this help message and exit
+  --tenant-id TENANT_ID
+                        Indicate the tenant id
   --arm-token ARM_TOKEN
                         Azure Management authentication token
   --graph-token GRAPH_TOKEN
                         Azure Graph authentication token
+  --foci-refresh-token FOCI_REFRESH_TOKEN
+                        FOCI Refresh Token
+  --username USERNAME   Username for authentication
+  --password PASSWORD   Password for authentication
   --out-json-path OUT_JSON_PATH
                         Output JSON file path (e.g. /tmp/azure_results.json)
   --threads THREADS     Number of threads to use
@@ -61,6 +70,12 @@ $Headers.Authorization.Parameter
 # e.g.
 ## You can indicate the tokens via command line or just exporting the previous env variables is enough
 python3 AzurePEASS.py [--arm-token <AZURE_MANAGEMENT_TOKEN>] [--graph-token <AZURE_GRAPH_TOKEN>]
+
+## FOCI refresh token for extra M365 enumeration
+python3 AzurePEASS.py [--tenant-id <TENANT_ID>] [--foci-refresh-token <FOCI_REFRESH_TOKEN>]
+
+## Credentials for extra M365 enumeration
+python3 AzurePEASS.py [--username <USERNAME>] [--password <PASSWORD>]
 ```
 
 ## GCPPEASS
