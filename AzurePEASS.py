@@ -61,6 +61,7 @@ class AzurePEASS(CloudPEASS):
         self.arm_token= arm_token
         self.graph_token = graph_token
         self.EntraIDPEASS = EntraIDPEASS(graph_token, num_threads)
+        self.sharepoint_followed_sites_ids = []
         super().__init__(very_sensitive_combos, sensitive_combos, "Azure", not_use_ht_ai, num_threads, AZURE_MALICIOUS_RESPONSE_EXAMPLE, AZURE_SENSITIVE_RESPONSE_EXAMPLE, out_path)
 
         if not self.arm_token and not self.graph_token:
@@ -221,7 +222,8 @@ class AzurePEASS(CloudPEASS):
             sharepoint_token = self.get_tokens_from_foci_with_scope(SHAREPOINT_FOCI_APPS)
 
             if sharepoint_token:
-                self.enumerate_sharepoint_sites(sharepoint_token)
+                self.sharepoint_enumerate_followed_sites(sharepoint_token)
+                self.sharepoint_enumerate_public_sites(sharepoint_token)
             
             # ONEDRIVE
             print(f"{Fore.YELLOW}\nEnumerating onedrive | max depth 3 | top 10:")
@@ -370,39 +372,48 @@ class AzurePEASS(CloudPEASS):
             else:
                 break
 
-    def enumerate_sharepoint_sites(self, token):
-        url = "https://graph.microsoft.com/v1.0/me/followedSites"
-        self.sharepoint_list_sites(url, token, depth=1, max_depth=3)
-
-    def sharepoint_list_sites(self, url, token, depth, max_depth):
+    def fetch_paginated_data(self, url, token):
+        """Helper to retrieve all paginated data from a Graph API endpoint."""
         headers = {'Authorization': f'Bearer {token}'}
-        # Indentation for hierarchical display (using tabs)
+        items = []
+        while url:
+            response = requests.get(url, headers=headers)
+            data = response.json()
+            items.extend(data.get("value", []))
+            url = data.get('@odata.nextLink') or data.get('nextLink')
+        return items
+
+
+    def enumerate_site(self, site, token, indent=""):
+        """Print details of a single site and enumerate its documents."""
+        name = site.get("displayName") or site.get("name", "Unnamed")
+        web_url = site.get("webUrl", "No URL provided")
+        site_id = site.get("id")
+        print(f"{indent}- {Fore.YELLOW}Site:{Fore.RESET} {name} | {Fore.BLUE}{web_url}")
+        self.sharepoint_list_documents(site_id, token, indent + "  ")
+
+    def sharepoint_enumerate_followed_sites(self, token, depth=1, max_depth=3, url="https://graph.microsoft.com/v1.0/me/followedSites"):
+        """Recursively enumerate followed sites."""
+
+        if depth == 1:
+            print(f"\n{Fore.CYAN}Followed Sites:{Fore.RESET}")
+        headers = {'Authorization': f'Bearer {token}'}
         indent = "  " * (depth - 1)
+        
         while url:
             response = requests.get(url, headers=headers)
             data = response.json()
             for site in data.get("value", []):
-                # Some sites may use "displayName" instead of "name"
-                name = site.get("displayName") or site.get("name", "Unnamed")
-                web_url = site.get("webUrl", "No URL provided")
-                site_id = site.get("id")
-                print(f"{indent}- {Fore.YELLOW}Site:{Fore.RESET} {name} | {Fore.BLUE}{web_url}")
-                # Enumerate documents in the site's default document library
-                self.sharepoint_list_documents(site_id, token, indent=indent+"  ")
-                # Recursive enumeration for subsites (if within allowed depth)
+                self.sharepoint_followed_sites_ids.append(site.get("id"))
+                self.enumerate_site(site, token, indent)
                 if depth < max_depth:
-                    subsites_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/sites?$top=10"
-                    self.sharepoint_list_sites(subsites_url, token, depth + 1, max_depth)
-            # Pagination Handling for sites
-            next_link = data.get('@odata.nextLink') or data.get('nextLink')
-            if next_link:
-                url = next_link
-            else:
-                break
+                    subsites_url = f"https://graph.microsoft.com/v1.0/sites/{site.get('id')}/sites?$top=10"
+                    self.sharepoint_enumerate_followed_sites(token, depth + 1, max_depth, subsites_url)
+            url = data.get('@odata.nextLink') or data.get('nextLink')
 
     def sharepoint_list_documents(self, site_id, token, indent=""):
+        """List documents in the default document library of a site."""
         headers = {'Authorization': f'Bearer {token}'}
-        # List items in the default document library ("drive") of the site
         url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/children?$top=10"
         print(f"{indent}Documents:")
         while url:
@@ -410,21 +421,17 @@ class AzurePEASS(CloudPEASS):
             data = response.json()
             for item in data.get("value", []):
                 item_name = item.get("name", "Unnamed item")
-                # Identify folders vs files
                 if "folder" in item:
                     print(f"{indent}  - {Fore.MAGENTA}Folder: {Fore.RESET}{item_name}")
-                    # Optionally, recursively enumerate folder contents
-                    self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent=indent+"    ")
+                    self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent + "    ")
                 else:
-                    print(f"{indent}  - File: {item_name}")
-            # Pagination Handling for documents
-            next_link = data.get('@odata.nextLink') or data.get('nextLink')
-            if next_link:
-                url = next_link
-            else:
-                break
+                    size = item.get("size", "Unknown")
+                    last_modified = item.get("lastModifiedDateTime", "Unknown")
+                    print(f"{indent}- {Fore.GREEN}File: {Fore.RESET}{item_name} | {Fore.CYAN}Size:{Fore.RESET} {size} bytes | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}")
+            url = data.get('@odata.nextLink') or data.get('nextLink')
 
     def sharepoint_list_folder_contents(self, site_id, token, folder_id, indent=""):
+        """Recursively list folder contents."""
         headers = {'Authorization': f'Bearer {token}'}
         url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/items/{folder_id}/children?$top=10"
         while url:
@@ -434,16 +441,25 @@ class AzurePEASS(CloudPEASS):
                 item_name = item.get("name", "Unnamed item")
                 if "folder" in item:
                     print(f"{indent}- {Fore.BLUE}Folder: {Fore.RESET}{item_name}")
-                    self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent=indent+"  ")
+                    self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent + "  ")
                 else:
                     size = item.get("size", "Unknown")
                     last_modified = item.get("lastModifiedDateTime", "Unknown")
                     print(f"{indent}- {Fore.GREEN}File: {Fore.RESET}{item_name} | {Fore.CYAN}Size:{Fore.RESET} {size} bytes | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}")
-            next_link = data.get('@odata.nextLink') or data.get('nextLink')
-            if next_link:
-                url = next_link
-            else:
-                break
+            url = data.get('@odata.nextLink') or data.get('nextLink')
+
+    def sharepoint_enumerate_public_sites(self, token):
+        """Enumerate public sites not already followed by the current user."""
+        url = "https://graph.microsoft.com/v1.0/sites?search=*"
+        print(f"\n{Fore.CYAN}Public Sites:{Fore.RESET}")
+        while url:
+            response = requests.get(url, headers={'Authorization': f'Bearer {token}'})
+            data = response.json()
+            for site in data.get("value", []):
+                if site.get("id") in self.sharepoint_followed_sites_ids:
+                    continue
+                self.enumerate_site(site, token, indent="")  # No extra indentation for public sites
+            url = data.get('@odata.nextLink') or data.get('nextLink')
 
     def enumerate_emails(self, outlook_token):
         headers = {'Authorization': f'Bearer {outlook_token}'}
