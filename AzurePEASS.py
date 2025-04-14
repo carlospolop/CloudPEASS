@@ -411,7 +411,7 @@ class AzurePEASS(CloudPEASS):
                     self.sharepoint_enumerate_followed_sites(token, depth + 1, max_depth, subsites_url)
             url = data.get('@odata.nextLink') or data.get('nextLink')
 
-    def sharepoint_list_documents(self, site_id, token, indent=""):
+    def sharepoint_list_documents(self, site_id, token, indent="", depth=1, max_depth=3):
         """List documents in the default document library of a site."""
         headers = {'Authorization': f'Bearer {token}'}
         url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/children?$top=10"
@@ -423,7 +423,8 @@ class AzurePEASS(CloudPEASS):
                 item_name = item.get("name", "Unnamed item")
                 if "folder" in item:
                     print(f"{indent}  - {Fore.MAGENTA}Folder: {Fore.RESET}{item_name}")
-                    self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent + "    ")
+                    if depth < max_depth:
+                        self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent + "    ", depth + 1, max_depth)
                 else:
                     size = item.get("size", "Unknown")
                     last_modified = item.get("lastModifiedDateTime", "Unknown")
