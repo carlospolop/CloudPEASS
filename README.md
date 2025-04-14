@@ -2,32 +2,32 @@
 
 **Still in development phase!**
 
-The current goal of **Cloud PEASS** is simple: Once you manage to get **some credentials to access Azure, GCP or AWS**, use different techniques to **get the permissions the principal has** and highlight all the **potential attacks** (privilege escalation, read sensitive information, etc) it's possible to do.
+The current goal of **Cloud PEAS** is simple: Once you manage to get **some credentials to access Azure, GCP or AWS**, use different techniques to **get the permissions the principal has** and highlight all the **potential attacks** (privilege escalation, read sensitive information, etc) it's possible to do.
 
 The sensitive permissions and attacks are discovered based on the sensitive permissions documented in **[HackTricks Cloud](https://cloud.hacktricks.wiki/en/index.html) and also asking the HackTricks AI**.
 
 **Note that at the moment HackTricks AI will share information with OpenAI**, however, as we just share permission and resource names and not the actual data, it should be safe to use. If you don't want to use HackTricks AI, you can use the **`--not-use-hacktricks-ai`** flag.
 
-## AzurePEASS
+## AzurePEAS
 
-AzurePEASS will check all **your permissions in Azure and in Entra ID** and will try to find **privilege escalation** paths and other potential attacks.
+AzurePEAS will check all **your permissions in Azure and in Entra ID** and will try to find **privilege escalation** paths and other potential attacks.
 
-AzurePEASS will use different API endpoints to find all the resources a principal has access to and then get all the permissions of those resources. It will also check for **Entra ID permissions** in different scopes.
+AzurePEAS will use different API endpoints to find all the resources a principal has access to and then get all the permissions of those resources. It will also check for **Entra ID permissions** in different scopes.
 
 Note that you will need to provide a token with access over the **ARM API** and another one with access over the **Graph API**.
 
 Note also that some specific permissions and scopes are needed to get all the information, but **the most part of the permissions can be gathered without requiring any specific enumeration permission**.
 
-**M356**: If you provide AzurePEASS with a **FOCI refresh token or some credentials** (username and password), it'll also be able to enumerate several Microsoft 365 services: **Sharepoint, OneDrive, Outlook, Teams, OneNote, Contacts, Tasks**. Note that the enumeration is not exhaustive and it's not the goal of the tool to be. The goal of the tool is just to let you know if there is any data in these services so you can check them manualy later.
+**M356**: If you provide AzurePEAS with a **FOCI refresh token or some credentials** (username and password), it'll also be able to enumerate several Microsoft 365 services: **Sharepoint, OneDrive, Outlook, Teams, OneNote, Contacts, Tasks**. Note that the enumeration is not exhaustive and it's not the goal of the tool to be. The goal of the tool is just to let you know if there is any data in these services so you can check them manualy later.
 
 - Help:
 
 ```bash
-python3 ./AzurePEASS.py --help
-usage: AzurePEASS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--foci-refresh-token FOCI_REFRESH_TOKEN] [--username USERNAME]
-                     [--password PASSWORD] [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
+python3 ./AzurePEAS.py --help
+usage: AzurePEAS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--foci-refresh-token FOCI_REFRESH_TOKEN] [--username USERNAME]
+                     [--password PASWORD] [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
 
-Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To check for Azure permissions an ARM token
+Run AzurePEAS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To check for Azure permissions an ARM token
 is needed. To check for Entra ID permissions a Graph token is needed.
 
 options:
@@ -41,7 +41,7 @@ options:
   --foci-refresh-token FOCI_REFRESH_TOKEN
                         FOCI Refresh Token
   --username USERNAME   Username for authentication
-  --password PASSWORD   Password for authentication
+  --password PASWORD   Password for authentication
   --out-json-path OUT_JSON_PATH
                         Output JSON file path (e.g. /tmp/azure_results.json)
   --threads THREADS     Number of threads to use
@@ -69,22 +69,22 @@ $Headers.Authorization.Parameter
 
 # e.g.
 ## You can indicate the tokens via command line or just exporting the previous env variables is enough
-python3 AzurePEASS.py [--arm-token <AZURE_MANAGEMENT_TOKEN>] [--graph-token <AZURE_GRAPH_TOKEN>]
+python3 AzurePEAS.py [--arm-token <AZURE_MANAGEMENT_TOKEN>] [--graph-token <AZURE_GRAPH_TOKEN>]
 
 ## FOCI refresh token for extra M365 enumeration
-python3 AzurePEASS.py [--tenant-id <TENANT_ID>] [--foci-refresh-token <FOCI_REFRESH_TOKEN>]
+python3 AzurePEAS.py [--tenant-id <TENANT_ID>] [--foci-refresh-token <FOCI_REFRESH_TOKEN>]
 
 ## Credentials for extra M365 enumeration
-python3 AzurePEASS.py [--username <USERNAME>] [--password <PASSWORD>]
+python3 AzurePEAS.py [--username <USERNAME>] [--password <PASWORD>]
 ```
 
-## GCPPEASS
+## GCPPEAS
 
 **This is still in development and testing, not ready yet**
 
-GCPPEASS will check all **your permissions in GCP** and will try to find **privilege escalation** paths and other potential attacks.
+GCPPEAS will check all **your permissions in GCP** and will try to find **privilege escalation** paths and other potential attacks.
 
-GCPPEASS will **brute force all the permissions** over all the projects, folders and organizations the user can list and also over the given projects, folders or organizations via the CLI and then it's check for **potential attacks** (like privilege escalation). This could create false negatives, as the principal might have **permissions directly assigned to specific resources** that won't be able to see. Although, usually permissions are assigned at the project level, so this way we should be able to find most of the permissions. GCPPEASS also tries to **enumerate all the VMs, Storages, Functions and SAs** and brute force the permissions over them to reduce these false negatives.
+GCPPEAS will **brute force all the permissions** over all the projects, folders and organizations the user can list and also over the given projects, folders or organizations via the CLI and then it's check for **potential attacks** (like privilege escalation). This could create false negatives, as the principal might have **permissions directly assigned to specific resources** that won't be able to see. Although, usually permissions are assigned at the project level, so this way we should be able to find most of the permissions. GCPPEAS also tries to **enumerate all the VMs, Storages, Functions and SAs** and brute force the permissions over them to reduce these false negatives.
 
 Note that you will need to provide a **GCP access token**.
 
@@ -116,10 +116,10 @@ def GetScopes(args):
 
 1. Start enbling the Gmail & Drive API in a GCP project: `gcloud services enable gmail.googleapis.com` and `gcloud services enable drive.googleapis.com`
 
-2. Go to `OAuth consent screen` in the web portal and configure an applciation called 'GCPPEASS' and set the users emaila ddress whenever an emaila ddress is needed.
+2. Go to `OAuth consent screen` in the web portal and configure an applciation called 'GCPPEAS' and set the users emaila ddress whenever an emaila ddress is needed.
   - Select the `External` user type and add the users email address as `Test Address`.
 
-3. Create a client indicating the name `GCPPEASS` and the type `Desktop Applicaiton` and download the secret.
+3. Create a client indicating the name `GCPPEAS` and the type `Desktop Applicaiton` and download the secret.
 
 4. Go to `Data access` and add the following scopes:
   * https://www.googleapis.com/auth/gmail.readonly
@@ -153,12 +153,12 @@ print("Access Token:", creds.token)
 - Help
 
 ```bash
-python3 ./GCPPEASS.py --help
-usage: GCPPEASS.py [-h] [--project PROJECT | --folder FOLDER | --organization ORGANIZATION]
+python3 ./GCPPEAS.py --help
+usage: GCPPEAS.py [-h] [--project PROJECT | --folder FOLDER | --organization ORGANIZATION]
                    (--sa-credentials-path SA_CREDENTIALS_PATH | --token TOKEN) [--extra-token EXTRA_TOKEN]
                    [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
 
-GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.
+GCPPEAS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.
 
 options:
   -h, --help            show this help message and exit
@@ -182,19 +182,19 @@ options:
 
 ```bash
 # Get token
-export CLOUDSDK_AUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)
+export CLOUDSDK_AUTH_ACCES_TOKEN=$(gcloud auth print-access-token)
 
 # e.g.
 ## You can indicate the token via command line or just exporting the previous env variable is enough
-## Use an extra token to give GCPPEASS access to gmail and drive
-python3 GCPPEASS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--project <PROJECT_ID>] [--folder <FOLDER_ID>] [--organization <ORGANIZATION_ID>]
+## Use an extra token to give GCPPEAS access to gmail and drive
+python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--project <PROJECT_ID>] [--folder <FOLDER_ID>] [--organization <ORGANIZATION_ID>]
 ```
 
-## AWSPEASS
+## AWSPEAS
 
 **This is still in development and testing, not ready yet**
 
-AWSPEASS will find as many **permissions as possible in AWS** and will try to find **privilege escalation** paths and other potential attacks.
+AWSPEAS will find as many **permissions as possible in AWS** and will try to find **privilege escalation** paths and other potential attacks.
 
 Methods to find permissions:
 
@@ -202,19 +202,19 @@ Methods to find permissions:
 - Try to **simulate all the permissions of the principal** (one IAM permission is required to do this)
 - Try to **brute-force as many List, Get & Describe permissions** as possible using the **`aws cli`**. This doesn't require any specific permission, but it will be slower and won't be able to find other type of permissions (like `Put` or `Create` permissions).
   - To reduce the bruteforce-timing you can indicate the **`--aws-services`** flag to brute-force only the services you are interested in.
-  - If brute-force is used, AWSPEASS integrates a version of **[aws-Perms2ManagedPolicies](https://github.com/carlospolop/aws-Perms2ManagedPolicies)** to try to **guess more permissions** based on the permissions found.
+  - If brute-force is used, AWSPEAS integrates a version of **[aws-Perms2ManagedPolicies](https://github.com/carlospolop/aws-Perms2ManagedPolicies)** to try to **guess more permissions** based on the permissions found.
 
-**Opsec**: AWSPEASS will get the account ID of the principal. Then, based on known canary account IDs, it will try to guess if it belongs to a **Canary service** or not and will **ask the user if he wants to continue if it finds it suspicious**. Then, it'll also get the name of the principal (this will generate a log) and based on that name it'll try to **guess if it's a canary principal or not**. As at this point a log will be generated, it'll just continue with the enumeration but at least it'll let you know.
+**Opsec**: AWSPEAS will get the account ID of the principal. Then, based on known canary account IDs, it will try to guess if it belongs to a **Canary service** or not and will **ask the user if he wants to continue if it finds it suspicious**. Then, it'll also get the name of the principal (this will generate a log) and based on that name it'll try to **guess if it's a canary principal or not**. As at this point a log will be generated, it'll just continue with the enumeration but at least it'll let you know.
 
-Note that you will need to configure and **indicate the profile and region** to use to AWSPEASS.
+Note that you will need to configure and **indicate the profile and region** to use to AWSPEAS.
 
 - Help
 
 ```bash
-python3 AWSPEASS.py -h
-usage: AWSPEASS.py [-h] --profile PROFILE [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--debug] --region REGION [--aws-services AWS_SERVICES]
+python3 AWSPEAS.py -h
+usage: AWSPEAS.py [-h] --profile PROFILE [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--debug] --region REGION [--aws-services AWS_SERVICES]
 
-Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEASS requires the name of the profile to use to connect to AWS.
+Run AWSPEAS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEAS requires the name of the profile to use to connect to AWS.
 
 options:
   -h, --help            show this help message and exit
@@ -235,6 +235,6 @@ options:
 
 ```bash
 # e.g.
-python3 AWSPEASS.py --profile <AWS_PROFILE> --region <AWS_REGION>
-python3 AWSPEASS.py --profile <AWS_PROFILE> --region <AWS_REGION> --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION>
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb
 ```
