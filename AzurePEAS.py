@@ -469,11 +469,17 @@ class AzurePEASS(CloudPEASS):
         while mail_url:
             resp = requests.get(mail_url, headers=headers)
             data = resp.json()
+            
             for message in data.get('value', []):
-                print(f"{Fore.BLUE}Email Subject: {Fore.WHITE}{message['subject']}")
-                print(f"{Fore.BLUE}From Email: {Fore.WHITE}{message['from']['emailAddress']['address']}")
-                print(f"{Fore.BLUE}Snippet: {Fore.WHITE}{message['bodyPreview']}")
-                print(f"{Fore.BLUE}Link: {Fore.WHITE}{message['webLink']}")
+                subject = message.get('subject', 'N/A')
+                from_email = message.get('from', {}).get('emailAddress', {}).get('address', 'N/A')
+                body_preview = message.get('bodyPreview', 'N/A')
+                web_link = message.get('webLink', 'N/A')
+
+                print(f"{Fore.BLUE}Email Subject: {Fore.WHITE}{subject}")
+                print(f"{Fore.BLUE}From Email: {Fore.WHITE}{from_email}")
+                print(f"{Fore.BLUE}Snippet: {Fore.WHITE}{body_preview}")
+                print(f"{Fore.BLUE}Link: {Fore.WHITE}{web_link}")
                 print("-" * 50)
 
             if '@odata.nextLink' in data:
