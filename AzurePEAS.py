@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from colorama import Fore, Style, init, Back
 import msal
+import re
 
 init(autoreset=True)
 
@@ -66,6 +67,7 @@ class AzurePEASS(CloudPEASS):
         self.graph_token = graph_token
         self.EntraIDPEASS = EntraIDPEASS(graph_token, num_threads)
         self.sharepoint_followed_sites_ids = []
+        self.initial_subscriptions = []
         super().__init__(very_sensitive_combos, sensitive_combos, "Azure", not_use_ht_ai, num_threads, AZURE_MALICIOUS_RESPONSE_EXAMPLE, AZURE_SENSITIVE_RESPONSE_EXAMPLE, out_path)
 
         if not self.arm_token and not self.graph_token:
@@ -109,6 +111,9 @@ class AzurePEASS(CloudPEASS):
         url = "https://management.azure.com/subscriptions?api-version=2020-01-01"
         resp = requests.get(url, headers={"Authorization": f"Bearer {self.arm_token}"})
         subs = [sub["subscriptionId"] for sub in resp.json().get("value", [])]
+        for sub in self.initial_subscriptions:
+            if sub not in subs:
+                subs.append(sub)
         return subs
 
     def list_resources_in_subscription(self, subscription_id):
@@ -198,6 +203,10 @@ class AzurePEASS(CloudPEASS):
                 if 'exp' in decoded:
                     expiration_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(decoded.get('exp')))
                     print(f"{Fore.BLUE}Token Expiration Time (ARM Token): {Fore.WHITE}{expiration_time}")
+                # Use a regex to find subscriptions IDs from the token
+                self.initial_subscriptions = list(set(re.findall(r"subscriptions/([a-z0-9-]+)", str(decoded))))
+                if self.initial_subscriptions:
+                    print(f"{Fore.BLUE}Initial Subscriptions: {Fore.WHITE}{', '.join(self.initial_subscriptions)}")
             except Exception as e:
                 print(f"{Fore.RED}Failed to decode ARM token: {str(e)}")
         
