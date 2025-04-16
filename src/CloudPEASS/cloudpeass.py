@@ -64,8 +64,9 @@ __CLOUD_SPECIFIC_EXAMPLE__
 
 
 ### CLARIFICATIONS
-Remember to indicate as many malicious actions as possible that can be performed with the given set of permissions, and provide the necessary commands to perform them.
+Remember to indicate as many malicious actions as possible (maximum 5) that can be performed with the given set of permissions, and provide the necessary commands to perform them.
 If more than one command is needed, just separate them with a newline character or a semi-colon.
+With a maximum of 5 techniques, prioritize privilege escalation techniauqes, and then sensitive information exfiltration techniques over deletion or DoS attacks.
 Do not report attacks that require permissions not indicated,that would be a false possitive.
 Always recheck the response to ensure it's correct and avoid false positives.
 Your response MUST be a valid JSON with the indicated format (an array of dicts with the keys "title", "description", "commands").
