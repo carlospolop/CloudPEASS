@@ -41,6 +41,9 @@ version: 1
 EOF
 
 gcloud compute instances set-iam-policy $INSTANCE policy.json --zone=$ZONE"
+		"Permissions": [
+			"compute.instances.setIamPolicy"
+		],
 	},
 	[...]
 ]"""

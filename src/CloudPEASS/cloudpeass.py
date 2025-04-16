@@ -54,6 +54,11 @@ Your complete response must be a valid JSON with the following format:
         "Title": "Malicious Action Title",
         "Description": "Description of the malicious action",
         "Commands": "Bash commands (using azure-cli, aws-cli, gcloud, etc.) to perform the malicious action",
+        "Permissions": [
+            "Permission 1",
+            "Permission 2",
+            ...
+        ]
     },
     [...]
 ]
@@ -67,7 +72,8 @@ __CLOUD_SPECIFIC_EXAMPLE__
 Remember to indicate as many malicious actions as possible (maximum 5) that can be performed with the given set of permissions, and provide the necessary commands to perform them.
 If more than one command is needed, just separate them with a newline character or a semi-colon.
 With a maximum of 5 techniques, prioritize privilege escalation techniauqes, and then sensitive information exfiltration techniques over deletion or DoS attacks.
-Do not report attacks that require permissions not indicated,that would be a false possitive.
+Do not report attacks that require permissions not indicated, that would be a false possitive.
+You need to indicate the permissions the user has that allows to perform each attack.
 Always recheck the response to ensure it's correct and avoid false positives.
 Your response MUST be a valid JSON with the indicated format (an array of dicts with the keys "title", "description", "commands").
 If no malicious actions are found, please provide an empty JSON array: []
@@ -245,8 +251,9 @@ class CloudPEASS:
         query_text += "### Your response was:\n"
         query_text += json.dumps(result, indent=2)
         query_text += "\n\n### Indications\n"
-        query_text += "- Check the response to ensure it's correct and avoid false positives.\n"
-        query_text += "- Your new response should only contain valid potential attacks based on the given permissions and not attacks not related to the permissions.\n"
+        query_text += "- Check the response to ensure it's correct and remove false positives.\n"
+        query_text += "- Your new response should only contain valid potential attacks based on the given permissions and not attacks that needs other permissions.\n"
+        query_text += "- If the mentioned permissions of an attack are wrong, think the really needed permissions and reevaluate if the attack if possible, if not, it's a false positive.\n"
         query_text += "- Answer with a new JSON keeping the valid attacks, removing the false positives if any, and adding more attacks if someone was missed.\n"
         query_text += "- If no malicious actions are found, please provide an empty JSON array: []\n"
         query_text += self.malicious_actions_response_format
@@ -259,7 +266,8 @@ class CloudPEASS:
                 final_result.append({
                     "title": entry["Title"],
                     "description": entry["Description"],
-                    "commands": entry["Commands"]
+                    "commands": entry["Commands"],
+                    "permissions": entry["Permissions"]
                 })
 
         return final_result
@@ -402,7 +410,8 @@ class CloudPEASS:
             output_lines.extend([
                 f"{Fore.BLUE}\nTitle: {Fore.WHITE}{attack['title']}",
                 f"{Fore.BLUE}Description: {Fore.WHITE}{attack['description']}",
-                f"{Fore.BLUE}Commands: {Fore.WHITE}{attack['commands']}\n"
+                f"{Fore.BLUE}Permissions: {Fore.WHITE}{', '.join(attack['permissions'])}",
+                f"{Fore.BLUE}Commands: {Fore.WHITE}{attack['commands']}\n",
             ])
         
         output_lines.append(Fore.LIGHTWHITE_EX + "-" * 80 + "\n" + Style.RESET_ALL)
@@ -506,9 +515,14 @@ class CloudPEASS:
                     results.append(result)
 
         # Print aggregated results in a thread-safe manner
-        for res in results:
-            print(res)
+        if results:
+            for res in results:
+                print(res)
+        else:
+            print(f"{Fore.YELLOW}No attacks found for the given permissions.")
         
         # Exit successfully
         print(f"{Fore.GREEN}\nAnalysis completed successfully!")
+        print()
+        print(f"{Fore.YELLOW}[{Fore.BLUE}i{Fore.YELLOW}] If you want to learn cloud hacking, check out the trainings at {Fore.CYAN}https://training.hacktricks.xyz")
         exit(0)

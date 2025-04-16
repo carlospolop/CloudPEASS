@@ -17,8 +17,8 @@ from src.azure.definitions import SHAREPOINT_FOCI_APPS, ONEDRIVE_FOCI_APPS, EMAI
 
 AZURE_MALICIOUS_RESPONSE_EXAMPLE = """[
     {
-        "Title": "Privilege Escalationto arbitrary Managed Identities ",
-        "Description": " Using the permissions Microsoft.Compute/virtualMachines/write and Microsoft.ManagedIdentity/userAssignedIdentities/assign/action among other it's possible to escalate privileges to arbitrary Managed Identities by creating a VM, assigning Managed Identities and then get tokens from the assigned Managed Identities from the metadata.",
+        "Title": "Privilege Escalation to arbitrary Managed Identities",
+        "Description": "Using the permissions Microsoft.Compute/virtualMachines/write and Microsoft.ManagedIdentity/userAssignedIdentities/assign/action among others it's possible to escalate privileges to arbitrary Managed Identities by creating a VM, assigning Managed Identities and then get tokens from the assigned Managed Identities from the metadata.",
         "Commands": "az vm create \\
                 --resource-group Resource_Group_1 \\
                 --name cli_vm \\
@@ -27,7 +27,11 @@ AZURE_MALICIOUS_RESPONSE_EXAMPLE = """[
                 --generate-ssh-keys \\
                 --assign-identity /subscriptions/<sub-id>/resourcegroups/<res-group>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/<mi-name> \\
                 --nsg-rule ssh \\
-                --location centralus"
+                --location centralus",
+        "Permissions": [
+            "Microsoft.Compute/virtualMachines/write",
+            "Microsoft.ManagedIdentity/userAssignedIdentities/assign/action",
+        ],
     },
     [...]
 ]"""

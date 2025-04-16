@@ -22,9 +22,16 @@ from src.aws.awsmanagedpoliciesguesser import AWSManagedPoliciesGuesser
 
 AWS_MALICIOUS_RESPONSE_EXAMPLE = """[
     {
-        "Title": "Privilege Escalation via Exploiting IAM Policies",
-        "Description": "Using overly permissive IAM policies, an attacker might escalate privileges by performing unauthorized actions.",
-        "Commands": "aws iam simulate-principal-policy --policy-source-arn <arn> --action-names <action>"
+        "Title": "Privilege Escalation via Lambda functions code modification",
+        "Description": "The attacker could create an AWS Lambda functions with a malicious code and then use the permissions of the assigned role to the function function to access other AWS services stealing its token from the metadata.",
+        "Commands": "aws lambda create-function --function-name my_function \
+    --runtime python3.8 --role <arn_of_lambda_role> \
+    --handler lambda_function.lambda_handler \
+    --zip-file fileb://rev.zip",
+        "Permissions": [
+            "lambda:CreateFunction",
+            "iam:PassRole"
+        ],
     },
     [...]
 ]"""
