@@ -7,6 +7,7 @@ init(autoreset=True)
 
 class EntraIDPEASS():
     def __init__(self, token, num_threads):
+        self.user_id = None
         self.headers = {
             "Authorization": f"Bearer {token}",
             "ConsistencyLevel": "eventual"
@@ -14,10 +15,16 @@ class EntraIDPEASS():
         self.num_threads = num_threads
 
     def get_my_user_id(self):
+
+        if self.user_id:
+            return self.user_id
+
         resp = requests.get("https://graph.microsoft.com/v1.0/me?$select=id", headers=self.headers)
         if resp.status_code != 200:
             raise Exception(f"Failed to get user ID: {resp.text}")
-        return resp.json().get("id")
+        
+        self.user_id = resp.json().get("id")
+        return self.user_id
 
     def get_role_name(self, role_definition_id):
         url = f"https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions/{role_definition_id}"
@@ -129,7 +136,7 @@ class EntraIDPEASS():
             granular_permissions = self.get_granular_permissions(role_definition_id)
 
             resource_entry = {
-                "id": role_definition_id,
+                "id": "roleDefinitionId:" + role_definition_id,
                 "name": self.get_role_name(role_definition_id),
                 "type": directory_scope_id,
                 "permissions": granular_permissions,
@@ -140,10 +147,99 @@ class EntraIDPEASS():
 
         return sub_resources
 
+    def get_assigned_permissions(self):
+        """
+        Fetch all direct + transitive Entra ID role assignments for the
+        signed-in user and return, for each, the granular permissions.
+        """
+
+        user_id = self.get_my_user_id()
+
+        url = (
+            "https://graph.microsoft.com/beta/"
+            "roleManagement/directory/transitiveRoleAssignments"
+            "?$count=true"
+            f"&$filter=principalId eq '{user_id}'"
+        )
+
+        assignments = self.get_all_pages(url)
+        if not assignments:
+            return []  # no assignments or no access
+
+        results = []
+
+        for a in assignments:
+            rd_id = a.get("roleDefinitionId")
+            try:
+                perms = self.get_granular_permissions(rd_id)
+            except Exception as e:
+                # If we can’t fetch a roleDefinition, skip or log
+                print(f"Failed to fetch perms for role {rd_id}: {e}")
+                perms = []
+
+            results.append({
+                "id": "#microsoft.graph:" + "roleDefinitionId:" + a.get("roleDefinitionId"),
+                "name": self.get_role_name(a.get("roleDefinitionId")),
+                "type": a.get("directoryScopeId"),
+                "permissions": perms,
+                "assignmentType": "Assigned"
+            })
+
+        return results
+
+    def get_my_app_role_assignments(self):
+        """
+        Fetches all app role assignments for the signed-in user and returns
+        a list of dicts matching your other methods' format:
+          - id
+          - resourceId
+          - resourceDisplayName
+          - appRoleId
+          - principalType
+          - permissions  (granular, i.e. the role's 'value')
+          - assignmentType ("Assigned")
+        """
+
+        url = "https://graph.microsoft.com/v1.0/me/appRoleAssignments"
+        assignments = self.get_all_pages(url)
+        if assignments is None:
+            return []  # no access to /me or no assignments
+
+        result = []
+        for a in assignments:
+            # Resolve granular appRole details from the service principal
+            perms = self._get_app_role_value(a["resourceId"], a["appRoleId"])
+
+            result.append({
+                "id": "#microsoft.graph:" + a.get("resourceId") + "-" + a.get("resourceDisplayName") + "-" + a.get("principalType"),
+                "name": a.get("appRoleId"),
+                "type": "appRoleAssignment",
+                "permissions": perms,
+                "assignmentType": "Assigned"
+            })
+
+        return result
+
+    def _get_app_role_value(self, resource_id, app_role_id):
+        """
+        Helper: fetches the service principal,
+        finds the matching appRole, and returns its 'value' (name/permission).
+        """
+        url = f"https://graph.microsoft.com/v1.0/servicePrincipals/{resource_id}"
+        resp = requests.get(url, headers=self.headers)
+        if resp.status_code != 200:
+            raise Exception(f"Failed to fetch SP {resource_id}: {resp.status_code} {resp.text}")
+
+        sp = resp.json()
+        for role in sp.get("appRoles", []):
+            if role.get("id") == app_role_id:
+                # return the human-readable permission name/value
+                return role.get("value") or role.get("displayName")
+        return []
+
     def get_eligible_roles(self):
         user_id = self.get_my_user_id()
         url = f"https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleInstances?$filter=principalId eq '{user_id}'&$expand=roleDefinition"
-
 
         try:
             eligible_roles = self.get_all_pages(url)

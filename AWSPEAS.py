@@ -679,7 +679,7 @@ if __name__ == "__main__":
     parser.add_argument('--profile', required=True, help="AWS profile to use")
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/aws_results.json)")
     parser.add_argument('--threads', default=10, type=int, help="Number of threads to use")
-    parser.add_argument('--not-use-hacktricks-ai', action="store_false", default=False, help="Don't use Hacktricks AI to analyze permissions")
+    parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to analyze permissions")
     parser.add_argument('--debug', default=False, action="store_true", help="Print more infromation when brute-forcing permissions")
     parser.add_argument('--region', required=True, help="Indicate the region to use for brute-forcing permissions")
     parser.add_argument('--aws-services', help="Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)")

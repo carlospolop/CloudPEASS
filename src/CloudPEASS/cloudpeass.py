@@ -122,7 +122,8 @@ class CloudPEASS:
     @staticmethod
     def group_resources_by_permissions(resources):
         """
-        Group resources by their unique sets of permissions.
+        First group entries by resources and then group them by their unique sets of permissions.
+        This is done to reduce the number of entries and make the analysis more efficient.
 
         Args:
             resources (list): List of resource dictionaries with permissions.
@@ -130,8 +131,25 @@ class CloudPEASS:
         Returns:
             dict: Keys as frozensets of permissions, values as lists of resources with those permissions.
         """
-        grouped = defaultdict(list)
+
+        # Group by affected resources first
+        final_resources = {}
         for resource in resources:
+            resource_id = resource["id"]
+            resource_type = resource["type"]
+            resource_name = resource["name"]
+            if resource_id not in final_resources:
+                final_resources[resource_id] = {
+                    "id": resource_id,
+                    "type": resource_type,
+                    "name": resource_name,
+                    "permissions": set()
+                }
+            final_resources[resource_id]["permissions"].update(resource["permissions"])
+
+
+        grouped = defaultdict(list)
+        for resource in final_resources.values():
             perms_set = frozenset(resource["permissions"])
             deny_perms_set = set()
             if "deny_perms" in resource:
@@ -276,6 +294,7 @@ class CloudPEASS:
         query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
         query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permission is a permission that allows to escalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets. A sensitive permission is a permission that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secrets, API keys...) is not sensitive.\n"
         query_text += "Note that permissions starting with '-' are deny permissions.\n"
+    
         query_text += self.sensitive_response_format
 
         result = self.query_hacktricks_ai(query_text)
@@ -333,7 +352,15 @@ class CloudPEASS:
         try:
             response = requests.post(HACKTRICKS_AI_ENDPOINT, json={"query": msg}, timeout=420)
         except requests.exceptions.ConnectionError as e:
-            print(f"{Fore.RED}Error connecting to Hacktricks AI: {e}")
+            if "429" in str(e):
+                print(f"{Fore.RED}Error connecting to Hacktricks AI: {e}")
+                print(f"{Fore.YELLOW}Rate limit exceeded. Retrying in 60 seconds...")
+                time.sleep(60)
+                return self.query_hacktricks_ai(msg, cont=cont+1)
+            
+            else:
+                print(f"{Fore.RED}Error connecting to Hacktricks AI: {e}")
+                
             if cont < 3:
                 print(f"{Fore.YELLOW}Trying again...")
                 time.sleep(10)
@@ -394,7 +421,7 @@ class CloudPEASS:
             return None  # Skip if no analysis
 
         perms_msg = ""
-        for perm in perms:
+        for perm in perms[:20]:
             if perm in all_very_sensitive_perms or perm in all_very_sensitive_perms_ai:
                 perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
             elif perm in all_sensitive_perms or perm in all_sensitive_perms_ai:
@@ -402,6 +429,9 @@ class CloudPEASS:
             else:
                 perms_msg += f"{Fore.WHITE}{perm}{Style.RESET_ALL}, "
         perms_msg = perms_msg.rstrip(", ")
+
+        if len(perms) > 20:
+            perms_msg += f"{Fore.WHITE}...{Style.RESET_ALL}"
 
         output_lines = [
             f"{Fore.YELLOW}\nPermissions: {perms_msg}"
@@ -422,10 +452,18 @@ class CloudPEASS:
     def run_analysis(self):
         print(f"{Fore.GREEN}\nStarting CloudPEASS analysis for {self.cloud_provider}...")
         print(f"{Fore.YELLOW}[{Fore.BLUE}i{Fore.YELLOW}] If you want to learn cloud hacking, check out the trainings at {Fore.CYAN}https://training.hacktricks.xyz")
+        
         print(f"{Fore.MAGENTA}\nGetting information about your principal...")
         self.print_whoami_info()
+        
         print(f"{Fore.MAGENTA}\nGetting all your permissions...")
         resources = self.get_resources_and_permissions()
+        final_resources = []
+        for resource in resources:
+            if resource["permissions"]:
+                final_resources.append(resource)
+        resources = final_resources
+
         grouped_resources = self.group_resources_by_permissions(resources)
         all_very_sensitive_perms = set()
         all_sensitive_perms = set()
@@ -524,5 +562,5 @@ class CloudPEASS:
         # Exit successfully
         print(f"{Fore.GREEN}\nAnalysis completed successfully!")
         print()
-        print(f"{Fore.YELLOW}[{Fore.BLUE}i{Fore.YELLOW}] If you want to learn cloud hacking, check out the trainings at {Fore.CYAN}https://training.hacktricks.xyz")
+        print(f"{Fore.YELLOW}If you want to learn more about cloud hacking, check out the trainings at {Fore.CYAN}https://training.hacktricks.xyz")
         exit(0)

@@ -226,6 +226,9 @@ class AzurePEASS(CloudPEASS):
                 if 'exp' in decoded:
                     expiration_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(decoded.get('exp')))
                     print(f"{Fore.BLUE}Token Expiration Time (Graph Token): {Fore.WHITE}{expiration_time}")
+                
+                print(f"{Fore.YELLOW}\nEnumerating Conditional Access Policies:{Fore.RESET}")
+                self.enumerate_conditional_access_policies(self.graph_token)
             except Exception as e:
                 print(f"{Fore.RED}Failed to decode Graph token: {str(e)}")
         
@@ -290,8 +293,35 @@ class AzurePEASS(CloudPEASS):
                 self.enumerate_tasks(tasks_token)
             else:
                 print(f"{Fore.RED}No FOCI app with Tasks scopes found. Skipping Tasks enumeration.{Fore.WHITE}")
-            
 
+
+    def enumerate_conditional_access_policies(self, graph_token):
+        """
+        List all Conditional Access policies** via Microsoft Graph.
+        """
+
+        headers = {'Authorization': f'Bearer {graph_token}'}
+        url = 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies'
+        while url:
+            resp = requests.get(url, headers=headers)
+            if resp.status_code == 403 or resp.status_code == 401:
+                print(f"{Fore.RED}Your user doesn't have access to read the conditional access policies.")
+                break
+            
+            data = resp.json()
+            for policy in data.get('value', []):
+                print(f"{Fore.CYAN}Policy: {Fore.WHITE}{policy.get('displayName')}")
+                print(f"{Fore.CYAN}State: {Fore.WHITE}{policy.get('state')}")
+                # Show key rule details
+                conditions = policy.get('conditions', {})
+                print(f"{Fore.CYAN}Conditions: {Fore.WHITE}{conditions}")
+                grant_ctrls = policy.get('grantControls', {})
+                print(f"{Fore.CYAN}Grant Controls: {Fore.WHITE}{grant_ctrls}")
+                print("-" * 50)
+            # Follow pagination if present
+            url = data.get('@odata.nextLink')
+
+    
     def enumerate_tasks(self, tasks_token):
         headers = {'Authorization': f'Bearer {tasks_token}'}
         lists_url = 'https://graph.microsoft.com/v1.0/me/todo/lists?$top=10'
@@ -632,6 +662,8 @@ class AzurePEASS(CloudPEASS):
                 return resources_data
             
             resources_data += memberships
+            resources_data += self.EntraIDPEASS.get_assigned_permissions()
+            resources_data += self.EntraIDPEASS.get_my_app_role_assignments()
             resources_data += self.EntraIDPEASS.get_eligible_roles()
             resources_data += self.EntraIDPEASS.get_entraid_owns()
 
@@ -753,7 +785,7 @@ if __name__ == "__main__":
     
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
     parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
-    parser.add_argument('--not-use-hacktricks-ai', action="store_false", default=False, help="Don't use Hacktricks AI to analyze permissions")
+    parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to analyze permissions")
     
     args = parser.parse_args()
     
