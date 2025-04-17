@@ -264,7 +264,7 @@ class CloudPEASS:
 
             # Remove confusing perms for AI
             confisuing_perms = [
-                "cloudasset"    # GCP
+                "cloudasset."    # GCP
             ]
             final_perms = []
             for perm in perms:
