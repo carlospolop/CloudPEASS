@@ -479,6 +479,9 @@ class CloudPEASS:
                 final_resources.append(resource)
         resources = final_resources
 
+        total_permissions = sum(len(resource["permissions"]) for resource in resources)
+        print(f"{Fore.YELLOW}\nFound {Fore.GREEN}{len(resources)} {Fore.YELLOW}resources with a total of {Fore.GREEN}{total_permissions} {Fore.YELLOW}permissions.")
+
         grouped_resources = self.group_resources_by_permissions(resources)
         all_very_sensitive_perms = set()
         all_sensitive_perms = set()

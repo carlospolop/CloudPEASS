@@ -627,7 +627,7 @@ class GCPPEASS(CloudPEASS):
 			print(f"{Fore.RED}No targets found! Indicate a project, folder or organization manually. Exiting.")
 			exit(1)
 
-		if found_permissions:
+		if any(p for entry in found_permissions for p in entry["permissions"] if p):
 			user_input = input(f"{Fore.YELLOW}Permissions were found accessing the IAM policies. Do you want to continue bruteforcing permissions? [Y/n]: {Fore.WHITE}")
 			if user_input.lower() == 'n':
 				return found_permissions
