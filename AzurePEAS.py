@@ -14,7 +14,7 @@ init(autoreset=True)
 from src.CloudPEASS.cloudpeass import CloudPEASS
 from src.sensitive_permissions.azure import very_sensitive_combinations, sensitive_combinations
 from src.azure.entraid import EntraIDPEASS
-from src.azure.definitions import SHAREPOINT_FOCI_APPS, ONEDRIVE_FOCI_APPS, EMAIL_FOCI_APPS, TEAMS_FOCI_APPS, ONENOTE_FOCI_APPS, CONTACTS_FOCI_APPS, TASKS_FOCI_APPS, FOCI_APPS
+from src.azure.definitions import SHAREPOINT_FOCI_APPS, ONEDRIVE_FOCI_APPS, EMAIL_FOCI_APPS, TEAMS_FOCI_APPS_GRAPH, TEAMS_FOCI_APPS_SKYPE, ONENOTE_FOCI_APPS, CONTACTS_FOCI_APPS, TASKS_FOCI_APPS, FOCI_APPS
 
 AZURE_MALICIOUS_RESPONSE_EXAMPLE = """[
     {
@@ -71,7 +71,10 @@ class AzurePEASS(CloudPEASS):
         super().__init__(very_sensitive_combos, sensitive_combos, "Azure", not_use_ht_ai, num_threads, AZURE_MALICIOUS_RESPONSE_EXAMPLE, AZURE_SENSITIVE_RESPONSE_EXAMPLE, out_path)
 
         if not self.arm_token and not self.graph_token:
-            print(f"{Fore.RED}At lest an ARM token or Graph token is needed. Exiting.")
+            if self.foci_refresh_token:
+                print(f"{Fore.RED}It wasn't possible to generate an ARM or Graph token with that FOCI token, it's potentially malformed. Exiting..")
+            else:
+                print(f"{Fore.RED}At least an ARM token or Graph token is needed. Exiting.")
             exit(1)
         
         if not self.arm_token:
@@ -259,12 +262,13 @@ class AzurePEASS(CloudPEASS):
 
             # TEAMS
             print(f"{Fore.YELLOW}\nEnumerating Teams Conversations:")
-            teams_token = self.get_tokens_from_foci_with_scope(TEAMS_FOCI_APPS)
+            teams_token_skype = self.get_tokens_from_foci_with_scope(TEAMS_FOCI_APPS_SKYPE)
+            teams_token_graph = self.get_tokens_from_foci_with_scope(TEAMS_FOCI_APPS_GRAPH)
 
-            if teams_token:
-                self.enumerate_teams_conversations(teams_token)
+            if teams_token_skype or teams_token_graph:
+                self.enumerate_teams_conversations(teams_token_skype, teams_token_graph)
             else:
-                print(f"{Fore.RED}No FOCI app with Teams scopes found. Skipping Teams conversations enumeration.{Fore.WHITE}")
+                print(f"{Fore.RED}No FOCI app with Teams or Skype scopes found. Skipping Teams conversations enumeration.{Fore.WHITE}")
 
             # ONENOTE
             print(f"{Fore.YELLOW}\nEnumerating OneNote Notebooks and Sections:")
@@ -467,7 +471,7 @@ class AzurePEASS(CloudPEASS):
                 if "folder" in item:
                     print(f"{indent}  - {Fore.MAGENTA}Folder: {Fore.RESET}{item_name}")
                     if depth < max_depth:
-                        self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent + "    ", depth + 1, max_depth)
+                        self.sharepoint_list_documents(item.get("id"), token, indent + "    ", depth + 1, max_depth)
                 else:
                     size = item.get("size", "Unknown")
                     last_modified = item.get("lastModifiedDateTime", "Unknown")
@@ -533,44 +537,70 @@ class AzurePEASS(CloudPEASS):
             else:
                 break
     
-    def enumerate_teams_conversations(self, teams_token):
-        headers = {'Authorization': f'Bearer {teams_token}'}
-        
-        # Enumerate Teams Chats
-        print(f"{Fore.RED}There isn't any known FOCI app capable of giving any of the scopes: Chat.ReadBasic, Chat.Read, Chat.ReadWrite. Therefore, I cannot list chats:({Fore.WHITE}")
-        """chats_url = 'https://graph.microsoft.com/v1.0/me/chats?$top=10'
-        print(f"{Fore.YELLOW}\nEnumerating Teams Chats:")
-        while chats_url:
-            resp = requests.get(chats_url, headers=headers)
+    def enumerate_teams_conversations(self, teams_token_skype, teams_token_graph):
+        # Get Skype token
+        if not teams_token_skype:
+            print(f"{Fore.RED}No FOCI app with Skype scopes found. Skipping conversations enumeration.{Fore.WHITE}")
+            
+        else:
+            headers = {'Authorization': f'Bearer {teams_token_skype}'}
+            url = "https://teams.microsoft.com/api/authsvc/v1.0/authz"
+            resp = requests.post(url, headers=headers)
             data = resp.json()
-            for chat in data.get('value', []):
-                chat_type = chat.get('chatType', 'unknown')
-                print(f"{Fore.CYAN}- Chat ID: {chat['id']} Type: {chat_type}")
-            if '@odata.nextLink' in data:
-                cont = input("Show more Teams Chats? (y/N): ")
-                if cont.lower() != 'y':
-                    break
-                chats_url = data['@odata.nextLink']
+            skype_token = data.get("tokens", {}).get("skypeToken")
+            chat_service_uri = data.get("regionGtms", {}).get("chatService")
+            
+            # Get open conversations
+            headers = {"Authentication":f"skypetoken={skype_token}", 'Authorization': f'Bearer {teams_token_skype}'}
+            url = f"{chat_service_uri}/v1/users/ME/conversations?view=msnp24Equivalent&pageSize=500"
+            resp = requests.get(url, headers=headers)
+            data = resp.json()
+
+            if not data.get("conversations"):
+                print(f"{Fore.GREEN}No conversations found in Teams.{Fore.WHITE}")
             else:
-                break"""
+                print(f"{Fore.GREEN}Some conversations found in Teams:{Fore.WHITE}")
+                for conversation in data.get("conversations", []):
+                    conv_id = conversation.get("id")
+                    conv_role = conversation.get("memberProperties", {}).get("role")
+                    conv_type = conversation.get("type")
+                    last_message = conversation.get("lastMessage", {})
+                    last_message_content = last_message.get("content", "")
+                    last_message_from = last_message.get("fromDisplayNameInToken", "") if last_message.get("fromDisplayNameInToken", "") else last_message.get("imdisplayname", "Unkown")
+                    
+                    print(f"{Fore.BLUE}  Conversation ID: {Fore.WHITE}{conv_id}")
+                    print(f"{Fore.BLUE}  Role: {Fore.WHITE}{conv_role}")
+                    print(f"{Fore.BLUE}  Type: {Fore.WHITE}{conv_type}")
+                    print(f"{Fore.BLUE}  Last Message {Fore.GREEN}(from {last_message_from}): {Fore.WHITE}{last_message_content}")
+                    print()
 
         # Enumerate Joined Teams (Groups)
-        print(f"{Fore.GREEN}However, it's possible to enumerate the Team groups you are part of.{Fore.RESET}")
-        teams_url = 'https://graph.microsoft.com/v1.0/me/joinedTeams'
-        while teams_url:
-            resp = requests.get(teams_url, headers=headers)
-            data = resp.json()
-            for team in data.get('value', []):
-                print(f"{Fore.BLUE}Team: {Fore.WHITE}{team['displayName']}")
-                print(f"{Fore.BLUE}Description: {Fore.WHITE}{team['description']}")
-                print("-" * 50)
-            if '@odata.nextLink' in data:
-                cont = input("Show more Joined Teams? (y/N): ")
-                if cont.lower() != 'y':
+        if not teams_token_graph:
+            print(f"{Fore.RED}No FOCI app with Teams scopes found. Skipping teams enumeration.{Fore.WHITE}")
+        
+        else:
+            headers = {'Authorization': f'Bearer {teams_token_graph}'}
+            teams_url = 'https://graph.microsoft.com/v1.0/me/joinedTeams'
+            while teams_url:
+                resp = requests.get(teams_url, headers=headers)
+                data = resp.json()
+                if data.get('value', []):
+                    print(f"{Fore.GREEN}Some teams found in Teams:{Fore.WHITE}")
+                    for team in data.get('value', []):
+                        print(f"{Fore.BLUE}  Team: {Fore.WHITE}{team['displayName']}")
+                        print(f"{Fore.BLUE}  Description: {Fore.WHITE}{team['description']}")
+                        print()
+                    if '@odata.nextLink' in data:
+                        cont = input("Show more Joined Teams? (y/N): ")
+                        if cont.lower() != 'y':
+                            break
+                        teams_url = data['@odata.nextLink']
+                    else:
+                        break
+                
+                else:
+                    print(f"{Fore.GREEN}No teams found in Teams.{Fore.WHITE}")
                     break
-                teams_url = data['@odata.nextLink']
-            else:
-                break
 
     def enumerate_onedrive(self, onedrive_token, max_depth=3):
         # Root URL to list items in the root folder

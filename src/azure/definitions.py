@@ -390,7 +390,39 @@ SHAREPOINT_FOCI_APPS = { # Sites.Read.All
     ]
 }
 
-TEAMS_FOCI_APPS = { # Team.ReadBasic.All
+TEAMS_FOCI_APPS_SKYPE = { # user_impersonation in skype
+    "https://api.spaces.skype.com/.default": [
+        "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+        "1950a258-227b-4e31-a9cf-717495945fc2",
+        "d3590ed6-52b3-4102-aeff-aad2292ab01c",
+        "c0d2a505-13b8-4ae0-aa9e-cddd5eab0b12",
+        "00b41c95-dab0-4487-9791-b9d2c32c80f2",
+        "1fec8e78-bce4-4aaf-ab1b-5451cc387264",
+        "ab9b8c07-8f02-4f72-87fa-80105867a763",
+        "27922004-5251-4030-b22d-91ecd9a37ea4",
+        "26a7ee05-5602-4d76-a7ba-eae8b7b67941",
+        "0ec893e0-5785-4de6-99da-4ed124e5296c",
+        "22098786-6e16-43cc-a27d-191a01a1e3b5",
+        "4813382a-8fa7-425e-ab75-3b753aab3abb",
+        "4e291c71-d680-4d0e-9640-0a3358e31177",
+        "57fcbcfa-7cee-4eb1-8b25-12d2030b4ee0",
+        "57336123-6e14-4acc-8dcf-287b6088aa28",
+        "66375f6b-983f-4c2c-9701-d680650f588f",
+        "872cd9fa-d31f-45e0-9eab-6e460a02d1f1",
+        "87749df4-7ccf-48f8-aa87-704bad0e0e16",
+        "9ba1a5c7-f17a-4de9-a1f1-6178c8d51223",
+        "a569458c-7f2b-45cb-bab9-b7dee514d112",
+        "af124e86-4e96-495a-b70a-90f90ab96707",
+        "b26aadf8-566f-4478-926f-589f601d9c74",
+        "d326c1ce-6cc6-4de2-bebc-4591e5e13ef0",
+        "f44b1140-bc5e-48c6-8dc0-5cf5a53c0e34",
+        "f05ff7c9-f75a-4acd-a3b5-f4b6a870245d",
+        "e9c51622-460d-4d3d-952d-966a5b1da34c",
+        "c1c74fed-04c9-4704-80dc-9f79a2e515cb"
+    ]
+}
+
+TEAMS_FOCI_APPS_GRAPH = { # Team.ReadBasic.All
     "AppCatalog.Read.All": [
         "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
     ],
