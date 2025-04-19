@@ -210,6 +210,7 @@ class AzurePEASS(CloudPEASS):
                 self.initial_subscriptions = list(set(re.findall(r"subscriptions/([a-z0-9-]+)", str(decoded))))
                 if self.initial_subscriptions:
                     print(f"{Fore.BLUE}Initial Subscriptions: {Fore.WHITE}{', '.join(self.initial_subscriptions)}")
+                print()
             except Exception as e:
                 print(f"{Fore.RED}Failed to decode ARM token: {str(e)}")
         
@@ -471,7 +472,12 @@ class AzurePEASS(CloudPEASS):
                 if "folder" in item:
                     print(f"{indent}  - {Fore.MAGENTA}Folder: {Fore.RESET}{item_name}")
                     if depth < max_depth:
-                        self.sharepoint_list_documents(item.get("id"), token, indent + "    ", depth + 1, max_depth)
+                        self.sharepoint_list_folder_contents(
+                        site_id,
+                        token,
+                        item.get("id"),
+                        indent + "    "
+                    )
                 else:
                     size = item.get("size", "Unknown")
                     last_modified = item.get("lastModifiedDateTime", "Unknown")
