@@ -1,5 +1,7 @@
 # Cloud Privilege Escalation Awesome Script Suite 🚀🛡️
 
+![/cloudpeass.jpg](/cloudpeass.jpg)
+
 Welcome to the **Cloud Privilege Escalation Awesome Script Suite** – your one-stop solution to **find your permissions** whenever you compromise a principal in a **Red Team** across major cloud platforms: **Azure, GCP, and AWS**. This suite is designed to help you determine all your permissions and also what it's possible to accomplish using compromised them, focusing on **privilege escalation** and accessing **sensitive information** 🔥, and other potential attack vectors **without modifying any resources**.
 
 This toolkit leverages advanced techniques to enumerate your permissions (it uses different permission enumreation tehcniques depending on the cloud) and utilizes insights from **[HackTricks Cloud](https://cloud.hacktricks.wiki/en/index.html)** as well as **HackTricks AI** 🤖 to map sensitive permissions to potential attacks. Note that **no sensitive data is sent to the AI, only names of resources and permissions**, but if you prefer not to use the AI analysis, simply append the **`--not-use-hacktricks-ai`** flag when executing the tools.
