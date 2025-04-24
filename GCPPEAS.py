@@ -64,12 +64,13 @@ INVALID_PERMS = {}
 
 
 class GCPPEASS(CloudPEASS):
-	def __init__(self, credentials, extra_token, project, folder, org, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path, billing_project, proxy, print_invalid_perms, dont_get_iam_policies):
+	def __init__(self, credentials, extra_token, projects, folders, orgs, sas, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path, billing_project, proxy, print_invalid_perms, dont_get_iam_policies):
 		self.credentials = credentials
 		self.extra_token = extra_token
-		self.project = project
-		self.folder = folder
-		self.org = org
+		self.projects = [p.strip() for p in projects.split(",")] if projects else []
+		self.folders = [f.strip() for f in folders.split(",")] if folders else []
+		self.orgs = [o.strip() for o in orgs.split(",")] if orgs else []
+		self.sas = [sa.strip() for sa in sas.split(",")] if sas else []
 		self.billing_project = billing_project
 		self.email = ""
 		self.is_sa = False
@@ -91,6 +92,7 @@ class GCPPEASS(CloudPEASS):
 						 GCP_MALICIOUS_RESPONSE_EXAMPLE, GCP_SENSITIVE_RESPONSE_EXAMPLE, out_path)
 
 	def download_gcp_permissions(self):
+		print(f"{Fore.BLUE}Downloading permissions...")
 		base_ref_page = requests.get("https://cloud.google.com/iam/docs/permissions-reference").text
 		permissions = re.findall('<td id="([^"]+)"', base_ref_page)
 		print(f"{Fore.GREEN}Gathered {len(permissions)} GCP permissions to check")
@@ -496,12 +498,33 @@ class GCPPEASS(CloudPEASS):
 			sa_project = self.email.split("@")[1].split(".")[0]
 			targets.append({"id": f"projects/{sa_project}", "type": "project"})
 
-		if self.project: # It's important that  project is the first thing to check
-			targets.append({"id": f"projects/{self.project}", "type": "project"})
-		if self.folder:
-			targets.append({"id": f"folders/{self.folder}", "type": "folder"})
-		if self.org:
-			targets.append({"id": f"organizations/{self.org}", "type": "organization"})
+		if self.projects: # It's important that  project is the first thing to check
+			for proj in self.projects:
+				targets.append({"id": f"projects/{proj}", "type": "project"})
+		
+		if self.folders:
+			for folder in self.folders:
+				if not folder.isdigit():
+					print(f"{Fore.RED}Folder {folder} is not a number. Please indicate the folder ID.")
+					exit(1)
+				targets.append({"id": f"folders/{folder}", "type": "folder"})
+		
+		if self.orgs:
+			for org in self.orgs:
+				if not org.isdigit():
+					print(f"{Fore.RED}Organization {org} is not a number. Please indicate the organization ID.")
+					exit(1)
+				targets.append({"id": f"organizations/{org}", "type": "organization"})
+		
+		if self.sas:
+			for sa in self.sas:
+				if not "@" in sa:
+					print(f"{Fore.RED}Service account {sa} is not an email. Please indicate the service account email.")
+					exit(1)
+				sa_project = sa.split("@")[1].split(".")[0]
+				if sa_project not in self.projects:
+					targets.append({"id": f"projects/{sa_project}", "type": "project"})
+				targets.append({"id": f"projects/{sa_project}/serviceAccounts/{sa}", "type": "service_account"})
 
 		for proj in self.list_projects():
 			targets.append({"id": f"projects/{proj}", "type": "project"})
@@ -913,9 +936,10 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.")
 
 	scope_group = parser.add_mutually_exclusive_group(required=False)
-	scope_group.add_argument('--project', help="Project ID (project name)")
-	scope_group.add_argument('--folder', help="Folder ID (folder number)")
-	scope_group.add_argument('--organization', help="Organization ID")
+	scope_group.add_argument('--projects', help="Known project IDs (project names) separated by commas")
+	scope_group.add_argument('--folders', help="Known folder IDs (folder number) separated by commas")
+	scope_group.add_argument('--organizations', help="Known organization IDs separated by commas")
+	scope_group.add_argument('--service-accounts', help="Known service account emails separated by commas")
 
 	auth_group = parser.add_mutually_exclusive_group(required=True)
 	auth_group.add_argument('--sa-credentials-path', help="Path to credentials.json")
@@ -937,23 +961,14 @@ if __name__ == "__main__":
 	else:
 		token = None
 	
-	if args.folder: # Check all numbers
-		if not args.folder.isdigit():
-			print(f"{Fore.RED}Folder ID must be a number.")
-			exit(1)
-	
-	if args.organization: # Check all numbers
-		if not args.organization.isdigit():
-			print(f"{Fore.RED}Organization ID must be a number.")
-			exit(1)
-		
 	sa_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", args.sa_credentials_path)
 	creds = google.oauth2.credentials.Credentials(token) if token else \
 		google.oauth2.service_account.Credentials.from_service_account_file(
 			sa_credentials_path, scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
 	gcp_peass = GCPPEASS(
-		creds, args.extra_token, args.project, args.folder, args.organization,
+		creds, args.extra_token, args.projects, args.folders, args.organizations,
+		args.service_accounts,
 		very_sensitive_combinations, sensitive_combinations,
 		not_use_ht_ai=args.not_use_hacktricks_ai,
 		num_threads=args.threads,

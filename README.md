@@ -245,37 +245,40 @@ print("Access Token:", creds.token)
   
   ```bash
   python3 ./GCPPEAS.py --help
-  usage: GCPPEAS.py [-h] [--project PROJECT | --folder FOLDER | --organization ORGANIZATION]
-                  (--sa-credentials-path SA_CREDENTIALS_PATH | --token TOKEN) [--extra-token EXTRA_TOKEN] [--dont-get-iam-policies]
-                  [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--billing-project BILLING_PROJECT]
-                  [--proxy PROXY] [--print-invalid-permissions]
+  usage: GCPPEAS.py [-h] [--projects PROJECTS | --folders FOLDERS | --organizations ORGANIZATIONS |
+                  --service-accounts SERVICE_ACCOUNTS] (--sa-credentials-path SA_CREDENTIALS_PATH | --token TOKEN)
+                  [--extra-token EXTRA_TOKEN] [--dont-get-iam-policies] [--out-json-path OUT_JSON_PATH] [--threads THREADS]
+                  [--not-use-hacktricks-ai] [--billing-project BILLING_PROJECT] [--proxy PROXY] [--print-invalid-permissions]
 
-  GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.
+GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.
 
-  options:
-    -h, --help            show this help message and exit
-    --project PROJECT     Project ID (project name)
-    --folder FOLDER       Folder ID (folder number)
-    --organization ORGANIZATION
-                          Organization ID
-    --sa-credentials-path SA_CREDENTIALS_PATH
-                          Path to credentials.json
-    --token TOKEN         Raw access token
-    --extra-token EXTRA_TOKEN
-                          Extra token potentially with access over Gmail and/or Drive
-    --dont-get-iam-policies
-                          Do not get IAM policies for the resources
-    --out-json-path OUT_JSON_PATH
-                          Output JSON file path (e.g. /tmp/gcp_results.json)
-    --threads THREADS     Number of threads to use
-    --not-use-hacktricks-ai
-                          Don't use Hacktricks AI to analyze permissions
-    --billing-project BILLING_PROJECT
-                          Indicate the billing project to use to brute-force permissions
-    --proxy PROXY         Indicate a proxy to use to connect to GCP for debugging (e.g. 127.0.0.1:8080)
-    --print-invalid-permissions
-                          Print found invalid permissions to improve th speed of the tool
-  ```
+options:
+  -h, --help            show this help message and exit
+  --projects PROJECTS   Known project IDs (project names) separated by commas
+  --folders FOLDERS     Known folder IDs (folder number) separated by commas
+  --organizations ORGANIZATIONS
+                        Known organization IDs separated by commas
+  --service-accounts SERVICE_ACCOUNTS
+                        Known service account emails separated by commas
+  --sa-credentials-path SA_CREDENTIALS_PATH
+                        Path to credentials.json
+  --token TOKEN         Raw access token
+  --extra-token EXTRA_TOKEN
+                        Extra token potentially with access over Gmail and/or Drive
+  --dont-get-iam-policies
+                        Do not get IAM policies for the resources
+  --out-json-path OUT_JSON_PATH
+                        Output JSON file path (e.g. /tmp/gcp_results.json)
+  --threads THREADS     Number of threads to use
+  --not-use-hacktricks-ai
+                        Don't use Hacktricks AI to analyze permissions
+  --billing-project BILLING_PROJECT
+                        Indicate the billing project to use to brute-force permissions
+  --proxy PROXY         Indicate a proxy to use to connect to GCP for debugging (e.g. 127.0.0.1:8080)
+  --print-invalid-permissions
+                        Print found invalid permissions to improve th speed of the tool
+
+```
 
 - **Usage Example:**  
   Set your environment token and run GCPPEAS with your desired parameters:
@@ -285,7 +288,7 @@ print("Access Token:", creds.token)
   export CLOUDSDK_AUTH_ACCES_TOKEN=$(gcloud auth print-access-token)
 
   # Run GCPPEAS (you can also pass an extra token for Gmail/Drive access)
-  python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--project <PROJECT_ID>] [--folder <FOLDER_ID>] [--organization <ORGANIZATION_ID>] [--billing-project <BILLING_PROJECT_ID>]
+  python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--projects <PROJECT_ID1>,<PROJECT_ID2>] [--folders <FOLDER_ID1>,<FOLDER_ID2>] [--organizations <ORGANIZATION_ID>] [--service-accounts <SA_EMAIL1>,<SA_EMAIL2>] [--billing-project <BILLING_PROJECT_ID>]
   ```
 
 ---
