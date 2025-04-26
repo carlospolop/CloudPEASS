@@ -555,6 +555,10 @@ class AzurePEASS(CloudPEASS):
             data = resp.json()
             skype_token = data.get("tokens", {}).get("skypeToken")
             chat_service_uri = data.get("regionGtms", {}).get("chatService")
+
+            if not chat_service_uri:
+                print(f"{Fore.RED}No access to chats.")
+                return
             
             # Get open conversations
             headers = {"Authentication":f"skypetoken={skype_token}", 'Authorization': f'Bearer {teams_token_skype}'}
