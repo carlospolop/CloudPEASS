@@ -51,9 +51,10 @@ AZURE_SENSITIVE_RESPONSE_EXAMPLE = """[
 
 
 class AzurePEASS(CloudPEASS):
-    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path=None):
+    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, not_enumerate_m365, out_path=None):
         self.foci_refresh_token = foci_refresh_token
         self.tenant_id = tenant_id
+        self.not_enumerate_m365 = not_enumerate_m365
 
         if self.foci_refresh_token:
             if not self.tenant_id:
@@ -236,7 +237,7 @@ class AzurePEASS(CloudPEASS):
             except Exception as e:
                 print(f"{Fore.RED}Failed to decode Graph token: {str(e)}")
         
-        if self.foci_refresh_token:
+        if self.foci_refresh_token and not self.not_enumerate_m365:
             # SHAREPOINT
             print(f"{Fore.YELLOW}\nEnumerating SharePoint files | max depth 3 | top 10 {Fore.RESET}(Thanks to {Fore.BLUE}JoelGMSec{Fore.RESET} for the idea):")
             sharepoint_token = self.get_tokens_from_foci_with_scope(SHAREPOINT_FOCI_APPS)
@@ -818,6 +819,7 @@ if __name__ == "__main__":
     parser.add_argument('--arm-token', help="Azure Management authentication token")
     parser.add_argument('--graph-token', help="Azure Graph authentication token")
     parser.add_argument('--foci-refresh-token', default=None, help="FOCI Refresh Token")
+    parser.add_argument('--not-enumerate-m365', action="store_true", default=False, help="Don't enumerate M365 permissions")
     
     # Username and password parameters for token generation
     parser.add_argument('--username', help="Username for authentication")
@@ -877,6 +879,7 @@ if __name__ == "__main__":
         sensitive_combinations,       # Ensure these variables are defined in your context
         not_use_ht_ai=args.not_use_hacktricks_ai,
         num_threads=args.threads,
+        not_enumerate_m365=args.not_enumerate_m365,
         out_path=args.out_json_path
     )
     azure_peass.run_analysis()

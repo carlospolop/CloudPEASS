@@ -41,12 +41,11 @@ To see the complete list of options, run:
 
 ```bash
 python3 ./AzurePEAS.py --help
-usage: AzurePEAS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN]
-                    [--foci-refresh-token FOCI_REFRESH_TOKEN] [--username USERNAME] [--password PASSWORD]
-                    [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
+usage: AzurePEAS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--foci-refresh-token FOCI_REFRESH_TOKEN] [--not-enumerate-m365]
+                    [--username USERNAME] [--password PASSWORD] [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
 
-Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To
-check for Azure permissions an ARM token is needed. To check for Entra ID permissions a Graph token is needed.
+Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To check for Azure permissions an ARM token
+is needed. To check for Entra ID permissions a Graph token is needed.
 
 options:
   -h, --help            show this help message and exit
@@ -58,6 +57,7 @@ options:
                         Azure Graph authentication token
   --foci-refresh-token FOCI_REFRESH_TOKEN
                         FOCI Refresh Token
+  --not-enumerate-m365  Don't enumerate M365 permissions
   --username USERNAME   Username for authentication
   --password PASSWORD   Password for authentication
   --out-json-path OUT_JSON_PATH
