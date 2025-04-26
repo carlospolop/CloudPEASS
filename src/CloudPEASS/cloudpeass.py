@@ -42,6 +42,7 @@ Remember to indicate as many sensitive permissions as possible.
 Always recheck the permissions and their descriptions to ensure they are correct and avoid false positives.
 Your response MUST be a valid JSON with the indicated format (an array of dicts with the keys "permission", "is_very_sensitive", "is_sensitive" and "description").
 If no malicious actions are found, please provide an empty JSON array: []
+__CLOUD_SPECIFIC_CLARIFICATIONS__
 
 """
 
@@ -89,7 +90,7 @@ threading.excepthook = my_thread_excepthook
 
 
 class CloudPEASS:
-    def __init__(self, very_sensitive_combos, sensitive_combos, cloud_provider, not_use_ht_ai, num_threads, example_malicious_cloud_response, example_sensitive_cloud_response, out_path=None):
+    def __init__(self, very_sensitive_combos, sensitive_combos, cloud_provider, not_use_ht_ai, num_threads, example_malicious_cloud_response, example_sensitive_cloud_response, sensitive_perms_clarifications="", out_path=None):
         self.very_sensitive_combos = [set(combo) for combo in very_sensitive_combos]
         self.sensitive_combos = [set(combo) for combo in sensitive_combos]
         self.cloud_provider = cloud_provider
@@ -97,7 +98,7 @@ class CloudPEASS:
         self.num_threads = int(num_threads)
         self.out_path = out_path
         self.malicious_actions_response_format = MALICIOUS_ACTIONS_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_malicious_cloud_response)
-        self.sensitive_response_format = SENSITIVE_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_sensitive_cloud_response)
+        self.sensitive_response_format = SENSITIVE_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_sensitive_cloud_response).replace("__CLOUD_SPECIFIC_CLARIFICATIONS__", sensitive_perms_clarifications)
         self._rate_limit_lock = threading.Lock()
         self._request_timestamps = []  
 

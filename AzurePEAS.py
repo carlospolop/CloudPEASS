@@ -48,6 +48,8 @@ AZURE_SENSITIVE_RESPONSE_EXAMPLE = """[
     [...]
 ]"""
 
+AZURE_CLARIFICATIONS = """- The permission "Microsoft.KeyVault/vaults/secrets/read" allows to list secrets but not to read them. To read asecret you need the permission "Microsoft.KeyVault/vaults/secrets/getSecret/action"."""
+
 
 
 class AzurePEASS(CloudPEASS):
@@ -69,7 +71,7 @@ class AzurePEASS(CloudPEASS):
         self.EntraIDPEASS = EntraIDPEASS(graph_token, num_threads)
         self.sharepoint_followed_sites_ids = []
         self.initial_subscriptions = []
-        super().__init__(very_sensitive_combos, sensitive_combos, "Azure", not_use_ht_ai, num_threads, AZURE_MALICIOUS_RESPONSE_EXAMPLE, AZURE_SENSITIVE_RESPONSE_EXAMPLE, out_path)
+        super().__init__(very_sensitive_combos, sensitive_combos, "Azure", not_use_ht_ai, num_threads, AZURE_MALICIOUS_RESPONSE_EXAMPLE, AZURE_SENSITIVE_RESPONSE_EXAMPLE, AZURE_CLARIFICATIONS, out_path)
 
         if not self.arm_token and not self.graph_token:
             if self.foci_refresh_token:
