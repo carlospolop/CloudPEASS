@@ -103,7 +103,8 @@ very_sensitive_combinations = [
     ["Microsoft.DesktopVirtualization/hostPools/retrieveRegistrationToken/action"],
 
     ["Microsoft.Compute/virtualMachines/extensions/write"],
-    ["Microsoft.Compute/virtualMachines/write", "Microsoft.Compute/galleries/applications/write"],
+    ["Microsoft.Compute/virtualMachines/write"],
+    ["Microsoft.Compute/galleries/applications/versions/write"],
     ["Microsoft.Compute/virtualMachines/runCommand/action"],
     ["Microsoft.Compute/virtualMachines/login/action"],
     ["Microsoft.Compute/virtualMachines/loginAsAdmin/action"],
