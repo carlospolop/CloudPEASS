@@ -243,10 +243,10 @@ class AWSBruteForce():
         if self.aws_services:
             filterred_services = [service for service in services if service.lower() in self.aws_services ]
             if not filterred_services:
-                print(f"{Fore.RED}No services found to test. Please check your input because you probably misspelled the filtering. Exiting...")
+                print(f"{Fore.RED}No services found to test. Please check your input because you probably misspelled the filtering. Exiting...{Fore.RESET}")
                 return
             else:
-                print(f"{Fore.YELLOW}Filtered services to bf: {', '.join(filterred_services)}")
+                print(f"{Fore.YELLOW}Filtered services to bf: {', '.join(filterred_services)}{Fore.RESET}")
 
         else:
             filterred_services = services
