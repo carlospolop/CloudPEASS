@@ -46,6 +46,8 @@ AWS_SENSITIVE_RESPONSE_EXAMPLE = """[
     [...]
 ]"""
 
+AWS_CLARIFICATIONS = ""
+
 class AWSPEASS(CloudPEASS):
     def __init__(self, profile_name, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, debug, region, aws_services, out_path=None):
         self.profile_name = profile_name
@@ -68,7 +70,7 @@ class AWSPEASS(CloudPEASS):
         self.principal_type, self.principal_name = self.parse_principal(self.principal_arn)
 
         super().__init__(very_sensitive_combos, sensitive_combos, "AWS", not_use_ht_ai, num_threads,
-                         AWS_MALICIOUS_RESPONSE_EXAMPLE, AWS_SENSITIVE_RESPONSE_EXAMPLE, out_path)
+                         AWS_MALICIOUS_RESPONSE_EXAMPLE, AWS_SENSITIVE_RESPONSE_EXAMPLE, AWS_CLARIFICATIONS, out_path)
 
     def get_caller_identity(self):
         try:

@@ -58,6 +58,7 @@ GCP_SENSITIVE_RESPONSE_EXAMPLE = """[
 	[...]
 ]"""
 
+GCP_CLARIFICATIONS = ""
 
 
 INVALID_PERMS = {}
@@ -89,7 +90,7 @@ class GCPPEASS(CloudPEASS):
 		self.all_gcp_perms = self.download_gcp_permissions()
 
 		super().__init__(very_sensitive_combos, sensitive_combos, "GCP", not_use_ht_ai, num_threads,
-						 GCP_MALICIOUS_RESPONSE_EXAMPLE, GCP_SENSITIVE_RESPONSE_EXAMPLE, out_path)
+						 GCP_MALICIOUS_RESPONSE_EXAMPLE, GCP_SENSITIVE_RESPONSE_EXAMPLE, GCP_CLARIFICATIONS, out_path)
 
 	def download_gcp_permissions(self):
 		print(f"{Fore.BLUE}Downloading permissions...")
