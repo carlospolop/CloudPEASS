@@ -240,10 +240,21 @@ class AWSBruteForce():
 
         services = self.get_aws_services()
 
+        if self.aws_services:
+            filterred_services = [service for service in services if service.lower() in self.aws_services ]
+            if not filterred_services:
+                print(f"{Fore.RED}No services found to test. Please check your input because you probably misspelled the filtering. Exiting...")
+                return
+            else:
+                print(f"{Fore.YELLOW}Filtered services to bf: {', '.join(filterred_services)}")
+
+        else:
+            filterred_services = services
+
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             future_to_service = {
                 executor.submit(self.get_commands_for_service, service): service 
-                for service in services if not self.aws_services or service.lower() in self.aws_services
+                for service in filterred_services
             }
             pbar = tqdm(total=len(future_to_service), desc="Getting commands to test")
             for future in as_completed(future_to_service):
