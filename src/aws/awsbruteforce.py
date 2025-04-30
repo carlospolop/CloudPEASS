@@ -10,12 +10,12 @@ from colorama import Fore, init
 
 class AWSBruteForce():
 
-    def __init__(self, debug, region, profile, aws_services):
+    def __init__(self, debug, region, profile, aws_services, threads):
         self.debug = debug
         self.region = region
         self.profile = profile
         self.aws_services = [a.lower() for a in aws_services]
-        self.num_threads = 5
+        self.num_threads = threads
         self.found_permissions = []
         self.lock = threading.Lock()
 

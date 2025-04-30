@@ -59,7 +59,7 @@ class AWSPEASS(CloudPEASS):
         self.credentials = self.session.get_credentials()
 
         # Initialize AWSBruteForce using the profile and region
-        self.AWSBruteForce = AWSBruteForce(debug, self.region, self.profile_name, aws_services)
+        self.AWSBruteForce = AWSBruteForce(debug, self.region, self.profile_name, aws_services, self.num_threads)
 
         # Create IAM and STS clients from the session
         self.iam_client = self.session.client('iam')
