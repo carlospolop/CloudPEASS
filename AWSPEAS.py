@@ -609,7 +609,6 @@ class AWSPEASS(CloudPEASS):
             print(f"{Fore.GREEN}No permissions found for the principal. Strating brute-force...")
             brute_force = True
         
-        brute_force = True #deleteme
         if brute_force:
             bf_permissions = self.AWSBruteForce.brute_force_permissions()
             if bf_permissions:
