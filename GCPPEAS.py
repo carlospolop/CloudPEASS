@@ -6,6 +6,7 @@ import httplib2
 import re
 import time
 import os
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from tqdm import tqdm
@@ -94,8 +95,8 @@ class GCPPEASS(CloudPEASS):
 
 	def download_gcp_permissions(self):
 		print(f"{Fore.BLUE}Downloading permissions...")
-		base_ref_page = requests.get("https://cloud.google.com/iam/docs/permissions-reference").text
-		permissions = re.findall('<td id="([^"]+)"', base_ref_page)
+		base_ref_page = requests.get("http://raw.githubusercontent.com/iann0036/iam-dataset/refs/heads/main/gcp/permissions.json").text
+		permissions = list(set(json.loads(base_ref_page).keys()))
 		print(f"{Fore.GREEN}Gathered {len(permissions)} GCP permissions to check")
 		return permissions
 
