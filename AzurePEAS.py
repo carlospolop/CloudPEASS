@@ -53,7 +53,7 @@ AZURE_CLARIFICATIONS = """- The permission "Microsoft.KeyVault/vaults/secrets/re
 
 
 class AzurePEASS(CloudPEASS):
-    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, not_enumerate_m365, out_path=None):
+    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, not_enumerate_m365, out_path=None, check_only_subs=[]):
         self.foci_refresh_token = foci_refresh_token
         self.tenant_id = tenant_id
         self.not_enumerate_m365 = not_enumerate_m365
@@ -71,6 +71,7 @@ class AzurePEASS(CloudPEASS):
         self.EntraIDPEASS = EntraIDPEASS(graph_token, num_threads)
         self.sharepoint_followed_sites_ids = []
         self.initial_subscriptions = []
+        self.check_only_subs = check_only_subs
         super().__init__(very_sensitive_combos, sensitive_combos, "Azure", not_use_ht_ai, num_threads, AZURE_MALICIOUS_RESPONSE_EXAMPLE, AZURE_SENSITIVE_RESPONSE_EXAMPLE, AZURE_CLARIFICATIONS, out_path)
 
         if not self.arm_token and not self.graph_token:
@@ -114,6 +115,10 @@ class AzurePEASS(CloudPEASS):
 
 
     def list_subscriptions(self):
+        if self.check_only_subs:
+            # If check_only_subs is provided, return only those subscriptions
+            return self.check_only_subs
+        
         url = "https://management.azure.com/subscriptions?api-version=2020-01-01"
         resp = requests.get(url, headers={"Authorization": f"Bearer {self.arm_token}"})
         subs = [sub["subscriptionId"] for sub in resp.json().get("value", [])]
@@ -130,11 +135,17 @@ class AzurePEASS(CloudPEASS):
             return resources
         data = resp.json()
         resources.extend(data.get("value", []))
-        while "nextLink" in data:
+        cont = 0
+        while "nextLink" in data and cont <= 30:  # Limit to 30 pages to avoid infinite loops
             next_url = data["nextLink"]
             resp = requests.get(next_url, headers={"Authorization": f"Bearer {self.arm_token}"})
             data = resp.json()
             resources.extend(data.get("value", []))
+            cont += 1
+        
+        if cont > 30:
+            print(f"{Fore.RED}Warning: More than 30 pages of resources found in subscription {subscription_id}. Stopping enumeration to avoid too long enumeration but some permissions will be missed!")
+        
         return resources
 
     def get_permissions_for_resource(self, resource_id):
@@ -305,7 +316,7 @@ class AzurePEASS(CloudPEASS):
 
     def enumerate_conditional_access_policies(self, graph_token):
         """
-        List all Conditional Access policies** via Microsoft Graph.
+        List all Conditional Access policies via Microsoft Graph.
         """
 
         headers = {'Authorization': f'Bearer {graph_token}'}
@@ -827,6 +838,7 @@ if __name__ == "__main__":
     parser.add_argument('--username', help="Username for authentication")
     parser.add_argument('--password', help="Password for authentication")
     
+    parser.add_argument('--check-only-these-subs', default="", help="In case you just want to check specific subscriptions, provide a comma-separated list of subscription IDs (e.g. 'sub1,sub2')")
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
     parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
     parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to analyze permissions")
@@ -869,6 +881,15 @@ if __name__ == "__main__":
         else:
             arm_token = foci_token
             print(f"{Fore.GREEN}Generated Management Access Token")
+    
+    check_only_subs = []
+    if args.check_only_these_subs:
+        # Split the provided subscription IDs and strip whitespace
+        check_only_subs = [sub.strip() for sub in args.check_only_these_subs.split(",") if sub.strip()]
+        # Check subscriptions are valid via regex
+        if not all(re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', sub) for sub in check_only_subs):
+            print(f"{Fore.RED}Invalid subscription ID format in --check-only-these-subs. Exiting.")
+            exit(1)
         
     
     # Initialize and run the AzurePEASS analysis
@@ -882,6 +903,7 @@ if __name__ == "__main__":
         not_use_ht_ai=args.not_use_hacktricks_ai,
         num_threads=args.threads,
         not_enumerate_m365=args.not_enumerate_m365,
-        out_path=args.out_json_path
+        out_path=args.out_json_path,
+        check_only_subs=check_only_subs
     )
     azure_peass.run_analysis()
