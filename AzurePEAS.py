@@ -148,12 +148,21 @@ class AzurePEASS(CloudPEASS):
         
         return resources
 
-    def get_permissions_for_resource(self, resource_id):
+    def get_permissions_for_resource(self, resource_id, cont=0):
         perms = set()
 
         # Retrieve active permissions
         permissions_url = f"https://management.azure.com{resource_id}/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
         resp = requests.get(permissions_url, headers={"Authorization": f"Bearer {self.arm_token}"})
+        if resp.status_code == 429:
+            if cont > 5:
+                print(f"{Fore.RED}Rate limit exceeded while fetching permissions for {resource_id}. Exiting after 5 retries.")
+                return []
+            
+            print(f"{Fore.RED}Rate limit exceeded while fetching permissions for {resource_id}. Retrying after 30 seconds...")
+            time.sleep(30)
+            return self.get_permissions_for_resource(resource_id, cont + 1)
+        
         if resp.status_code != 200:
             raise Exception(f"Failed fetching permissions: {resp.text}")
 
@@ -678,6 +687,7 @@ class AzurePEASS(CloudPEASS):
                 sub_resources = []
                 raw_resources = self.list_resources_in_subscription(sub_id)
 
+                # Add subscription permissions
                 perms = self.get_permissions_for_resource(f"/subscriptions/{sub_id}")
                 if perms:
                     sub_resources.append({
@@ -687,17 +697,30 @@ class AzurePEASS(CloudPEASS):
                         "permissions": perms
                     })
 
-                for res in raw_resources:
+                # Process resources in parallel with progress bar
+                def get_resource_permissions(res):
                     res_id = res.get("id")
                     res_name = res.get("name")
                     res_type = res.get("type")
                     perms = self.get_permissions_for_resource(res_id)
-                    sub_resources.append({
+                    return {
                         "id": res_id,
                         "name": res_name,
                         "type": res_type,
                         "permissions": perms
-                    })
+                    }
+
+                if raw_resources:
+                    # Use 3 threads for permission fetching per subscription
+                    with ThreadPoolExecutor(max_workers=min(3, max(1, len(raw_resources) // 10))) as resource_executor:
+                        resource_results = list(tqdm(
+                            resource_executor.map(get_resource_permissions, raw_resources),
+                            total=len(raw_resources),
+                            desc=f"Checking resources in {sub_id[:20]}...",
+                            leave=False
+                        ))
+                    sub_resources.extend(resource_results)
+
                 return sub_resources
 
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
