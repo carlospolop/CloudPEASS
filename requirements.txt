@@ -6,3 +6,4 @@ tqdm
 colorama
 PyJWT
 boto3
+tiktoken

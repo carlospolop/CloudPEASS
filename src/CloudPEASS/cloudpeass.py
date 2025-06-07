@@ -9,6 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import pdb
 import faulthandler
+import tiktoken
+
 
 from colorama import Fore, Style, init, Back
 
@@ -100,7 +102,12 @@ class CloudPEASS:
         self.malicious_actions_response_format = MALICIOUS_ACTIONS_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_malicious_cloud_response)
         self.sensitive_response_format = SENSITIVE_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_sensitive_cloud_response).replace("__CLOUD_SPECIFIC_CLARIFICATIONS__", sensitive_perms_clarifications)
         self._rate_limit_lock = threading.Lock()
-        self._request_timestamps = []  
+        self._request_timestamps = []
+    
+    def get_len_tokens(self, prompt) -> int:
+        model="o3"
+        encoding = tiktoken.encoding_for_model(model)
+        return len(encoding.encode(prompt))
 
     def get_resources_and_permissions(self):
         """
@@ -344,27 +351,69 @@ class CloudPEASS:
         return final_results
     
     def analyze_sensitive_combinations_ai(self, permissions):
-        query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(permissions)}\n"
-        query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permission is a permission that allows to escalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets. A sensitive permission is a permission that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secrets, API keys...) is not sensitive.\n"
-        query_text += "Note that permissions starting with '-' are deny permissions.\n"
-    
-        query_text += self.sensitive_response_format
+        if not permissions:
+            return {
+                "very_sensitive_perms": [],
+                "sensitive_perms": []
+            }
+        
+        # Split permissions into chunks based on token count
+        chunks = []
+        current_chunk = []
+        max_tokens_per_chunk = 30000
 
-        result = self.query_hacktricks_ai(query_text)
+        # Process permissions in batches of 100
+        batch_size = 100
+        permissions_list = list(permissions)
+        for i in range(0, len(permissions_list), batch_size):
+            batch = permissions_list[i:i + batch_size]
+            
+            # Check if adding this batch would exceed token limit
+            test_tokens = self.get_len_tokens(', '.join(current_chunk + batch))
+            
+            if test_tokens > max_tokens_per_chunk and current_chunk:
+                # Current chunk is full, start a new one with this batch
+                chunks.append(current_chunk)
+                current_chunk = batch
+            else:
+                # Add the batch to current chunk
+                current_chunk.extend(batch)
+        
+        # Add the last chunk if it has permissions
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        # Limit to first 5 chunks
+        if len(chunks) > 5:
+            print(f"{Fore.YELLOW}Warning: Too many permissions ({len(chunks)} chunks). Only analyzing the first 5 chunks of permissions.")
+            chunks = chunks[:5]
+        
         final_result = {
             "very_sensitive_perms": [],
             "sensitive_perms": []
         }
-
-        for entry in result:
-            if not all(key in entry for key in ["permission", "is_very_sensitive", "is_sensitive", "description"]):
-                print(f"Malformed response from Hacktricks AI: {entry}")
-            else:
-                if entry["is_very_sensitive"]:
-                    final_result["very_sensitive_perms"].append(entry["permission"])
-                elif entry["is_sensitive"]:
-                    final_result["sensitive_perms"].append(entry["permission"])
-                    
+        
+        # Process each chunk
+        for i, chunk in enumerate(chunks):
+            print(f"{Fore.WHITE}Analyzing permission chunk {i+1}/{len(chunks)} with AI ({len(chunk)} permissions)...")
+            
+            query_text = f"Given the following {self.cloud_provider} permissions: {', '.join(chunk)}\n"
+            query_text += "Indicate if any of those permissions are very sensitive or sensitive permissions. A very sensitive permission is a permission that allows to escalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets. A sensitive permission is a permission that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but it's not clear if it's enough by itself. A regular read permission that doesn't allow to read sensitive information (credentials, secrets, API keys...) is not sensitive.\n"
+            query_text += "Note that permissions starting with '-' are deny permissions.\n"
+            query_text += self.sensitive_response_format
+            
+            result = self.query_hacktricks_ai(query_text)
+            
+            if result:
+                for entry in result:
+                    if not all(key in entry for key in ["permission", "is_very_sensitive", "is_sensitive", "description"]):
+                        print(f"Malformed response from Hacktricks AI: {entry}")
+                    else:
+                        if entry["is_very_sensitive"]:
+                            final_result["very_sensitive_perms"].append(entry["permission"])
+                        elif entry["is_sensitive"]:
+                            final_result["sensitive_perms"].append(entry["permission"])
+    
         return final_result
 
 
@@ -480,10 +529,10 @@ class CloudPEASS:
                 final_resources.append(resource)
         resources = final_resources
 
-        total_permissions = sum(len(resource["permissions"]) for resource in resources)
-        print(f"{Fore.YELLOW}\nFound {Fore.GREEN}{len(resources)} {Fore.YELLOW}resources with a total of {Fore.GREEN}{total_permissions} {Fore.YELLOW}permissions.")
-
         grouped_resources = self.group_resources_by_permissions(resources)
+        total_permissions = sum(len(perms_set) for perms_set in grouped_resources.keys())
+        print(f"{Fore.YELLOW}\nFound {Fore.GREEN}{len(resources)} {Fore.YELLOW}resources with a total of {Fore.GREEN}{total_permissions} {Fore.YELLOW}permissions.")
+        
         all_very_sensitive_perms = set()
         all_sensitive_perms = set()
         all_very_sensitive_perms_ai = set()

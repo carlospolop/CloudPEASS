@@ -281,6 +281,9 @@ class GCPPEASS(CloudPEASS):
 			response = request.execute()
 			return response.get("includedPermissions", [])
 		except Exception as e:
+			if "Identity and Access Management (IAM) API has not been used" in str(e):
+				print(f"{Fore.RED}IAM API is not enabled. Please enable it in the project or set a billing project that has IAM API enabled.")
+				return "Stop"
 			print(f"{Fore.RED}Failed to retrieve permissions for role {role_name}: {e}")
 			return []
 
@@ -599,12 +602,14 @@ class GCPPEASS(CloudPEASS):
 						if affected:
 							role = binding.get("role")
 							permissions = self.get_permissions_from_role(role)
+							if permissions == "Stop":
+								break
 							collected.extend(permissions)
 			
 			return {
 				"id": target["id"],
 				"name": target["id"].split("/")[-1] if len(target["id"].split("/")) > 2 else target["id"],
-				"permissions": collected,
+				"permissions": list(set(collected)),
 				"type": target["type"]
 			}
 		
