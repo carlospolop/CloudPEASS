@@ -164,9 +164,18 @@ class AzurePEASS(CloudPEASS):
             return self.get_permissions_for_resource(resource_id, cont + 1)
         
         if resp.status_code != 200:
-            raise Exception(f"Failed fetching permissions: {resp.text}")
+            if resp.status_code == 403:
+                # If 403, the user doesn't have IAM permissions inside the subscription
+                # The error message might say something like: does not have authorization to perform action \'Microsoft.Authorization/permissions/read\' over scope \'/subscriptions/6414b7ad-ea28-41d3-901e-3132c02d7b0a\' or the scope is invalid
+                # But actually that permission shouldn't be needed (or maybe is granted if you have some permissions inside the subscription)
+                # So we will just put that the permissions are empty
+                perm_data = []
+            else:
+                raise Exception(f"Failed fetching permissions: {resp.text}")
 
-        perm_data = resp.json().get('value', [])
+        else:
+            perm_data = resp.json().get('value', [])
+        
         for perm_block in perm_data:
             actions = set(perm_block.get("actions", []))
             data_actions = set(perm_block.get("dataActions", []))
