@@ -358,4 +358,8 @@ python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION>
 
 # Usage with specific AWS services (e.g., S3, EC2, Lambda, etc.)
 python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb
+
+# For Windows users
+# (Note: On Windows, `python3` is usually just `python`)
+python AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb
 ```
