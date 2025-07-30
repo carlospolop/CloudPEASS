@@ -85,7 +85,7 @@ class AzurePEASS(CloudPEASS):
             print(f"{Fore.RED}ARM token not provided. Skipping Azure permissions analysis")
         
         if not self.graph_token:
-            print(f"{Fore.RED}Graph token not provided. Skipping EntraID permissions analysis")
+            print(f"{Fore.RED}Graph token not provided. Skipping EntraID permissions analysis. If App creds, it might have Entra ID roles or API permissions of type 'application' that I cannot lest.")
 
         if self.arm_token:
             self.check_jwt_token(self.arm_token, ["https://management.azure.com/", "https://management.core.windows.net/", "https://management.azure.com"])
@@ -741,17 +741,17 @@ class AzurePEASS(CloudPEASS):
         if self.graph_token:
             print(f"{Fore.MAGENTA}Getting Permissions from EntraID...")
 
-            # If None, then it's a MI token without access to get its Entra ID permissions (probably it doesn't have them)
-            ## Important: Keep this Entra ID check first
+            # For SPs, let's get their API permissions
+            resources_data += self.EntraIDPEASS.get_api_permissions()
+
+            # The following checks are for user principals (they use the /me endpoint)
             memberships = self.EntraIDPEASS.get_entraid_memberships()
-            if memberships is None:
-                return resources_data
-            
-            resources_data += memberships
-            resources_data += self.EntraIDPEASS.get_assigned_permissions()
-            resources_data += self.EntraIDPEASS.get_my_app_role_assignments()
-            resources_data += self.EntraIDPEASS.get_eligible_roles()
-            resources_data += self.EntraIDPEASS.get_entraid_owns()
+            if memberships is not None:
+                resources_data += memberships
+                resources_data += self.EntraIDPEASS.get_assigned_permissions()
+                resources_data += self.EntraIDPEASS.get_my_app_role_assignments()
+                resources_data += self.EntraIDPEASS.get_eligible_roles()
+                resources_data += self.EntraIDPEASS.get_entraid_owns()
 
         return resources_data
     

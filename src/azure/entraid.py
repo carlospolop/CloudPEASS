@@ -2,17 +2,24 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 from colorama import Fore, Style, init, Back
 import time
+import jwt
 
 init(autoreset=True)
 
 class EntraIDPEASS():
     def __init__(self, token, num_threads):
         self.user_id = None
+        self.token = token
         self.headers = {
             "Authorization": f"Bearer {token}",
             "ConsistencyLevel": "eventual"
         }
         self.num_threads = num_threads
+        self.decoded_token = {}
+        try:
+            self.decoded_token = jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
+        except Exception:
+            pass
 
     def get_my_user_id(self):
 
@@ -235,7 +242,7 @@ class EntraIDPEASS():
             if role.get("id") == app_role_id:
                 # return the human-readable permission name/value
                 return role.get("value") or role.get("displayName")
-        return []
+        return None
 
     def get_eligible_roles(self):
         user_id = self.get_my_user_id()
@@ -266,6 +273,58 @@ class EntraIDPEASS():
             })
 
         return eligible_resources    
+
+    def get_api_permissions(self):
+        if not self.decoded_token or 'appid' not in self.decoded_token:
+            return []
+
+        print(f"{Fore.CYAN}Checking for API permissions...{Style.RESET_ALL}")
+        app_id = self.decoded_token.get('appid')
+        
+        # Get Application object ID from appId
+        app_url = f"https://graph.microsoft.com/v1.0/applications?$filter=appId eq '{app_id}'&$select=id"
+        app_resp = requests.get(app_url, headers=self.headers)
+        
+        if app_resp.status_code != 200:
+            print(f"{Fore.YELLOW}Could not retrieve application object for appId {app_id}. The Service Principal may not have permissions like Application.Read.All. Error: {app_resp.text}{Style.RESET_ALL}")
+            return []
+        
+        app_data = app_resp.json().get('value')
+        if not app_data:
+            print(f"{Fore.YELLOW}Could not find application object for appId {app_id}.{Style.RESET_ALL}")
+            return []
+        app_object_id = app_data[0]['id']
+
+        # Get requiredResourceAccess from the application object
+        req_access_url = f"https://graph.microsoft.com/v1.0/applications/{app_object_id}?$select=requiredResourceAccess"
+        req_access_resp = requests.get(req_access_url, headers=self.headers)
+        
+        if req_access_resp.status_code != 200:
+            print(f"{Fore.YELLOW}Could not retrieve requiredResourceAccess for application {app_object_id}. Error: {req_access_resp.text}{Style.RESET_ALL}")
+            return []
+            
+        required_access = req_access_resp.json().get('requiredResourceAccess', [])
+        
+        api_permissions = []
+        for resource_access in required_access:
+            resource_app_id = resource_access.get('resourceAppId')
+            for permission in resource_access.get('resourceAccess', []):
+                if permission.get('type') == 'Role':
+                    perm_id = permission.get('id')
+                    try:
+                        perm_name = self._get_app_role_value(resource_app_id, perm_id)
+                        if perm_name:
+                             api_permissions.append({
+                                'id': f'api-permission:{resource_app_id}/{perm_id}',
+                                'name': perm_name,
+                                'type': 'APIPermission-Application',
+                                'permissions': [perm_name],
+                                'assignmentType': 'Direct'
+                            })
+                    except Exception as e:
+                        print(f"{Fore.YELLOW}Could not resolve permission name for role {perm_id} on resource {resource_app_id}: {e}{Style.RESET_ALL}")
+                        
+        return api_permissions
 
     def get_entraid_owns(self):
         sub_resources = []
