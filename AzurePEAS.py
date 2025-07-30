@@ -85,7 +85,7 @@ class AzurePEASS(CloudPEASS):
             print(f"{Fore.RED}ARM token not provided. Skipping Azure permissions analysis")
         
         if not self.graph_token:
-            print(f"{Fore.RED}Graph token not provided. Skipping EntraID permissions analysis. If App creds, it might have Entra ID roles or API permissions of type 'application' that I cannot lest.")
+            print(f"{Fore.RED}Graph token not provided. Skipping EntraID permissions analysis. If App creds, it might have Entra ID roles or API permissions of type 'application' that I cannot list.")
 
         if self.arm_token:
             self.check_jwt_token(self.arm_token, ["https://management.azure.com/", "https://management.core.windows.net/", "https://management.azure.com"])
