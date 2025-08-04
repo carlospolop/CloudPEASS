@@ -748,7 +748,7 @@ class GCPPEASS(CloudPEASS):
 				msg = f"{Fore.BLUE}Current user: {Fore.WHITE}{user_info['email']} (Not Service Account)"
 				self.groups = self.get_user_groups()
 				if self.groups:
-					msg += f"\n{Fore.BLUE}User groups: {Fore.WHITE}{', '.join(self.groups)}"
+					msg += f"\n{Fore.BLUE}User groups: {Fore.WHITE}{', '.join([g for g in self.groups if g])}"
 
 			print(msg)
 		
@@ -843,7 +843,10 @@ class GCPPEASS(CloudPEASS):
 				for membership in memberships:
 					for keys in membership["preferredMemberKey"]:
 						if keys["id"] == self.email:
-							user_groups.append(group_email)
+							if group_email:
+								user_groups.append(group_email)
+							elif group_name:
+								user_groups.append(group_name)
 
 			return user_groups
 
