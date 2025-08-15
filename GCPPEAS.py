@@ -592,7 +592,7 @@ class GCPPEASS(CloudPEASS):
 						if self.email.lower() in member:
 							affected = True
 						
-						elif "goup:" in member and self.groups:
+						elif "group:" in member and self.groups:
 							if any(g.lower() in member.lower() for g in self.groups):
 								affected = True
 						
