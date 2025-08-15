@@ -66,7 +66,7 @@ INVALID_PERMS = {}
 
 
 class GCPPEASS(CloudPEASS):
-	def __init__(self, credentials, extra_token, projects, folders, orgs, sas, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path, billing_project, proxy, print_invalid_perms, dont_get_iam_policies):
+	def __init__(self, credentials, extra_token, projects, folders, orgs, sas, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path, billing_project, proxy, print_invalid_perms, dont_get_iam_policies, assume_yes=False):
 		self.credentials = credentials
 		self.extra_token = extra_token
 		self.projects = [p.strip() for p in projects.split(",")] if projects else []
@@ -79,6 +79,7 @@ class GCPPEASS(CloudPEASS):
 		self.groups = []
 		self.print_invalid_perms = print_invalid_perms
 		self.dont_get_iam_policies = dont_get_iam_policies
+		self.assume_yes = assume_yes
 		
 		if proxy:
 			proxy = proxy.split("//")[-1] # Porotocol not needed
@@ -384,11 +385,14 @@ class GCPPEASS(CloudPEASS):
 		except googleapiclient.errors.HttpError as e:
 			if "Cloud Resource Manager API has not been used" in str(e):
 				if self.billing_project:
-					user_input = input(f"{Fore.RED}Cloudresourcemanager found disabled with billing project {self.billing_project}. Do you want to try without it? (Y/n): ")
-					if user_input.lower() != "n":
+					if self.assume_yes:
 						self.billing_project = None
 						return self.can_check_permissions(resource_id, perms)
-				
+					else:
+						user_input = input(f"{Fore.RED}Cloudresourcemanager found disabled with billing project {self.billing_project}. Do you want to try without it? (Y/n): ")
+						if user_input.lower() != "n":
+							self.billing_project = None
+							return self.can_check_permissions(resource_id, perms)
 				else:
 					print(f"{Fore.RED}Cloud Resource Manager API is disabled.")
 					print(f"{Fore.YELLOW}You could try to give {self.email} the role 'roles/serviceusage.serviceUsageConsumer' in a project controlled by you with that API enabled and pass it with the argument --billing-account.{Fore.RESET}\n")
@@ -658,9 +662,10 @@ class GCPPEASS(CloudPEASS):
 			exit(1)
 
 		if any(p for entry in found_permissions for p in entry["permissions"] if p):
-			user_input = input(f"{Fore.YELLOW}Permissions were found accessing the IAM policies. Do you want to continue bruteforcing permissions? [Y/n]: {Fore.WHITE}")
-			if user_input.lower() == 'n':
-				return found_permissions
+			if not self.assume_yes:
+				user_input = input(f"{Fore.YELLOW}Permissions were found accessing the IAM policies. Do you want to continue bruteforcing permissions? [Y/n]: {Fore.WHITE}")
+				if user_input.lower() == 'n':
+					return found_permissions
 			
 		# Check if the user has permissions to check the permissions
 		relevant_perms = self.get_relevant_permissions(targets[0]["type"])
@@ -963,7 +968,7 @@ if __name__ == "__main__":
 	parser.add_argument('--billing-project', type=str, default="", help="Indicate the billing project to use to brute-force permissions")
 	parser.add_argument('--proxy', type=str, default="", help="Indicate a proxy to use to connect to GCP for debugging (e.g. 127.0.0.1:8080)")
 	parser.add_argument('--print-invalid-permissions', default=False, action="store_true", help="Print found invalid permissions to improve th speed of the tool")
-
+	parser.add_argument('-y', '--yes', action='store_true', help='Automatically answer YES to interactive prompts')
 
 	args = parser.parse_args()
 	if args.token:
@@ -986,6 +991,7 @@ if __name__ == "__main__":
 		billing_project=args.billing_project,
 		proxy=args.proxy,
 		print_invalid_perms=args.print_invalid_permissions,
-		dont_get_iam_policies=args.dont_get_iam_policies
+		dont_get_iam_policies=args.dont_get_iam_policies,
+		assume_yes=args.yes
 	)
 	gcp_peass.run_analysis()
