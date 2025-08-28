@@ -907,12 +907,17 @@ if __name__ == "__main__":
         # If username, we get a FOCI refresh token
         if "@" in args.username:
             foci_refresh_token = foci_token
-            print(f"{Fore.GREEN}Generated FOCI Refresh Token")
+            print(f"{Fore.GREEN}Generated FOCI Refresh Token: {Fore.LIGHTBLUE_EX}{foci_refresh_token}")
         
         # If SP, we just get an access token for management
         else:
             arm_token = foci_token
-            print(f"{Fore.GREEN}Generated Management Access Token")
+            print(f"{Fore.GREEN}Generated Management Access Token: {Fore.LIGHTBLUE_EX}{arm_token}")
+            try:
+                graph_token = generate_foci_token(args.username, args.password, tenant_id, "https://graph.microsoft.com/.default")
+                print(f"{Fore.GREEN}Generated Graph Access Token: {Fore.LIGHTBLUE_EX}{graph_token}")
+            except Exception:
+                print(f"{Fore.RED}Error generating Graph Access Token")
     
     check_only_subs = []
     if args.check_only_these_subs:

@@ -50,7 +50,7 @@ class EntraIDPEASS():
             resp = requests.get(url, headers=self.headers)
             if resp.status_code != 200:
                 if "/me request is only valid with delegated authentication" in resp.text:
-                    print(f"{Fore.RED}This is a token from a MI or a SP, it cannot access it's permissions in Entra ID (and it probably doesn't have any). Skipping.{Style.RESET_ALL}")
+                    print(f"{Fore.RED}This is a token from a MI or a SP, it cannot access it's permissions in Entra ID. Skipping.{Style.RESET_ALL}")
                     return None
                 else:
                     print(f"{Fore.RED}Graph API call failed: {url} -> {resp.status_code} {resp.text}.{Style.RESET_ALL}")
