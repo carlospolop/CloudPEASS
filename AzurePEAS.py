@@ -820,7 +820,60 @@ def discover_tenant_from_domain(domain):
     return None
 
 
-def generate_foci_token(username, password, tenant_id, scope="https://management.azure.com/.default"):
+def authenticate_with_device_code(tenant_id, scope="https://management.azure.com/.default"):
+    """
+    Authenticate using device code flow (works with and without MFA).
+    This is the default and most user-friendly authentication method.
+    """
+    if not tenant_id:
+        print(f"{Fore.RED}Tenant ID is required for device code flow.")
+        print(f"{Fore.YELLOW}Provide --tenant-id or a username with domain to auto-discover.")
+        exit(1)
+    
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    
+    for client_id in FOCI_APPS:
+        try:
+            app = msal.PublicClientApplication(client_id, authority=authority)
+        except ValueError as e:
+            error_msg = str(e)
+            if "Unable to get authority configuration" in error_msg or "invalid_tenant" in error_msg:
+                print(f"{Fore.RED}Invalid tenant ID: {tenant_id}")
+                print(f"{Fore.YELLOW}The tenant ID provided doesn't exist or is incorrect.")
+                exit(1)
+            else:
+                raise
+        
+        # Initiate device code flow
+        flow = app.initiate_device_flow(scopes=[scope])
+        
+        if "user_code" not in flow:
+            continue
+        
+        print(f"\n{Fore.CYAN}To authenticate with Azure:")
+        print(f"{Fore.CYAN}1. Go to: {Fore.WHITE}{flow['verification_uri']}")
+        print(f"{Fore.CYAN}2. Enter code: {Fore.YELLOW}{flow['user_code']}")
+        print(f"{Fore.CYAN}3. Sign in with your account (MFA will be prompted if required)")
+        print(f"{Fore.CYAN}4. Return here - waiting for you to complete authentication...\n")
+        
+        # Wait for the user to complete the flow
+        token_response = app.acquire_token_by_device_flow(flow)
+        
+        if "refresh_token" in token_response:
+            print(f"{Fore.GREEN}Authentication successful!")
+            return token_response["refresh_token"]
+        elif "access_token" in token_response:
+            print(f"{Fore.GREEN}Authentication successful!")
+            return token_response["access_token"]
+        else:
+            print(f"{Fore.RED}Authentication failed:", token_response.get("error_description"))
+            continue
+    
+    print(f"{Fore.RED}Failed to authenticate with device code flow.")
+    exit(1)
+
+
+def generate_foci_token(username, password, tenant_id, scope="https://management.azure.com/.default", allow_mfa_fallback=True):
     """
     Generate a FOCI refresh token using Azure AD API via MSAL.
     
@@ -831,7 +884,7 @@ def generate_foci_token(username, password, tenant_id, scope="https://management
     
     The returned token is used as the FOCI refresh token.
     
-    If MFA is required, it will automatically use device code flow for authentication.
+    If MFA is required and allow_mfa_fallback is True, it will automatically use device code flow for authentication.
     """
     # Create the authority URL using the tenant id.
     authority = f"https://login.microsoftonline.com/{tenant_id}"
@@ -899,6 +952,12 @@ def generate_foci_token(username, password, tenant_id, scope="https://management
             # 50072: User needs to enroll for MFA (first time)
             # 50074: Strong authentication required
             elif "error_codes" in token_response and any(code in token_response["error_codes"] for code in [50076, 50158, 50079, 50072, 50074]):
+                if not allow_mfa_fallback:
+                    # MFA fallback is disabled - fail with clear error
+                    print(f"{Fore.RED}MFA is required for this account, but --use-username-password does not support MFA.")
+                    print(f"{Fore.YELLOW}Remove --use-username-password to use device code flow (supports MFA).")
+                    exit(1)
+                
                 print(f"{Fore.YELLOW}MFA is required for this account. Starting device code flow...")
                 
                 # Use device code flow for MFA
@@ -942,9 +1001,10 @@ if __name__ == "__main__":
     parser.add_argument('--foci-refresh-token', default=None, help="FOCI Refresh Token")
     parser.add_argument('--not-enumerate-m365', action="store_true", default=False, help="Don't enumerate M365 permissions")
     
-    # Username and password parameters for token generation
-    parser.add_argument('--username', help="Username for authentication")
-    parser.add_argument('--password', help="Password for authentication")
+    # Authentication parameters
+    parser.add_argument('--username', help="Username for authentication (used with --use-username-password)")
+    parser.add_argument('--password', help="Password for authentication (used with --use-username-password)")
+    parser.add_argument('--use-username-password', action="store_true", default=False, help="Use username/password flow instead of device code flow (only works without MFA)")
     
     parser.add_argument('--check-only-these-subs', default="", help="In case you just want to check specific subscriptions, provide a comma-separated list of subscription IDs (e.g. 'sub1,sub2')")
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
@@ -960,14 +1020,13 @@ if __name__ == "__main__":
     graph_token = args.graph_token or os.getenv("AZURE_GRAPH_TOKEN")
     foci_refresh_token = args.foci_refresh_token
 
-    if args.username and not args.password:
-        print(f"{Fore.RED}Password is required when using username. Exiting.")
-        exit(1)
+    # Validation for username/password flow
+    if args.use_username_password:
+        if not args.username or not args.password:
+            print(f"{Fore.RED}Username and password are required when using --use-username-password. Exiting.")
+            exit(1)
     
-    if args.password and not args.username:
-        print(f"{Fore.RED}Username is required when using password. Exiting.")
-        exit(1)
-    
+    # Auto-discover tenant ID from username if provided
     if args.username and not tenant_id:
         if "@" in args.username:
             domain = args.username.split("@")[-1]
@@ -980,36 +1039,52 @@ if __name__ == "__main__":
                 print(f"{Fore.YELLOW}Could not discover tenant ID from domain. Using domain as tenant: {domain}")
                 tenant_id = domain
 
-    if (foci_refresh_token or args.username) and not tenant_id:
-        print(f"{Fore.RED}Tenant ID is required when using FOCI refresh token or username. Exiting.")
-        exit(1)
-    
-    # If tenant_id looks like it might be wrong (GUID format but getting errors), try to discover from username
-    if args.username and "@" in args.username and tenant_id:
-        domain = args.username.split("@")[-1]
-        # Only try if tenant_id is a GUID (not a domain)
-        if re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', tenant_id):
-            print(f"{Fore.CYAN}Using provided tenant ID: {tenant_id}")
-            print(f"{Fore.CYAN}If authentication fails, the tenant ID might be incorrect. Try omitting --tenant-id to auto-discover from the email domain.")
-
-    # Automatically generate the FOCI refresh token if username and password are provided and no token exists.
-    if not foci_refresh_token and args.username and args.password:
-        foci_token = generate_foci_token(args.username, args.password, tenant_id)
+    # If no tokens are provided, use authentication flow
+    if not arm_token and not graph_token and not foci_refresh_token:
+        if args.use_username_password:
+            # Use username/password flow (only works without MFA)
+            if not args.username or not args.password:
+                print(f"{Fore.RED}Username and password are required for username/password authentication. Exiting.")
+                exit(1)
+            
+            if not tenant_id:
+                print(f"{Fore.RED}Tenant ID is required. Provide --tenant-id or use username with domain to auto-discover. Exiting.")
+                exit(1)
+            
+            print(f"{Fore.CYAN}Using username/password authentication (note: will fail if MFA is required)...")
+            foci_token = generate_foci_token(args.username, args.password, tenant_id, allow_mfa_fallback=False)
+            
+            # If username, we get a FOCI refresh token
+            if "@" in args.username:
+                foci_refresh_token = foci_token
+                print(f"{Fore.GREEN}Generated FOCI Refresh Token: {Fore.LIGHTBLUE_EX}{foci_refresh_token}")
+            
+            # If SP, we just get an access token for management
+            else:
+                arm_token = foci_token
+                print(f"{Fore.GREEN}Generated Management Access Token: {Fore.LIGHTBLUE_EX}{arm_token}")
+                try:
+                    graph_token = generate_foci_token(args.username, args.password, tenant_id, scope="https://graph.microsoft.com/.default", allow_mfa_fallback=False)
+                    print(f"{Fore.GREEN}Generated Graph Access Token: {Fore.LIGHTBLUE_EX}{graph_token}")
+                except Exception:
+                    print(f"{Fore.RED}Error generating Graph Access Token")
         
-        # If username, we get a FOCI refresh token
-        if "@" in args.username:
-            foci_refresh_token = foci_token
-            print(f"{Fore.GREEN}Generated FOCI Refresh Token: {Fore.LIGHTBLUE_EX}{foci_refresh_token}")
-        
-        # If SP, we just get an access token for management
         else:
-            arm_token = foci_token
-            print(f"{Fore.GREEN}Generated Management Access Token: {Fore.LIGHTBLUE_EX}{arm_token}")
-            try:
-                graph_token = generate_foci_token(args.username, args.password, tenant_id, scope="https://graph.microsoft.com/.default")
-                print(f"{Fore.GREEN}Generated Graph Access Token: {Fore.LIGHTBLUE_EX}{graph_token}")
-            except Exception:
-                print(f"{Fore.RED}Error generating Graph Access Token")
+            # Use device code flow (default - works with and without MFA)
+            print(f"{Fore.CYAN}No tokens provided. Using device code flow for authentication...")
+            print(f"{Fore.CYAN}(This works with and without MFA)")
+            
+            if not tenant_id:
+                print(f"{Fore.YELLOW}Tenant ID is required for authentication.")
+                print(f"{Fore.YELLOW}Provide --tenant-id <tenant_id> or use a common tenant:")
+                tenant_id = input(f"{Fore.CYAN}Enter tenant ID (or press Enter to use 'organizations'): {Fore.WHITE}").strip()
+                if not tenant_id:
+                    tenant_id = "organizations"
+                    print(f"{Fore.GREEN}Using 'organizations' tenant (works for most Azure AD accounts)")
+            
+            # Authenticate and get FOCI refresh token
+            foci_refresh_token = authenticate_with_device_code(tenant_id)
+            print(f"{Fore.GREEN}Generated FOCI Refresh Token: {Fore.LIGHTBLUE_EX}{foci_refresh_token}")
     
     check_only_subs = []
     if args.check_only_these_subs:

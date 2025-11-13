@@ -16,10 +16,11 @@ This toolkit leverages advanced techniques to enumerate your permissions (it use
   AzurePEAS finds all resources accessible to the principal and the permisions he has over them. It retrieves permissions for both **Azure (ARM API)** and **Entra ID (Graph API)**, ensuring a thorough analysis of your cloud permissions.
 
 - **Authentication Requirements**  
-  To operate effectively, AzurePEAS requires:
-  - A token with access to the **Azure ARM API** to find all the resources and permissions of the principal has inside Azure Management.
-  - A token with access to the **Azure Graph API** to find all the resources and permissions of the principal has inside Entra ID.
-  - If a **FOCI refresh token** or valid **credentials (username and password)** are provided, AzurePEAS can generate the previous tokens itself and also enumerate various Microsoft 365 services.
+  AzurePEAS supports multiple authentication methods:
+  - **Device Code Flow (Default):** Simply run without parameters for interactive browser-based authentication (supports MFA) 🔐
+  - **Pre-existing Tokens:** Provide **ARM** and/or **Graph** tokens directly
+  - **Username/Password:** Use `--use-username-password` flag for automation (non-MFA accounts only)
+  - **FOCI Refresh Token:** Generate tokens and access M365 services
   
   **Note:** Most permissions can be collected without needing extra enumeration privileges. However, some specific operations might need additional scopes.
 
@@ -42,7 +43,7 @@ To see the complete list of options, run:
 ```bash
 python3 ./AzurePEAS.py --help
 usage: AzurePEAS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--foci-refresh-token FOCI_REFRESH_TOKEN] [--not-enumerate-m365]
-                    [--username USERNAME] [--password PASSWORD] [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
+                    [--username USERNAME] [--password PASSWORD] [--use-username-password] [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
 
 Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To check for Azure permissions an ARM token
 is needed. To check for Entra ID permissions a Graph token is needed.
@@ -58,8 +59,10 @@ options:
   --foci-refresh-token FOCI_REFRESH_TOKEN
                         FOCI Refresh Token
   --not-enumerate-m365  Don't enumerate M365 permissions
-  --username USERNAME   Username for authentication
-  --password PASSWORD   Password for authentication
+  --username USERNAME   Username for authentication (used with --use-username-password)
+  --password PASSWORD   Password for authentication (used with --use-username-password)
+  --use-username-password
+                        Use username/password flow instead of device code flow (only works without MFA)
   --out-json-path OUT_JSON_PATH
                         Output JSON file path (e.g. /tmp/azure_results.json)
   --threads THREADS     Number of threads to use
@@ -69,9 +72,21 @@ options:
 
 ### AzurePEAS Usage Examples
 
-**1. Obtaining Tokens** 🔑
+**1. Simple Interactive Authentication (Recommended)** �
 
-Before executing the script, generate your tokens with the following commands:
+Just run with no parameters for device code flow (works with MFA):
+
+```bash
+# Simplest - prompts for tenant or uses 'organizations'
+python3 AzurePEAS.py
+
+# With tenant auto-discovery from email domain
+python3 AzurePEAS.py --username user@domain.com
+```
+
+**2. Obtaining Tokens Manually** 🔑
+
+If you prefer to generate tokens beforehand:
 
 ```bash
 # Get Azure ARM token
@@ -92,29 +107,33 @@ $Headers = $Response.RequestMessage.Headers
 $Headers.Authorization.Parameter
 ```
 
-**2. Running AzurePEAS Using Tokens**
+**3. Running AzurePEAS Using Pre-existing Tokens**
 
-You can run AzurePEAS by either providing the tokens via the command line or by having them set as environment variables:
+Provide tokens via command line or environment variables:
 
 ```bash
-python3 AzurePEAS.py [--arm-token <AZURE_MANAGEMENT_TOKEN>] [--graph-token <AZURE_GRAPH_TOKEN>]
+python3 AzurePEAS.py --arm-token <TOKEN> --graph-token <TOKEN>
+# or use environment variables
+export AZURE_ARM_TOKEN=<TOKEN>
+export AZURE_GRAPH_TOKEN=<TOKEN>
+python3 AzurePEAS.py
 ```
 
-**3. Running AzurePEAS Using Credentials/FOCI token for improved enumeration**
+**4. Username/Password Authentication (Non-MFA only)** ⚠️
 
-For additional enumeration of Microsoft 365 services, you can supply:
+For automation scripts with non-MFA accounts:
 
-- A **FOCI refresh token**:
+```bash
+python3 AzurePEAS.py --use-username-password --username <USERNAME> --password <PASSWORD>
+```
 
-  ```bash
-  python3 AzurePEAS.py [--tenant-id <TENANT_ID>] [--foci-refresh-token <FOCI_REFRESH_TOKEN>]
-  ```
+**5. Using FOCI Refresh Token**
 
-- **Username and password credentials**:
+For M365 enumeration capabilities:
 
-  ```bash
-  python3 AzurePEAS.py [--username <USERNAME>] [--password <PASWORD>]
-  ```
+```bash
+python3 AzurePEAS.py --tenant-id <TENANT_ID> --foci-refresh-token <TOKEN>
+```
 
 ---
 
