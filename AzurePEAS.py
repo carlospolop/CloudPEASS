@@ -798,6 +798,28 @@ class AzurePEASS(CloudPEASS):
         return None
 
 
+def discover_tenant_from_domain(domain):
+    """
+    Try to discover the tenant ID from a domain name by checking the OpenID configuration.
+    Returns the tenant ID if found, otherwise None.
+    """
+    try:
+        # Try to get tenant info from the OpenID configuration endpoint
+        url = f"https://login.microsoftonline.com/{domain}/v2.0/.well-known/openid-configuration"
+        resp = requests.get(url)
+        if resp.status_code == 200:
+            data = resp.json()
+            # Extract tenant ID from the issuer URL
+            issuer = data.get("issuer", "")
+            # Issuer format: https://login.microsoftonline.com/{tenant_id}/v2.0
+            tenant_id = issuer.split("/")[-2] if "/" in issuer else None
+            if tenant_id and tenant_id != domain:
+                return tenant_id
+    except Exception as e:
+        pass
+    return None
+
+
 def generate_foci_token(username, password, tenant_id, scope="https://management.azure.com/.default"):
     """
     Generate a FOCI refresh token using Azure AD API via MSAL.
@@ -808,6 +830,8 @@ def generate_foci_token(username, password, tenant_id, scope="https://management
     It then retrieves an access token for Microsoft Management (scope: https://management.azure.com/.default).
     
     The returned token is used as the FOCI refresh token.
+    
+    If MFA is required, it will automatically use device code flow for authentication.
     """
     # Create the authority URL using the tenant id.
     authority = f"https://login.microsoftonline.com/{tenant_id}"
@@ -821,19 +845,38 @@ def generate_foci_token(username, password, tenant_id, scope="https://management
         )
         token_response = app.acquire_token_for_client(scopes=[scope])
 
-        if "access_token" in token_response:
+        if token_response and "access_token" in token_response:
             return token_response["access_token"]
         else:
-            print(f"{Fore.RED}Error acquiring token with those credentials:", token_response.get("error_description"))
+            error_desc = token_response.get("error_description") if token_response else "Unknown error"
+            print(f"{Fore.RED}Error acquiring token with those credentials:", error_desc)
             exit(1)
     
     else:
+        token_response = None
         for client_id in FOCI_APPS:
             # Initialize the MSAL PublicClientApplication with the client id and authority.
-            app = msal.PublicClientApplication(client_id, authority=authority)
+            try:
+                app = msal.PublicClientApplication(client_id, authority=authority)
+            except ValueError as e:
+                error_msg = str(e)
+                if "Unable to get authority configuration" in error_msg or "invalid_tenant" in error_msg:
+                    print(f"{Fore.RED}Invalid tenant ID: {tenant_id}")
+                    print(f"{Fore.YELLOW}The tenant ID provided doesn't exist or is incorrect.")
+                    if "@" in username:
+                        domain = username.split("@")[-1]
+                        print(f"{Fore.CYAN}Hint: Try running without --tenant-id to auto-discover from email domain: {domain}")
+                        discovered_tenant_id = discover_tenant_from_domain(domain)
+                        if discovered_tenant_id:
+                            print(f"{Fore.GREEN}Auto-discovered tenant ID: {discovered_tenant_id}")
+                            print(f"{Fore.CYAN}Try running with: --tenant-id {discovered_tenant_id}")
+                    exit(1)
+                else:
+                    raise
             
             # Acquire token using username/password flow
             try:
+                # First try with username/password
                 token_response = app.acquire_token_by_username_password(
                     username=username,
                     password=password,
@@ -846,10 +889,43 @@ def generate_foci_token(username, password, tenant_id, scope="https://management
                 return token_response["refresh_token"]
             
             elif "error_codes" in token_response and 50126 in token_response["error_codes"]:
-                print(f"{Fore.RED}Invalid credentials given. Existing")
+                print(f"{Fore.RED}Invalid credentials given. Exiting")
                 exit(1)
+            
+            # Check if MFA is required (error codes: 50076, 50158, 50079, 50072, 50074)
+            # 50076: MFA required
+            # 50158: Conditional Access policy requires MFA
+            # 50079: User needs to enroll for MFA
+            # 50072: User needs to enroll for MFA (first time)
+            # 50074: Strong authentication required
+            elif "error_codes" in token_response and any(code in token_response["error_codes"] for code in [50076, 50158, 50079, 50072, 50074]):
+                print(f"{Fore.YELLOW}MFA is required for this account. Starting device code flow...")
+                
+                # Use device code flow for MFA
+                flow = app.initiate_device_flow(scopes=[scope])
+                
+                if "user_code" not in flow:
+                    print(f"{Fore.RED}Failed to create device flow for MFA. Error: {flow.get('error_description')}")
+                    continue
+                
+                print(f"\n{Fore.CYAN}To complete authentication with MFA:")
+                print(f"{Fore.CYAN}1. Go to: {Fore.WHITE}{flow['verification_uri']}")
+                print(f"{Fore.CYAN}2. Enter code: {Fore.YELLOW}{flow['user_code']}")
+                print(f"{Fore.CYAN}3. Complete the MFA challenge in your browser")
+                print(f"{Fore.CYAN}4. Return here - waiting for you to complete authentication...\n")
+                
+                # Wait for the user to complete the flow
+                token_response = app.acquire_token_by_device_flow(flow)
+                
+                if "refresh_token" in token_response:
+                    print(f"{Fore.GREEN}MFA authentication successful!")
+                    return token_response["refresh_token"]
+                else:
+                    print(f"{Fore.RED}MFA authentication failed:", token_response.get("error_description"))
+                    continue
 
-        print(f"{Fore.RED}Error acquiring token with those credentials:", token_response.get("error_description"))
+        error_desc = token_response.get("error_description") if token_response else "Unknown error"
+        print(f"{Fore.RED}Error acquiring token with those credentials:", error_desc)
         exit(1)
 
 
@@ -894,11 +970,27 @@ if __name__ == "__main__":
     
     if args.username and not tenant_id:
         if "@" in args.username:
-            tenant_id = args.username.split("@")[-1]
+            domain = args.username.split("@")[-1]
+            print(f"{Fore.YELLOW}No tenant ID provided. Trying to discover from domain: {domain}")
+            discovered_tenant_id = discover_tenant_from_domain(domain)
+            if discovered_tenant_id:
+                tenant_id = discovered_tenant_id
+                print(f"{Fore.GREEN}Discovered tenant ID: {tenant_id}")
+            else:
+                print(f"{Fore.YELLOW}Could not discover tenant ID from domain. Using domain as tenant: {domain}")
+                tenant_id = domain
 
     if (foci_refresh_token or args.username) and not tenant_id:
         print(f"{Fore.RED}Tenant ID is required when using FOCI refresh token or username. Exiting.")
         exit(1)
+    
+    # If tenant_id looks like it might be wrong (GUID format but getting errors), try to discover from username
+    if args.username and "@" in args.username and tenant_id:
+        domain = args.username.split("@")[-1]
+        # Only try if tenant_id is a GUID (not a domain)
+        if re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', tenant_id):
+            print(f"{Fore.CYAN}Using provided tenant ID: {tenant_id}")
+            print(f"{Fore.CYAN}If authentication fails, the tenant ID might be incorrect. Try omitting --tenant-id to auto-discover from the email domain.")
 
     # Automatically generate the FOCI refresh token if username and password are provided and no token exists.
     if not foci_refresh_token and args.username and args.password:
@@ -914,7 +1006,7 @@ if __name__ == "__main__":
             arm_token = foci_token
             print(f"{Fore.GREEN}Generated Management Access Token: {Fore.LIGHTBLUE_EX}{arm_token}")
             try:
-                graph_token = generate_foci_token(args.username, args.password, tenant_id, "https://graph.microsoft.com/.default")
+                graph_token = generate_foci_token(args.username, args.password, tenant_id, scope="https://graph.microsoft.com/.default")
                 print(f"{Fore.GREEN}Generated Graph Access Token: {Fore.LIGHTBLUE_EX}{graph_token}")
             except Exception:
                 print(f"{Fore.RED}Error generating Graph Access Token")
