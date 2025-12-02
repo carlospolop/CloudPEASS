@@ -192,17 +192,17 @@ class AWSBruteForce():
 
     def get_aws_services(self):
         output = subprocess.run("aws help | col -b", shell=True, capture_output=True).stdout.decode().splitlines()
-        start_string = "SERVICES"
-        end_string = "SEE"
+        start_string = "AVAILABLE SERVICES"
+        end_string = "SEE ALSO"
         point = "o"
         in_range = False
         services = []
 
         for line in output:
             line = line.strip()
-            if start_string in line:
+            if start_string in line.upper():
                 in_range = True
-            elif end_string in line:
+            elif end_string in line.upper():
                 in_range = False
 
             if in_range and line and line != point and start_string not in line:
@@ -214,22 +214,22 @@ class AWSBruteForce():
 
     def get_commands_for_service(self, service):
         output = subprocess.run(f"aws {service} help | col -b", shell=True, capture_output=True).stdout.decode().splitlines()
-        start_string = "COMMANDS"
-        end_string = "SEE"
+        start_string = "AVAILABLE COMMANDS"
+        end_string = "SEE ALSO"
         in_range = False
         commands = []
 
         for line in output:
             line = line.strip()
-            if start_string in line:
+            if start_string in line.upper():
                 in_range = True
-            elif end_string in line:
+            elif end_string in line.upper():
                 in_range = False
 
             if in_range and line:
                 if line.startswith("o "):
                     line = line[2:]
-                if re.match(r'^(list|describe|get)', line):
+                if re.match(r'^(list|ls|describe|get)', line):
                     commands.append(line)
 
         return commands
