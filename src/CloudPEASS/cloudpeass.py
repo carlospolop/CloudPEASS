@@ -560,6 +560,8 @@ class CloudPEASS:
         print(f"{Fore.RED}  {Back.YELLOW}Very Sensitive Permissions{Style.RESET_ALL} - Permissions that allow to escalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets.")
         print(f"{Fore.RED}  Sensitive Permissions{Style.RESET_ALL} - Permissions that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but they aren't enough by themselves.")
         print(f"{Fore.WHITE}  Regular Permissions{Style.RESET_ALL} - Not so interesting permissions.")
+        if not self.not_use_ht_ai:
+            print(f"{Fore.YELLOW}\n  ⚠️  WARNING: Permissions marked with (AI) are AI-generated suggestions and may contain inaccuracies. Always verify before acting on them.{Style.RESET_ALL}")
         print()
         print()
         for result in analysis_results:
@@ -615,6 +617,11 @@ class CloudPEASS:
                 print(f"{Fore.YELLOW}No attacks found for the given permissions.")
 
             else:
+                print(f"{Fore.YELLOW}\n" + "="*80)
+                print(f"{Fore.YELLOW}⚠️  WARNING: The following attack vectors are AI-GENERATED suggestions.")
+                print(f"{Fore.YELLOW}They may contain inaccuracies, hallucinations, or false positives.")
+                print(f"{Fore.YELLOW}Always verify the information and test commands carefully before use.")
+                print(f"{Fore.YELLOW}" + "="*80 + f"{Style.RESET_ALL}\n")
                 for attack in hacktricks_analysis:
                     print(f"{Fore.BLUE}\nTitle: {Fore.WHITE}{attack['title']}")
                     print(f"{Fore.BLUE}Description: {Fore.WHITE}{attack['description']}")
