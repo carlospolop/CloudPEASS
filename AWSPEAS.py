@@ -602,8 +602,8 @@ class AWSPEASS(CloudPEASS):
         if resources_data[0]["permissions"]:
             # Ask the user if he wants to brute-force permissions
             print(f"{Fore.GREEN}Found permissions for the principal.")
-            brute_force = input(f"{Fore.YELLOW}Do you still want to brute-force permissions? (y/N) ")
-            if brute_force.lower() == "y":
+            brute_force_input = input(f"{Fore.YELLOW}Do you still want to brute-force permissions? (y/N) ")
+            if brute_force_input.lower() == "y":
                 brute_force = True
         else:
             print(f"{Fore.GREEN}No permissions found for the principal. Strating brute-force...")
