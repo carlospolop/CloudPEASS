@@ -959,7 +959,7 @@ if __name__ == "__main__":
 	parser.add_argument('--dont-get-iam-policies', action="store_true", default=False, help="Do not get IAM policies for the resources")
 	parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/gcp_results.json)")
 	parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
-	parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to analyze permissions")
+	parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to suggest attack paths")
 	parser.add_argument('--billing-project', type=str, default="", help="Indicate the billing project to use to brute-force permissions")
 	parser.add_argument('--proxy', type=str, default="", help="Indicate a proxy to use to connect to GCP for debugging (e.g. 127.0.0.1:8080)")
 	parser.add_argument('--print-invalid-permissions', default=False, action="store_true", help="Print found invalid permissions to improve th speed of the tool")

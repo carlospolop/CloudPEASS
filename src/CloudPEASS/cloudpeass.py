@@ -10,6 +10,9 @@ import threading
 import pdb
 import faulthandler
 import tiktoken
+from pathlib import Path
+import yaml
+from typing import Optional
 
 
 from colorama import Fore, Style, init, Back
@@ -18,6 +21,8 @@ init(autoreset=True)
 faulthandler.enable()
 
 HACKTRICKS_AI_ENDPOINT = "https://www.hacktricks.ai/api/ht-api"
+PERMISSIONS_CATALOG_BASE_URL = "https://raw.githubusercontent.com/carlospolop/Blue-CloudPEASS/main"
+PERMISSIONS_CATALOG_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 SENSITIVE_RESPONSE_FORMAT = """\n
 ### RESPONSE FORMAT
@@ -72,8 +77,8 @@ __CLOUD_SPECIFIC_EXAMPLE__
 
 
 ### CLARIFICATIONS
-- Remember to indicate as many malicious actions as possible (maximum 5) that can be performed with the given set of permissions, and provide the necessary commands to perform them.
-- With a maximum of 5 techniques, prioritize privilege escalation and then sensitive information exfiltration techniques over deletion or DoS attacks.
+- Remember to indicate as many malicious actions as possible (maximum 3) that can be performed with the given set of permissions, and provide the necessary commands to perform them.
+- With a maximum of 3 techniques, prioritize privilege escalation and then sensitive information exfiltration techniques over deletion or DoS attacks.
 - If more than one command is needed, just separate them with a newline character or a semi-colon inside the JSON field.
 - Report only attacks whose most important permissions are assigned to the user and indicated. You can always suppose that the user has other necessary read, list or invoke permissions but not write permissions that haven't been indicated.
 - Always recheck the response to ensure it's correct and avoid false positives.
@@ -103,6 +108,7 @@ class CloudPEASS:
         self.sensitive_response_format = SENSITIVE_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_sensitive_cloud_response).replace("__CLOUD_SPECIFIC_CLARIFICATIONS__", sensitive_perms_clarifications)
         self._rate_limit_lock = threading.Lock()
         self._request_timestamps = []
+        self._permissions_catalog = None
     
     def get_len_tokens(self, prompt) -> int:
         model="o3"
@@ -198,6 +204,98 @@ class CloudPEASS:
             "sensitive_perms": found_sensitive
         }
 
+    def _catalog_cloud_id(self) -> str:
+        cloud = (self.cloud_provider or "").strip().lower()
+        if cloud in {"aws", "azure", "gcp"}:
+            return cloud
+        raise ValueError("Unsupported cloud provider. Supported providers are: Azure, AWS, GCP.")
+
+    def _catalog_cache_path(self) -> Path:
+        cloud = self._catalog_cloud_id()
+        filename = f"{cloud}_permissions_cat.yaml"
+        return Path.home() / ".cache" / "cloudpeass" / "permissions_catalog" / filename
+
+    def _should_refresh_catalog(self, path: Path) -> bool:
+        if not path.exists():
+            return True
+        try:
+            age_seconds = time.time() - path.stat().st_mtime
+        except OSError:
+            return True
+        return age_seconds > PERMISSIONS_CATALOG_CACHE_TTL_SECONDS
+
+    def _download_permissions_catalog(self) -> Optional[str]:
+        cloud = self._catalog_cloud_id()
+        url = f"{PERMISSIONS_CATALOG_BASE_URL}/{cloud}_permissions_cat.yaml"
+        try:
+            resp = requests.get(url, timeout=45)
+        except Exception as e:
+            print(f"{Fore.YELLOW}Warning: Couldn't download permissions catalog: {e}")
+            return None
+
+        if resp.status_code != 200:
+            print(f"{Fore.YELLOW}Warning: Couldn't download permissions catalog ({resp.status_code}): {resp.text[:200]}")
+            return None
+        return resp.text
+
+    def _load_permissions_catalog(self) -> dict:
+        if self._permissions_catalog is not None:
+            return self._permissions_catalog
+
+        cache_path = self._catalog_cache_path()
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+        catalog_text = None
+        if self._should_refresh_catalog(cache_path):
+            catalog_text = self._download_permissions_catalog()
+            if catalog_text:
+                try:
+                    cache_path.write_text(catalog_text, encoding="utf-8")
+                except OSError:
+                    pass
+
+        if catalog_text is None and cache_path.exists():
+            try:
+                catalog_text = cache_path.read_text(encoding="utf-8")
+            except OSError:
+                catalog_text = None
+
+        if not catalog_text:
+            self._permissions_catalog = {"critical": set(), "high": set(), "medium": set(), "low": set()}
+            return self._permissions_catalog
+
+        try:
+            parsed = yaml.safe_load(catalog_text) or {}
+        except Exception as e:
+            print(f"{Fore.YELLOW}Warning: Couldn't parse permissions catalog YAML: {e}")
+            parsed = {}
+
+        catalog = {}
+        for level in ("critical", "high", "medium", "low"):
+            values = parsed.get(level) or []
+            if not isinstance(values, list):
+                values = []
+            catalog[level] = set(v for v in values if isinstance(v, str))
+
+        self._permissions_catalog = catalog
+        return self._permissions_catalog
+
+    def categorize_permissions_from_catalog(self, permissions):
+        catalog = self._load_permissions_catalog()
+        categorized = {"critical": set(), "high": set(), "medium": set(), "low": set()}
+        for perm in permissions or []:
+            if not isinstance(perm, str) or perm.startswith("-"):
+                continue
+            if perm in catalog["critical"]:
+                categorized["critical"].add(perm)
+            elif perm in catalog["high"]:
+                categorized["high"].add(perm)
+            elif perm in catalog["medium"]:
+                categorized["medium"].add(perm)
+            elif perm in catalog["low"]:
+                categorized["low"].add(perm)
+        return categorized
+
     def sumarize_resources(self, resources):
         """
         Summarize resources by reducing to 1 resource per type.
@@ -255,6 +353,7 @@ class CloudPEASS:
 
         query_text = "#### REQUEST\n"
         query_text += "What actions could an attacker perform with the following permissions to escalate privileges (escalate to another user, group or managed identity/role/service account or get more permissions somehow inside the cloud or inside the cloud service), access sensitive information from the could (env vars, connection strings, secrets, dumping buckets or disks... any kind of data storage)?"
+        query_text += "\n\nNOTE: For safety and to minimize data shared, ONLY critical/high permissions are provided below. Medium/low/other permissions are NOT sent to HackTricks AI."
         query_text += "\n\n"
 
         query_text_perms = "#### IDENTIFIED PERMISSIONS\n"
@@ -268,45 +367,19 @@ class CloudPEASS:
             # Get permissions
             all_very_sensitive_perms = set()
             all_sensitive_perms = set()
-            perms = result["permissions"]
+            perms_cat = result.get("permissions_cat") or {}
+            critical = sorted(set(perms_cat.get("critical") or []))
+            high = sorted(set(perms_cat.get("high") or []))
 
-            # Remove confusing perms for AI
-            confisuing_perms = [
-                "cloudasset."    # GCP
-            ]
-            final_perms = []
-            for perm in perms:
-                if not any(conf in perm.lower() for conf in confisuing_perms):
-                    final_perms.append(perm)
-            perms = final_perms
+            all_very_sensitive_perms.update(critical)
+            all_sensitive_perms.update(high)
 
-            # Get sensitive and very sensitive permissions
-            sensitivity_ht = result["sensitive_perms"]
-            sensitivity_ai = result["sensitive_perms_ai"]
-            all_very_sensitive_perms.update(sensitivity_ht["very_sensitive_perms"])
-            all_sensitive_perms.update(sensitivity_ht["sensitive_perms"])
-            all_very_sensitive_perms.update(sensitivity_ai["very_sensitive_perms"])
-            all_sensitive_perms.update(sensitivity_ai["sensitive_perms"])
-            
-            # Remove sensitive and very sensitive permissions from the permissions list
-            for perm in all_very_sensitive_perms:
-                if perm in perms:
-                    perms.remove(perm)
-            for perm in all_sensitive_perms:
-                if perm in perms:
-                    perms.remove(perm)
-            
             if all_very_sensitive_perms:
-                query_text_perms += f"- Very sensitive permissions: {', '.join(all_very_sensitive_perms)}\n"
+                query_text_perms += f"- Critical permissions: {', '.join(sorted(all_very_sensitive_perms))}\n"
             if all_sensitive_perms:
-                query_text_perms += f"- Sensitive permissions: {', '.join(all_sensitive_perms)}\n"
-            if perms:
-                if len(perms) <= 30:
-                    query_text_perms += f"- Other permissions: {', '.join(perms[:30])}\n"
-                else:
-                    query_text_perms += f"- Other permissions: {', '.join(perms[:30])}, and more non-sensitive permissions (list, get and other non write permissions)\n"
+                query_text_perms += f"- High permissions: {', '.join(sorted(all_sensitive_perms))}\n"
 
-            if any(perm.startswith("-") for perm in list(perms)+list(all_sensitive_perms)+list(all_very_sensitive_perms)):
+            if any(perm.startswith("-") for perm in list(all_sensitive_perms) + list(all_very_sensitive_perms)):
                 query_text_perms += "- Note that permissions starting with '-' are deny permissions.\n"
             
             query_text_perms += "\n\n"
@@ -500,17 +573,22 @@ class CloudPEASS:
 
     def analyze_group(self, perms_set, resources_group):
         sensitive_perms = self.analyze_sensitive_combinations(perms_set)
-
-        sensitive_perms_ai = {
-            "very_sensitive_perms": [],
-            "sensitive_perms": []
-        } if self.not_use_ht_ai else self.analyze_sensitive_combinations_ai(perms_set)
+        sensitive_perms_serializable = {
+            "very_sensitive_perms": sorted(sensitive_perms["very_sensitive_perms"]),
+            "sensitive_perms": sorted(sensitive_perms["sensitive_perms"]),
+        }
+        perms_catalog = self.categorize_permissions_from_catalog(perms_set)
+        perms_catalog["critical"].update(sensitive_perms["very_sensitive_perms"])
+        perms_catalog["high"].update(sensitive_perms["sensitive_perms"])
+        perms_catalog["high"] -= perms_catalog["critical"]
+        perms_catalog["medium"] -= (perms_catalog["critical"] | perms_catalog["high"])
+        perms_catalog["low"] -= (perms_catalog["critical"] | perms_catalog["high"] | perms_catalog["medium"])
 
         return {
             "permissions": list(perms_set),
             "resources": [r["id"] if "/" in r["id"] else r["id"] + ":" + r["type"] + ":" + r["name"] for r in resources_group],
-            "sensitive_perms": sensitive_perms,
-            "sensitive_perms_ai": sensitive_perms_ai
+            "sensitive_perms": sensitive_perms_serializable,
+            "permissions_cat": {k: sorted(v) for k, v in perms_catalog.items()}
         }
     
 
@@ -533,10 +611,9 @@ class CloudPEASS:
         total_permissions = sum(len(perms_set) for perms_set in grouped_resources.keys())
         print(f"{Fore.YELLOW}\nFound {Fore.GREEN}{len(resources)} {Fore.YELLOW}resources with a total of {Fore.GREEN}{total_permissions} {Fore.YELLOW}permissions.")
         
-        all_very_sensitive_perms = set()
-        all_sensitive_perms = set()
-        all_very_sensitive_perms_ai = set()
-        all_sensitive_perms_ai = set()
+        all_critical_perms = set()
+        all_high_perms = set()
+        all_medium_perms = set()
 
         analysis_results = []
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
@@ -557,37 +634,34 @@ class CloudPEASS:
         # Clearly Print the results with the requested color formatting
         print(f"{Fore.YELLOW}\nDetailed Analysis Results:\n")
         print(f"{Fore.BLUE}Legend:")
-        print(f"{Fore.RED}  {Back.YELLOW}Very Sensitive Permissions{Style.RESET_ALL} - Permissions that allow to escalate privileges or read sensitive information that allows to escalate privileges like credentials or secrets.")
-        print(f"{Fore.RED}  Sensitive Permissions{Style.RESET_ALL} - Permissions that could be used to escalate privileges, read sensitive information or perform other cloud attacks, but they aren't enough by themselves.")
-        print(f"{Fore.WHITE}  Regular Permissions{Style.RESET_ALL} - Not so interesting permissions.")
-        if not self.not_use_ht_ai:
-            print(f"{Fore.YELLOW}\n  ⚠️  WARNING: Permissions marked with (AI) are AI-generated suggestions and may contain inaccuracies. Always verify before acting on them.{Style.RESET_ALL}")
+        print(f"{Fore.RED}  {Back.YELLOW}Critical Permissions{Style.RESET_ALL} - Very dangerous permissions that often allow privilege escalation or access to secrets/credentials.")
+        print(f"{Fore.RED}  High Permissions{Style.RESET_ALL} - Sensitive permissions that can enable attacks depending on context.")
+        print(f"{Fore.YELLOW}  Medium Permissions{Style.RESET_ALL} - Interesting permissions that can support attacks in some scenarios.")
+        print(f"{Fore.WHITE}  Low/Other Permissions{Style.RESET_ALL} - Less interesting permissions.")
         print()
         print()
         for result in analysis_results:
             perms = result["permissions"]
-            sensitivity_ht = result["sensitive_perms"]
-            sensitivity_ai = result["sensitive_perms_ai"]
-            all_very_sensitive_perms.update(sensitivity_ht["very_sensitive_perms"])
-            all_sensitive_perms.update(sensitivity_ht["sensitive_perms"])
-            all_very_sensitive_perms_ai.update(sensitivity_ai["very_sensitive_perms"])
-            all_sensitive_perms_ai.update(sensitivity_ai["sensitive_perms"])
+            perms_cat = result.get("permissions_cat") or {}
+            critical = set(perms_cat.get("critical") or [])
+            high = set(perms_cat.get("high") or [])
+            medium = set(perms_cat.get("medium") or [])
+            all_critical_perms.update(critical)
+            all_high_perms.update(high)
+            all_medium_perms.update(medium)
 
             print(f"{Fore.WHITE}Resources: {Fore.CYAN}{f'{Fore.WHITE} , {Fore.CYAN}'.join(result['resources'])}")
             perms_msg = f"{Fore.WHITE}Permissions: "
 
             for perm in perms:
-                if perm in sensitivity_ht["very_sensitive_perms"]:
+                if perm in critical:
                     perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
                 
-                elif perm in sensitivity_ai["very_sensitive_perms"]:
-                    perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}(AI), "
-                
-                elif perm in sensitivity_ht["sensitive_perms"]:
+                elif perm in high:
                     perms_msg += f"{Fore.RED}{perm}{Style.RESET_ALL}, "
 
-                elif perm in sensitivity_ai["sensitive_perms"]:
-                    perms_msg += f"{Fore.RED}{perm}{Style.RESET_ALL}(AI), "
+                elif perm in medium:
+                    perms_msg += f"{Fore.YELLOW}{perm}{Style.RESET_ALL}, "
                 
                 else:
                     perms_msg += f"{Fore.WHITE}{perm}{Style.RESET_ALL}, "
@@ -601,7 +675,7 @@ class CloudPEASS:
             print("\n" + Fore.LIGHTWHITE_EX + "-" * 80 + "\n" + Style.RESET_ALL)
 
         if not analysis_results:
-            print(f"{Fore.RED}No permissions found. Existing.")
+            print(f"{Fore.RED}No permissions found. Exiting.")
 
         # Proceed with Hacktricks AI check if enabled
         elif self.not_use_ht_ai:

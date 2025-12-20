@@ -4,7 +4,7 @@
 
 Welcome to the **Cloud Privilege Escalation Awesome Script Suite** – your one-stop solution to **find your permissions** whenever you compromise a principal in a **Red Team** across major cloud platforms: **Azure, GCP, and AWS**. This suite is designed to help you determine all your permissions and also what it's possible to accomplish using compromised them, focusing on **privilege escalation** and accessing **sensitive information** 🔥, and other potential attack vectors **without modifying any resources**.
 
-This toolkit leverages advanced techniques to enumerate your permissions (it uses different permission enumreation tehcniques depending on the cloud) and utilizes insights from **[HackTricks Cloud](https://cloud.hacktricks.wiki/en/index.html)** as well as **HackTricks AI** 🤖 to map sensitive permissions to potential attacks. Note that **no sensitive data is sent to the AI, only names of resources and permissions**, but if you prefer not to use the AI analysis, simply append the **`--not-use-hacktricks-ai`** flag when executing the tools.
+This toolkit leverages advanced techniques to enumerate your permissions (it uses different permission enumreation tehcniques depending on the cloud) and utilizes insights from **[HackTricks Cloud](https://cloud.hacktricks.wiki/en/index.html)** plus a curated permissions catalog (**Blue-CloudPEASS**) to classify permissions as **critical / high / medium / low**. Optionally, it can use **HackTricks AI** 🤖 to suggest potential attack paths; to minimize data shared, it only sends resource identifiers and **critical/high** permission names (never medium/low). If you prefer not to use the AI, append **`--not-use-hacktricks-ai`** when executing the tools.
 
 ---
 
@@ -67,7 +67,7 @@ options:
                         Output JSON file path (e.g. /tmp/azure_results.json)
   --threads THREADS     Number of threads to use
   --not-use-hacktricks-ai
-                        Don't use Hacktricks AI to analyze permissions
+                        Don't use Hacktricks AI to suggest attack paths (permissions are categorized locally)
 ```
 
 ### AzurePEAS Usage Examples
@@ -269,7 +269,7 @@ print("Access Token:", creds.token)
                   [--extra-token EXTRA_TOKEN] [--dont-get-iam-policies] [--out-json-path OUT_JSON_PATH] [--threads THREADS]
                   [--not-use-hacktricks-ai] [--billing-project BILLING_PROJECT] [--proxy PROXY] [--print-invalid-permissions]
 
-GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.
+GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks.
 
 options:
   -h, --help            show this help message and exit
@@ -290,7 +290,7 @@ options:
                         Output JSON file path (e.g. /tmp/gcp_results.json)
   --threads THREADS     Number of threads to use
   --not-use-hacktricks-ai
-                        Don't use Hacktricks AI to analyze permissions
+                        Don't use Hacktricks AI to suggest attack paths (permissions are categorized locally)
   --billing-project BILLING_PROJECT
                         Indicate the billing project to use to brute-force permissions
   --proxy PROXY         Indicate a proxy to use to connect to GCP for debugging (e.g. 127.0.0.1:8080)
@@ -361,7 +361,7 @@ options:
                         Output JSON file path (e.g. /tmp/aws_results.json)
   --threads THREADS     Number of threads to use
   --not-use-hacktricks-ai
-                        Don't use Hacktricks AI to analyze permissions
+                        Don't use Hacktricks AI to suggest attack paths (permissions are categorized locally)
   --debug               Print more infromation when brute-forcing permissions
   --region REGION       Indicate the region to use for brute-forcing permissions
   --aws-services AWS_SERVICES
