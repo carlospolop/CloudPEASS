@@ -349,7 +349,8 @@ Before running AWSPEAS, ensure that you have:
 ```bash
 python3 ./AWSPEAS.py --help
 usage: AWSPEAS.py [-h] --profile PROFILE [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--debug]
-                  --region REGION [--aws-services AWS_SERVICES]
+                  --region REGION [--aws-services AWS_SERVICES] [--skip-iam-policies] [--skip-simulation] [--force-bruteforce]
+                  [--skip-managed-policies-guess]
 
 Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEASS requires the
 name of the profile to use to connect to AWS.
@@ -367,6 +368,11 @@ options:
   --aws-services AWS_SERVICES
                         Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-
                         services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)
+  --skip-iam-policies   Skip retrieving permissions from IAM policies
+  --skip-simulation     Skip simulating permissions using simulate-principal-policy
+  --force-bruteforce    Force brute-force without asking
+  --skip-managed-policies-guess
+                        Skip guessing permissions based on AWS managed policies
 ```
 
 - **Usage Examples:**  
@@ -377,4 +383,16 @@ python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION>
 
 # Usage with specific AWS services (e.g., S3, EC2, Lambda, etc.)
 python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb
+
+# Skip IAM policy retrieval and simulation, force brute-force (stealth mode)
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-iam-policies --skip-simulation --force-bruteforce
+
+# Only skip simulation but still try IAM policies
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-simulation
+
+# Force brute-force without prompting (but still try other methods first)
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --force-bruteforce
+
+# Full automation mode - skip all prompts and use only brute-force
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-iam-policies --skip-simulation --force-bruteforce --skip-managed-policies-guess
 ```

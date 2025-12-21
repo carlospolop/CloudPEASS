@@ -49,10 +49,14 @@ AWS_SENSITIVE_RESPONSE_EXAMPLE = """[
 AWS_CLARIFICATIONS = ""
 
 class AWSPEASS(CloudPEASS):
-    def __init__(self, profile_name, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, debug, region, aws_services, out_path=None):
+    def __init__(self, profile_name, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, debug, region, aws_services, skip_iam_policies=False, skip_simulation=False, force_bruteforce=False, skip_managed_policies_guess=False, out_path=None):
         self.profile_name = profile_name
         self.num_threads = num_threads
         self.region = region
+        self.skip_iam_policies = skip_iam_policies
+        self.skip_simulation = skip_simulation
+        self.force_bruteforce = force_bruteforce
+        self.skip_managed_policies_guess = skip_managed_policies_guess
 
         # Initialize session using the profile
         self.session = boto3.Session(profile_name=self.profile_name, region_name=self.region)
@@ -575,11 +579,20 @@ class AWSPEASS(CloudPEASS):
         """
         resources_data = []
 
+        principal_perms = {"allow": [], "deny": []}
+        
         # Try to get permissions from IAM policies
-        principal_perms = self.get_principal_permissions()
+        if not self.skip_iam_policies:
+            principal_perms = self.get_principal_permissions()
+        else:
+            print(f"{Fore.YELLOW}Skipping IAM policies retrieval (--skip-iam-policies flag set)")
         
         # Now try to brute-force permissions using simulate-principal-policy, if allowed
-        simulated_permissions = aws_peass.simulate_permissions()
+        simulated_permissions = []
+        if not self.skip_simulation:
+            simulated_permissions = aws_peass.simulate_permissions()
+        else:
+            print(f"{Fore.YELLOW}Skipping simulation of permissions (--skip-simulation flag set)")
 
         if simulated_permissions:
             principal_perms["allow"].extend(simulated_permissions)
@@ -599,7 +612,10 @@ class AWSPEASS(CloudPEASS):
         })
 
         brute_force = False
-        if resources_data[0]["permissions"]:
+        if self.force_bruteforce:
+            print(f"{Fore.YELLOW}Forcing brute-force (--force-bruteforce flag set)")
+            brute_force = True
+        elif resources_data[0]["permissions"]:
             # Ask the user if he wants to brute-force permissions
             print(f"{Fore.GREEN}Found permissions for the principal.")
             brute_force_input = input(f"{Fore.YELLOW}Do you still want to brute-force permissions? (y/N) ")
@@ -623,51 +639,54 @@ class AWSPEASS(CloudPEASS):
                 )
         
         if brute_force:
-            guess_permissions = input(f"{Fore.YELLOW}Do you want to guess permissions based on AWS managed policies? (Y/n) {Fore.RESET}")
-            if guess_permissions.lower() == "n":
-                return resources_data
-            
-            guesser = AWSManagedPoliciesGuesser(set(bf_permissions))
-            guessed_perms = guesser.guess_permissions()
+            if self.skip_managed_policies_guess:
+                print(f"{Fore.YELLOW}Skipping managed policies guess (--skip-managed-policies-guess flag set){Fore.RESET}")
+            else:
+                guess_permissions = input(f"{Fore.YELLOW}Do you want to guess permissions based on AWS managed policies? (Y/n) {Fore.RESET}")
+                if guess_permissions.lower() != "n":
+                    guesser = AWSManagedPoliciesGuesser(set(bf_permissions))
+                    guessed_perms = guesser.guess_permissions()
 
-            if guessed_perms:
-                print()
-                print("Color legend:")
-                print(f"{Fore.GREEN}  Green: Permissions that you already have{Fore.RESET}")
-                print(f"{Fore.BLUE}  Blue: Permissions that were guessed based on AWS managed policies{Fore.RESET}")
-                print()
+                    if guessed_perms:
+                        print()
+                        print("Color legend:")
+                        print(f"{Fore.GREEN}  Green: Permissions that you already have{Fore.RESET}")
+                        print(f"{Fore.BLUE}  Blue: Permissions that were guessed based on AWS managed policies{Fore.RESET}")
+                        print()
 
-            # Show each combination and ask the user which one to add
-            all_coms = []
-            i = 0
-            for key, value in guessed_perms.items():
-                i += 1
-                print(f"{Fore.YELLOW}[{i}]{Fore.WHITE} This combination has {Fore.YELLOW}{key}{Fore.WHITE} permissions not detected.\n    {Fore.WHITE}Policies: {Fore.CYAN}{', '.join(value['policies'])}\n    {Fore.WHITE}Permissions: {Fore.BLUE}{', '.join([f'{Fore.GREEN}{perm}{Fore.BLUE}' if perm in bf_permissions else perm for perm in value['permissions']])}{Fore.RESET}")
-                all_coms.append(value['permissions'])
-                print()
+                        # Show each combination and ask the user which one to add
+                        all_coms = []
+                        i = 0
+                        for key, value in guessed_perms.items():
+                            i += 1
+                            print(f"{Fore.YELLOW}[{i}]{Fore.WHITE} This combination has {Fore.YELLOW}{key}{Fore.WHITE} permissions not detected.\n    {Fore.WHITE}Policies: {Fore.CYAN}{', '.join(value['policies'])}\n    {Fore.WHITE}Permissions: {Fore.BLUE}{', '.join([f'{Fore.GREEN}{perm}{Fore.BLUE}' if perm in bf_permissions else perm for perm in value['permissions']])}{Fore.RESET}")
+                            all_coms.append(value['permissions'])
+                            print()
 
-            # Ask the user which combination to add
-            selected_comb = False
-            selected_combination = -1
-            while not selected_comb:
-                selected_combination = input(f"{Fore.YELLOW}Select a combination to add those permissions to check from 1 to {i} (1 is the recommended one) or -1 to not add any: {Fore.RESET}")
-                selected_combination = int(selected_combination)
-                if selected_combination < -1 or selected_combination == 0 or selected_combination > i:
-                    print(f"{Fore.RED}Invalid selection. Try again.{Fore.RESET}")
-                else:
-                    selected_comb = True
-            
-            if selected_combination != -1:
-                selected_combination -= 1
-                resources_data.append(
-                    {
-                        "id": "",
-                        "name": "",
-                        "type": "",
-                        "permissions": all_coms[selected_combination],
-                        "deny_perms": []
-                    }
-                )
+                        # Ask the user which combination to add
+                        selected_comb = False
+                        selected_combination = -1
+                        while not selected_comb:
+                            selected_combination = input(f"{Fore.YELLOW}Select a combination to add those permissions to check from 1 to {i} (1 is the recommended one) or -1 to not add any: {Fore.RESET}")
+                            selected_combination = int(selected_combination)
+                            if selected_combination < -1 or selected_combination == 0 or selected_combination > i:
+                                print(f"{Fore.RED}Invalid selection. Try again.{Fore.RESET}")
+                            else:
+                                selected_comb = True
+                        
+                        if selected_combination != -1:
+                            selected_combination -= 1
+                            resources_data.append(
+                                {
+                                    "id": "",
+                                    "name": "",
+                                    "type": "",
+                                    "permissions": all_coms[selected_combination],
+                                    "deny_perms": []
+                                }
+                            )
+                    else:
+                        print(f"{Fore.YELLOW}No managed policy combinations found.{Fore.RESET}")
 
         return resources_data
 
@@ -684,6 +703,10 @@ if __name__ == "__main__":
     parser.add_argument('--debug', default=False, action="store_true", help="Print more infromation when brute-forcing permissions")
     parser.add_argument('--region', required=True, help="Indicate the region to use for brute-forcing permissions")
     parser.add_argument('--aws-services', help="Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)")
+    parser.add_argument('--skip-iam-policies', action="store_true", default=False, help="Skip retrieving permissions from IAM policies")
+    parser.add_argument('--skip-simulation', action="store_true", default=False, help="Skip simulating permissions using simulate-principal-policy")
+    parser.add_argument('--force-bruteforce', action="store_true", default=False, help="Force brute-force without asking")
+    parser.add_argument('--skip-managed-policies-guess', action="store_true", default=False, help="Skip guessing permissions based on AWS managed policies")
 
     args = parser.parse_args()
 
@@ -700,6 +723,10 @@ if __name__ == "__main__":
         debug=args.debug,
         region=args.region,
         aws_services=aws_services,
+        skip_iam_policies=args.skip_iam_policies,
+        skip_simulation=args.skip_simulation,
+        force_bruteforce=args.force_bruteforce,
+        skip_managed_policies_guess=args.skip_managed_policies_guess,
         out_path=args.out_json_path
     )
     # Run the analysis to get permissions from policies
