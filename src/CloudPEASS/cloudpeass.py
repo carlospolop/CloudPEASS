@@ -24,6 +24,49 @@ HACKTRICKS_AI_ENDPOINT = "https://www.hacktricks.ai/api/ht-api"
 PERMISSIONS_CATALOG_BASE_URL = "https://raw.githubusercontent.com/carlospolop/Blue-CloudPEASS/main"
 PERMISSIONS_CATALOG_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
+
+class CloudResource:
+    """
+    Standardized resource representation across all cloud providers.
+    Ensures consistent JSON output format for AWS, Azure, and GCP.
+    """
+    def __init__(self, resource_id: str, name: str, resource_type: str, 
+                 permissions: list = None, deny_perms: list = None, is_admin: bool = False, **extra_fields):
+        self.id = resource_id
+        self.name = name
+        self.type = resource_type
+        self.permissions = permissions or []
+        self.deny_perms = deny_perms or []
+        self.is_admin = is_admin
+        # Store any extra fields (like assignmentType for Azure EntraID)
+        self.extra_fields = extra_fields
+    
+    def to_dict(self) -> dict:
+        """Convert resource to dictionary for JSON serialization."""
+        result = {
+            "id": self.id,
+            "name": self.name,
+            "type": self.type,
+            "permissions": self.permissions,
+            "deny_perms": self.deny_perms,
+            "is_admin": self.is_admin
+        }
+        # Add any extra fields
+        result.update(self.extra_fields)
+        return result
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        """Create CloudResource from dictionary."""
+        resource_id = data.pop("id", "")
+        name = data.pop("name", "")
+        resource_type = data.pop("type", "")
+        permissions = data.pop("permissions", [])
+        deny_perms = data.pop("deny_perms", [])
+        is_admin = data.pop("is_admin", False)
+        # Everything else goes to extra_fields
+        return cls(resource_id, name, resource_type, permissions, deny_perms, is_admin, **data)
+
 SENSITIVE_RESPONSE_FORMAT = """\n
 ### RESPONSE FORMAT
 Your complete response must be a valid JSON with the following format:
@@ -140,7 +183,7 @@ class CloudPEASS:
         This is done to reduce the number of entries and make the analysis more efficient.
 
         Args:
-            resources (list): List of resource dictionaries with permissions.
+            resources (list): List of CloudResource objects or dictionaries with permissions.
 
         Returns:
             dict: Keys as frozensets of permissions, values as lists of resources with those permissions.
@@ -149,16 +192,26 @@ class CloudPEASS:
         # Group by affected resources first
         final_resources = {}
         for resource in resources:
+            # Convert CloudResource to dict if needed
+            if isinstance(resource, CloudResource):
+                resource = resource.to_dict()
+            
             resource_id = resource["id"]
             resource_type = resource["type"]
             resource_name = resource["name"]
+            is_admin = resource.get("is_admin", False)
             if resource_id not in final_resources:
                 final_resources[resource_id] = {
                     "id": resource_id,
                     "type": resource_type,
                     "name": resource_name,
-                    "permissions": set()
+                    "permissions": set(),
+                    "is_admin": is_admin
                 }
+            else:
+                # If resource already exists and either the existing or new one is admin, mark as admin
+                if is_admin:
+                    final_resources[resource_id]["is_admin"] = True
             final_resources[resource_id]["permissions"].update(resource["permissions"])
 
 
@@ -196,6 +249,16 @@ class CloudPEASS:
                     for perm in permissions:
                         if fnmatch.fnmatch(perm, pattern):
                             found_sensitive.add(perm)
+
+        # Also include permissions from YAML catalog
+        catalog = self._load_permissions_catalog()
+        for perm in permissions:
+            if not isinstance(perm, str) or perm.startswith("-"):
+                continue
+            if perm in catalog.get("critical", set()):
+                found_very_sensitive.add(perm)
+            elif perm in catalog.get("high", set()):
+                found_sensitive.add(perm)
 
         found_sensitive -= found_very_sensitive  # Avoid duplicates
 
@@ -584,11 +647,25 @@ class CloudPEASS:
         perms_catalog["medium"] -= (perms_catalog["critical"] | perms_catalog["high"])
         perms_catalog["low"] -= (perms_catalog["critical"] | perms_catalog["high"] | perms_catalog["medium"])
 
+        # Convert CloudResource objects to dicts for resource IDs
+        resource_ids = []
+        is_admin = False
+        for r in resources_group:
+            r_dict = r.to_dict() if isinstance(r, CloudResource) else r
+            # Debug: Check if we're properly detecting is_admin
+            if r_dict.get("is_admin", False):
+                is_admin = True
+            if "/" in r_dict["id"]:
+                resource_ids.append(r_dict["id"])
+            else:
+                resource_ids.append(r_dict["id"] + ":" + r_dict["type"] + ":" + r_dict["name"])
+
         return {
             "permissions": list(perms_set),
-            "resources": [r["id"] if "/" in r["id"] else r["id"] + ":" + r["type"] + ":" + r["name"] for r in resources_group],
+            "resources": resource_ids,
             "sensitive_perms": sensitive_perms_serializable,
-            "permissions_cat": {k: sorted(v) for k, v in perms_catalog.items()}
+            "permissions_cat": {k: sorted(v) for k, v in perms_catalog.items()},
+            "is_admin": is_admin
         }
     
 
@@ -602,8 +679,19 @@ class CloudPEASS:
         print(f"{Fore.MAGENTA}\nGetting all your permissions...")
         resources = self.get_resources_and_permissions()
         final_resources = []
+        has_admin = False
         for resource in resources:
-            if resource["permissions"]:
+            # Handle both CloudResource objects and dictionaries
+            if isinstance(resource, CloudResource):
+                perms = resource.permissions
+                is_admin = resource.is_admin
+            else:
+                perms = resource.get("permissions", [])
+                is_admin = resource.get("is_admin", False)
+            
+            if is_admin:
+                has_admin = True
+            if perms:
                 final_resources.append(resource)
         resources = final_resources
 
@@ -651,20 +739,40 @@ class CloudPEASS:
             all_medium_perms.update(medium)
 
             print(f"{Fore.WHITE}Resources: {Fore.CYAN}{f'{Fore.WHITE} , {Fore.CYAN}'.join(result['resources'])}")
-            perms_msg = f"{Fore.WHITE}Permissions: "
-
+            
+            # Organize permissions by category
+            wildcards_perms = []
+            critical_perms = []
+            high_perms = []
+            medium_perms = []
+            low_perms = []
+            
             for perm in perms:
-                if perm in critical:
-                    perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
-                
+                if '*' in perm:
+                    wildcards_perms.append(perm)
+                elif perm in critical:
+                    critical_perms.append(perm)
                 elif perm in high:
-                    perms_msg += f"{Fore.RED}{perm}{Style.RESET_ALL}, "
-
+                    high_perms.append(perm)
                 elif perm in medium:
-                    perms_msg += f"{Fore.YELLOW}{perm}{Style.RESET_ALL}, "
-                
+                    medium_perms.append(perm)
                 else:
-                    perms_msg += f"{Fore.WHITE}{perm}{Style.RESET_ALL}, "
+                    low_perms.append(perm)
+            
+            # Build permissions message with sorted categories
+            perms_msg = f"{Fore.WHITE}Permissions: "
+            
+            for perm in wildcards_perms + critical_perms:
+                perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
+            
+            for perm in high_perms:
+                perms_msg += f"{Fore.RED}{perm}{Style.RESET_ALL}, "
+            
+            for perm in medium_perms:
+                perms_msg += f"{Fore.YELLOW}{perm}{Style.RESET_ALL}, "
+            
+            for perm in low_perms:
+                perms_msg += f"{Fore.WHITE}{perm}{Style.RESET_ALL}, "
             
             perms_msg = perms_msg.strip()
             if perms_msg.endswith(","):
@@ -678,8 +786,18 @@ class CloudPEASS:
             print(f"{Fore.RED}No permissions found. Exiting.")
 
         # Proceed with Hacktricks AI check if enabled
+        elif self.out_path:
+            print(f"{Fore.GREEN}JSON output specified. Skipping Hacktricks AI analysis (results saved to {self.out_path}).")
+        
         elif self.not_use_ht_ai:
             print(f"{Fore.YELLOW}Hacktricks AI analysis disabled. Skipping Hacktricks AI recommendations.")
+        
+        elif has_admin:
+            pass  # Skip HackTricks AI when admin access is detected
+        
+        elif not all_critical_perms and not all_high_perms:
+            print(f"{Fore.GREEN}\nNo critical or high-risk permissions found. Skipping Hacktricks AI analysis.")
+            print(f"{Fore.BLUE}Your permissions appear to be low-risk. No privilege escalation paths detected.")
         
         else:
 
@@ -699,7 +817,27 @@ class CloudPEASS:
                 for attack in hacktricks_analysis:
                     print(f"{Fore.BLUE}\nTitle: {Fore.WHITE}{attack['title']}")
                     print(f"{Fore.BLUE}Description: {Fore.WHITE}{attack['description']}")
-                    print(f"{Fore.BLUE}Permissions: {Fore.WHITE}{', '.join(attack['permissions'])}")
+                    
+                    # Color permissions based on their sensitivity level
+                    perms_msg = f"{Fore.BLUE}Permissions: "
+                    for perm in attack['permissions']:
+                        # Check for wildcards first (*, service:*, *:action, etc.)
+                        if '*' in perm:
+                            perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
+                        elif perm in all_critical_perms:
+                            perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
+                        elif perm in all_high_perms:
+                            perms_msg += f"{Fore.RED}{perm}{Style.RESET_ALL}, "
+                        elif perm in all_medium_perms:
+                            perms_msg += f"{Fore.YELLOW}{perm}{Style.RESET_ALL}, "
+                        else:
+                            perms_msg += f"{Fore.WHITE}{perm}{Style.RESET_ALL}, "
+                    
+                    perms_msg = perms_msg.strip()
+                    if perms_msg.endswith(","):
+                        perms_msg = perms_msg[:-1]
+                    print(perms_msg)
+                    
                     print(f"{Fore.BLUE}Commands: {Fore.WHITE}{attack['commands']}\n")
                     # Append to output lines for later printing
                     print(Fore.LIGHTWHITE_EX + "-" * 80 + "\n" + Style.RESET_ALL)

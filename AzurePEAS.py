@@ -11,7 +11,7 @@ import re
 
 init(autoreset=True)
 
-from src.CloudPEASS.cloudpeass import CloudPEASS
+from src.CloudPEASS.cloudpeass import CloudPEASS, CloudResource
 from src.sensitive_permissions.azure import very_sensitive_combinations, sensitive_combinations
 from src.azure.entraid import EntraIDPEASS
 from src.azure.definitions import SHAREPOINT_FOCI_APPS, ONEDRIVE_FOCI_APPS, EMAIL_FOCI_APPS, TEAMS_FOCI_APPS_GRAPH, TEAMS_FOCI_APPS_SKYPE, ONENOTE_FOCI_APPS, CONTACTS_FOCI_APPS, TASKS_FOCI_APPS, FOCI_APPS
@@ -53,10 +53,11 @@ AZURE_CLARIFICATIONS = """- The permission "Microsoft.KeyVault/vaults/secrets/re
 
 
 class AzurePEASS(CloudPEASS):
-    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, not_enumerate_m365, out_path=None, check_only_subs=[]):
+    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, not_enumerate_m365, skip_entraid, out_path=None, check_only_subs=[]):
         self.foci_refresh_token = foci_refresh_token
         self.tenant_id = tenant_id
         self.not_enumerate_m365 = not_enumerate_m365
+        self.skip_entraid = skip_entraid
 
         if self.foci_refresh_token:
             if not self.tenant_id:
@@ -84,8 +85,11 @@ class AzurePEASS(CloudPEASS):
         if not self.arm_token:
             print(f"{Fore.RED}ARM token not provided. Skipping Azure permissions analysis")
         
-        if not self.graph_token:
+        if not self.graph_token and not self.skip_entraid:
             print(f"{Fore.RED}Graph token not provided. Skipping EntraID permissions analysis. If App creds, it might have Entra ID roles or API permissions of type 'application' that I cannot list.")
+        
+        if self.skip_entraid:
+            print(f"{Fore.YELLOW}Skipping EntraID enumeration (--skip-entraid flag set)")
 
         if self.arm_token:
             self.check_jwt_token(self.arm_token, ["https://management.azure.com/", "https://management.core.windows.net/", "https://management.azure.com"])
@@ -268,7 +272,7 @@ class AzurePEASS(CloudPEASS):
             except Exception as e:
                 print(f"{Fore.RED}Failed to decode Graph token: {str(e)}")
         
-        if self.foci_refresh_token and not self.not_enumerate_m365:
+        if self.foci_refresh_token and not self.not_enumerate_m365 and not self.skip_entraid:
             # SHAREPOINT
             print(f"{Fore.YELLOW}\nEnumerating SharePoint files | max depth 3 | top 10 {Fore.RESET}(Thanks to {Fore.BLUE}JoelGMSec{Fore.RESET} for the idea):")
             sharepoint_token = self.get_tokens_from_foci_with_scope(SHAREPOINT_FOCI_APPS)
@@ -699,12 +703,32 @@ class AzurePEASS(CloudPEASS):
                 # Add subscription permissions
                 perms = self.get_permissions_for_resource(f"/subscriptions/{sub_id}")
                 if perms:
-                    sub_resources.append({
-                        "id": f"/subscriptions/{sub_id}",
-                        "name": sub_id,
-                        "type": "subscription",
-                        "permissions": perms
-                    })
+                    # Check if user is admin/owner on this subscription
+                    is_admin = self._is_admin_azure(perms)
+                    if is_admin:
+                        print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
+                        print(f"{Fore.RED}{Back.YELLOW}  ADMINISTRATOR ACCESS DETECTED - Skipping enumeration                           {Style.RESET_ALL}")
+                        print(f"{Fore.RED}{Back.YELLOW}  Principal has Owner/Admin access on subscription {sub_id[:20]}...{' '*(21)}{Style.RESET_ALL}")
+                        print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
+                        
+                        # Return only the subscription resource, skip enumeration
+                        return [CloudResource(
+                            resource_id=f"/subscriptions/{sub_id}",
+                            name=sub_id,
+                            resource_type="subscription",
+                            permissions=perms,
+                            deny_perms=[],
+                            is_admin=True
+                        )]
+                    
+                    sub_resources.append(CloudResource(
+                        resource_id=f"/subscriptions/{sub_id}",
+                        name=sub_id,
+                        resource_type="subscription",
+                        permissions=perms,
+                        deny_perms=[],
+                        is_admin=is_admin
+                    ))
 
                 # Process resources in parallel with progress bar
                 def get_resource_permissions(res):
@@ -712,12 +736,13 @@ class AzurePEASS(CloudPEASS):
                     res_name = res.get("name")
                     res_type = res.get("type")
                     perms = self.get_permissions_for_resource(res_id)
-                    return {
-                        "id": res_id,
-                        "name": res_name,
-                        "type": res_type,
-                        "permissions": perms
-                    }
+                    return CloudResource(
+                        resource_id=res_id,
+                        name=res_name,
+                        resource_type=res_type,
+                        permissions=perms,
+                        deny_perms=[]
+                    )
 
                 if raw_resources:
                     # Use 3 threads for permission fetching per subscription
@@ -738,7 +763,7 @@ class AzurePEASS(CloudPEASS):
             for sub_result in results:
                 resources_data.extend(sub_result)
 
-        if self.graph_token:
+        if self.graph_token and not self.skip_entraid:
             print(f"{Fore.MAGENTA}Getting Permissions from EntraID...")
 
             # For SPs, let's get their API permissions
@@ -754,6 +779,20 @@ class AzurePEASS(CloudPEASS):
                 resources_data += self.EntraIDPEASS.get_entraid_owns()
 
         return resources_data
+    
+    def _is_admin_azure(self, permissions):
+        """
+        Check if the permissions indicate admin/owner access in Azure.
+        Returns True if user has Owner-like access.
+        """
+        perms_str = [str(p).lower() for p in permissions]
+        
+        # Check for wildcard permissions that indicate full access
+        admin_perms = ["*" ,"*/*", "*/action", "*/write", "*/create", "*/update"]
+        if any(admin in p for admin in admin_perms for p in perms_str):
+            return True
+        
+        return False
     
     def get_accesstoken_from_foci(self, client_id, scopes):
         """
@@ -1000,6 +1039,7 @@ if __name__ == "__main__":
     parser.add_argument('--graph-token', help="Azure Graph authentication token")
     parser.add_argument('--foci-refresh-token', default=None, help="FOCI Refresh Token")
     parser.add_argument('--not-enumerate-m365', action="store_true", default=False, help="Don't enumerate M365 permissions")
+    parser.add_argument('--skip-entraid', action="store_true", default=False, help="Skip EntraID permissions enumeration and only focus on Azure subscriptions")
     
     # Authentication parameters
     parser.add_argument('--username', help="Username for authentication (used with --use-username-password)")
@@ -1107,6 +1147,7 @@ if __name__ == "__main__":
         not_use_ht_ai=args.not_use_hacktricks_ai,
         num_threads=args.threads,
         not_enumerate_m365=args.not_enumerate_m365,
+        skip_entraid=args.skip_entraid,
         out_path=args.out_json_path,
         check_only_subs=check_only_subs
     )

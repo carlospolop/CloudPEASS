@@ -6,7 +6,7 @@ import time
 import requests  # Needed for downloading AWS permissions for simulation
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from colorama import Fore, init
+from colorama import Fore, Style, Back, init
 import re
 import math
 import subprocess
@@ -15,7 +15,7 @@ import binascii
 
 init(autoreset=True)
 
-from src.CloudPEASS.cloudpeass import CloudPEASS
+from src.CloudPEASS.cloudpeass import CloudPEASS, CloudResource
 from src.sensitive_permissions.aws import very_sensitive_combinations, sensitive_combinations
 from src.aws.awsbruteforce import AWSBruteForce
 from src.aws.awsmanagedpoliciesguesser import AWSManagedPoliciesGuesser
@@ -130,7 +130,8 @@ class AWSPEASS(CloudPEASS):
             response = self.iam_client.list_groups_for_user(UserName=user_name)
             groups = response.get("Groups", [])
         except Exception as e:
-            print(f"{Fore.RED}Error listing groups for user {user_name}: {e}")
+            # Re-raise the exception to be handled by the caller
+            raise e
         return groups
 
     def list_group_attached_policies(self, group_name):
@@ -269,7 +270,7 @@ class AWSPEASS(CloudPEASS):
             try:
                 groups = self.list_groups_for_user(user_name)
             except Exception as e:
-                print(f"{Fore.RED}Error listing groups for user {user_name}: {e}")
+                print(f"{Fore.YELLOW}Warning: Cannot list groups for user {user_name} (permission denied). Continuing without group permissions...")
                 groups = []
 
             for group in groups:
@@ -580,17 +581,44 @@ class AWSPEASS(CloudPEASS):
         resources_data = []
 
         principal_perms = {"allow": [], "deny": []}
+        iam_policies_retrieved = False
         
         # Try to get permissions from IAM policies
         if not self.skip_iam_policies:
             principal_perms = self.get_principal_permissions()
+            iam_policies_retrieved = bool(principal_perms["allow"] or principal_perms["deny"])
         else:
             print(f"{Fore.YELLOW}Skipping IAM policies retrieval (--skip-iam-policies flag set)")
+        
+        # Check for admin access early to skip enumeration if detected
+        is_admin = self._is_admin_aws(principal_perms["allow"])
+        if is_admin:
+            print(f"{Fore.RED}{Back.YELLOW}═══════════════════════════════════════════════════════════════════════════════{Style.RESET_ALL}")
+            print(f"{Fore.RED}{Back.YELLOW}  ADMINISTRATOR ACCESS DETECTED - Skipping enumeration/simulation/bruteforce   {Style.RESET_ALL}")
+            print(f"{Fore.RED}{Back.YELLOW}  Principal has Administrator access to this AWS account                       {Style.RESET_ALL}")
+            print(f"{Fore.RED}{Back.YELLOW}═══════════════════════════════════════════════════════════════════════════════{Style.RESET_ALL}")
+            
+            resources_data.append(CloudResource(
+                resource_id="",
+                name="",
+                resource_type="",
+                permissions=principal_perms["allow"],
+                deny_perms=principal_perms["deny"],
+                is_admin=True
+            ))
+            return resources_data
         
         # Now try to brute-force permissions using simulate-principal-policy, if allowed
         simulated_permissions = []
         if not self.skip_simulation:
-            simulated_permissions = aws_peass.simulate_permissions()
+            # If IAM policies were successfully retrieved, ask before simulating
+            should_simulate = True
+            if iam_policies_retrieved:
+                user_input = input(f"{Fore.YELLOW}Permissions were successfully retrieved from IAM policies. Do you want to also simulate permissions (may find additional permissions but slower)? (y/N): {Fore.RESET}")
+                should_simulate = user_input.lower() == 'y'
+            
+            if should_simulate:
+                simulated_permissions = aws_peass.simulate_permissions()
         else:
             print(f"{Fore.YELLOW}Skipping simulation of permissions (--skip-simulation flag set)")
 
@@ -598,24 +626,21 @@ class AWSPEASS(CloudPEASS):
             principal_perms["allow"].extend(simulated_permissions)
         
         principal_perms["allow"] = list(set(principal_perms["allow"]))
-
-        if "*" in principal_perms["allow"]:
-            print(f"{Fore.GREEN}Principal has full access (*). You can do mostly everything. Skipping further analysis.")
-            exit(0)
         
-        resources_data.append({
-            "id": "",
-            "name": "",
-            "type": "",
-            "permissions": principal_perms["allow"],
-            "deny_perms": principal_perms["deny"]
-        })
+        resources_data.append(CloudResource(
+            resource_id="",
+            name="",
+            resource_type="",
+            permissions=principal_perms["allow"],
+            deny_perms=principal_perms["deny"],
+            is_admin=False
+        ))
 
         brute_force = False
         if self.force_bruteforce:
             print(f"{Fore.YELLOW}Forcing brute-force (--force-bruteforce flag set)")
             brute_force = True
-        elif resources_data[0]["permissions"]:
+        elif resources_data[0].permissions:
             # Ask the user if he wants to brute-force permissions
             print(f"{Fore.GREEN}Found permissions for the principal.")
             brute_force_input = input(f"{Fore.YELLOW}Do you still want to brute-force permissions? (y/N) ")
@@ -628,15 +653,13 @@ class AWSPEASS(CloudPEASS):
         if brute_force:
             bf_permissions = self.AWSBruteForce.brute_force_permissions()
             if bf_permissions:
-                resources_data.append(
-                    {
-                        "id": "",
-                        "name": "",
-                        "type": "",
-                        "permissions": bf_permissions,
-                        "deny_perms": []
-                    }
-                )
+                resources_data.append(CloudResource(
+                    resource_id="",
+                    name="",
+                    resource_type="",
+                    permissions=bf_permissions,
+                    deny_perms=[]
+                ))
         
         if brute_force:
             if self.skip_managed_policies_guess:
@@ -676,19 +699,35 @@ class AWSPEASS(CloudPEASS):
                         
                         if selected_combination != -1:
                             selected_combination -= 1
-                            resources_data.append(
-                                {
-                                    "id": "",
-                                    "name": "",
-                                    "type": "",
-                                    "permissions": all_coms[selected_combination],
-                                    "deny_perms": []
-                                }
-                            )
+                            resources_data.append(CloudResource(
+                                resource_id="",
+                                name="",
+                                resource_type="",
+                                permissions=all_coms[selected_combination],
+                                deny_perms=[]
+                            ))
                     else:
                         print(f"{Fore.YELLOW}No managed policy combinations found.{Fore.RESET}")
 
         return resources_data
+    
+    def _is_admin_aws(self, permissions):
+        """
+        Check if the permissions indicate admin/administrator access in AWS.
+        Returns True if user has Administrator-like access.
+        """
+        perms_str = [str(p).lower() for p in permissions]
+        
+        # Check for wildcard permission that indicates full access
+        amdmin_privs = [
+            "*",
+            "*:*",
+            "iam:*"
+        ]
+        if any(admin in p for admin in amdmin_privs for p in perms_str):
+            return True
+        
+        return False
 
 if __name__ == "__main__":
 

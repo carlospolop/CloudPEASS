@@ -15,7 +15,7 @@ from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google_auth_httplib2 import AuthorizedHttp
 
-from src.CloudPEASS.cloudpeass import CloudPEASS
+from src.CloudPEASS.cloudpeass import CloudPEASS, CloudResource
 from src.sensitive_permissions.gcp import very_sensitive_combinations, sensitive_combinations
 from src.gcp.definitions import NOT_COMPUTE_PERMS, NOT_FUNCTIONS_PERMS, NOT_STORAGE_PERMS, NOT_SA_PERMS, NOT_PROJECT_PERMS, NOT_FOLDER_PERMS, NOT_ORGANIZATION_PERMS
 
@@ -66,7 +66,7 @@ INVALID_PERMS = {}
 
 
 class GCPPEASS(CloudPEASS):
-	def __init__(self, credentials, extra_token, projects, folders, orgs, sas, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path, billing_project, proxy, print_invalid_perms, dont_get_iam_policies):
+	def __init__(self, credentials, extra_token, projects, folders, orgs, sas, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path, billing_project, proxy, print_invalid_perms, dont_get_iam_policies, skip_bruteforce=False):
 		self.credentials = credentials
 		self.extra_token = extra_token
 		self.projects = [p.strip() for p in projects.split(",")] if projects else []
@@ -79,6 +79,7 @@ class GCPPEASS(CloudPEASS):
 		self.groups = []
 		self.print_invalid_perms = print_invalid_perms
 		self.dont_get_iam_policies = dont_get_iam_policies
+		self.skip_bruteforce = skip_bruteforce
 		
 		if proxy:
 			proxy = proxy.split("//")[-1] # Porotocol not needed
@@ -539,22 +540,27 @@ class GCPPEASS(CloudPEASS):
 			targets.append({"id": f"organizations/{org}", "type": "organization"})
 
 		### For each project, add VMs, Cloud Functions, and Storage buckets ###
+		# Track which projects will be enumerated for sub-resources
+		projects_to_enumerate = []
+		for proj in self.list_projects():
+			projects_to_enumerate.append(proj)
+		
 		print("Trying to list VMs, Cloud Functions, Storage buckets and Service Accounts on each project...")
 		def process_project(proj):
 			local_targets = []
 			for vm in self.list_vms(proj):
-				local_targets.append({"id": vm, "type": "vm"})
+				local_targets.append({"id": vm, "type": "vm", "project": proj})
 			for func in self.list_functions(proj):
-				local_targets.append({"id": func, "type": "function"})
+				local_targets.append({"id": func, "type": "function", "project": proj})
 			for bucket in self.list_storages(proj):
-				local_targets.append({"id": bucket, "type": "storage"})
+				local_targets.append({"id": bucket, "type": "storage", "project": proj})
 			for sa in self.list_service_accounts(proj):
-				local_targets.append({"id": sa, "type": "service_account"})
+				local_targets.append({"id": sa, "type": "service_account", "project": proj})
 			return local_targets
 
 		# Process projects concurrently using a thread pool
 		with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-			futures = {executor.submit(process_project, proj): proj for proj in self.list_projects()}
+			futures = {executor.submit(process_project, proj): proj for proj in projects_to_enumerate}
 			for future in tqdm(as_completed(futures), total=len(futures), desc="Processing projects"):
 				targets.extend(future.result())
 		
@@ -573,11 +579,26 @@ class GCPPEASS(CloudPEASS):
 		### Start looking for IAM policies and permissions ###
 		found_permissions = []
 		lock = Lock()
+		admin_orgs = set()  # Track organizations with admin access
+		admin_folders = set()  # Track folders with admin access
+		admin_projects = set()  # Track projects with admin access
 
-		def process_target_iam(target):
+		def process_target_iam(target, inherited_admin=False):
+			# If already known to be admin via inheritance, mark as admin without checking
+			if inherited_admin:
+				return CloudResource(
+					resource_id=target["id"],
+					name=target["id"].split("/")[-1] if len(target["id"].split("/")) > 2 else target["id"],
+					resource_type=target["type"],
+					permissions=[],  # Don't enumerate individual permissions for inherited admin
+					deny_perms=[],
+					is_admin=True
+				)
+			
 			# Attempt to retrieve IAM policy
 			policy = self.get_iam_policy(target["id"])
 			collected = []
+			is_admin_by_role = False
 
 			if policy and "bindings" in policy:
 				for binding in policy["bindings"]:
@@ -592,7 +613,7 @@ class GCPPEASS(CloudPEASS):
 						if self.email.lower() in member:
 							affected = True
 						
-						elif "goup:" in member and self.groups:
+						elif "group:" in member and self.groups:
 							if any(g.lower() in member.lower() for g in self.groups):
 								affected = True
 						
@@ -600,36 +621,185 @@ class GCPPEASS(CloudPEASS):
 								affected = True
 
 						if affected:
-							role = binding.get("role")
+							role = binding.get("role", "")
+							
+							# Check if role is a direct admin role
+							if target["type"] == "organization" and role.lower() in ["roles/owner", "roles/resourcemanager.organizationadmin"]:
+								is_admin_by_role = True
+							elif target["type"] == "folder" and role.lower() in ["roles/owner", "roles/resourcemanager.folderadmin"]:
+								is_admin_by_role = True
+							elif target["type"] == "project" and role.lower() in ["roles/owner", "roles/editor"]:
+								is_admin_by_role = True
+							
 							permissions = self.get_permissions_from_role(role)
 							if permissions == "Stop":
 								break
 							collected.extend(permissions)
 			
-			return {
-				"id": target["id"],
-				"name": target["id"].split("/")[-1] if len(target["id"].split("/")) > 2 else target["id"],
-				"permissions": list(set(collected)),
-				"type": target["type"]
-			}
-		
+			# Check if user has admin access (either by role or by permissions)
+			collected_unique = list(set(collected))
+			is_admin = is_admin_by_role or self._is_admin_gcp(collected_unique, target["type"])
+			
+			# Track admin resources to skip sub-resources based on hierarchy
+			if is_admin:
+				with lock:
+					if target["type"] == "organization":
+						org_id = target["id"].split("/")[-1]
+						admin_orgs.add(org_id)
+					elif target["type"] == "folder":
+						folder_id = target["id"].split("/")[-1]
+						admin_folders.add(folder_id)
+					elif target["type"] == "project":
+						project_id = target["id"].split("/")[-1]
+						admin_projects.add(project_id)
+
+			return CloudResource(
+				resource_id=target["id"],
+				name=target["id"].split("/")[-1] if len(target["id"].split("/")) > 2 else target["id"],
+				resource_type=target["type"],
+				permissions=collected_unique,
+				deny_perms=[],
+				is_admin=is_admin
+			)
+		# Process IAM policies in hierarchical order to detect inherited admin access
 		if not self.dont_get_iam_policies:
-			# Use a thread pool to process each target concurrently
-			with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-				# Submit tasks for each target
-				futures = {executor.submit(process_target_iam, target): target for target in targets}
-				# Iterate over completed futures with a progress bar
-				for future in tqdm(as_completed(futures), total=len(futures), desc="Checking IAM policies", leave=False):
-					res = future.result()
-					with lock:
-						found_permissions.append(res)
-
+			# Step 1: Check organizations first
+			org_targets = [t for t in targets if t["type"] == "organization"]
+			if org_targets:
+				print("Checking IAM policies for organizations...")
+				with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+					futures = {executor.submit(process_target_iam, target, False): target for target in org_targets}
+					for future in tqdm(as_completed(futures), total=len(futures), desc="Checking org IAM policies"):
+						res = future.result()
+						with lock:
+							found_permissions.append(res)
+			
+			# Step 2: Check folders (could inherit from admin orgs)
+			folder_targets = [t for t in targets if t["type"] == "folder"]
+			if folder_targets:
+				print("Checking IAM policies for folders...")
+				with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+					futures = {executor.submit(process_target_iam, target, False): target for target in folder_targets}
+					for future in tqdm(as_completed(futures), total=len(futures), desc="Checking folder IAM policies"):
+						res = future.result()
+						with lock:
+							found_permissions.append(res)
+			
+			# If org admin detected, skip everything else
+			if admin_orgs:
+				print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
+				print(f"{Fore.RED}{Back.YELLOW}  ORGANIZATION ADMINISTRATOR DETECTED                                           {Style.RESET_ALL}")
+				print(f"{Fore.RED}{Back.YELLOW}  User is admin of {len(admin_orgs)} organization(s): {', '.join(admin_orgs)}{' '*(36-len(', '.join(admin_orgs)))}{Style.RESET_ALL}")
+				print(f"{Fore.RED}{Back.YELLOW}  Skipping enumeration of all {len([t for t in targets if t['type'] in ['folder', 'project']]) + len([t for t in targets if t['type'] not in ['organization', 'folder', 'project']])} folders, projects, and sub-resources{' '*(12)}{Style.RESET_ALL}")
+				print(f"{Fore.RED}{Back.YELLOW}  (Organization admin has full access to everything in the org)                 {Style.RESET_ALL}")
+				print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
+				# Mark all projects as admin without checking them
+				for t in targets:
+					if t["type"] in ["project", "folder"]:
+						found_permissions.append(CloudResource(
+							resource_id=t["id"],
+							name=t["id"].split("/")[-1] if "/" in t["id"] else t["id"],
+							resource_type=t["type"],
+							permissions=[],
+							deny_perms=[],
+							is_admin=True
+						))
+						if t["type"] == "project":
+							admin_projects.add(t["id"].split("/")[-1])
+			else:
+				# Step 3: Check projects - mark as admin if under admin org/folder
+				project_targets = [t for t in targets if t["type"] == "project"]
+				if project_targets:
+					print("Checking IAM policies for projects...")
+					if admin_folders:
+						print(f"{Fore.YELLOW}Note: User is admin of {len(admin_folders)} folder(s), projects may inherit admin access")
+					
+					with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+						futures = {}
+						for target in project_targets:
+							# Check directly since no org admin
+							inherited = False
+							futures[executor.submit(process_target_iam, target, inherited)] = target
+						
+						for future in tqdm(as_completed(futures), total=len(futures), desc="Checking project IAM policies"):
+							res = future.result()
+							with lock:
+								found_permissions.append(res)
+								# Track if project is admin via inheritance
+								if res.is_admin:
+									project_id = res.id.split("/")[-1]
+									admin_projects.add(project_id)
+				
+				# Step 4: Check sub-resources (VMs, functions, etc.) - skip if under admin project
+				subresource_targets = [t for t in targets if t["type"] not in ["organization", "folder", "project"]]
+				if subresource_targets:
+					# Filter out sub-resources under admin projects
+					if admin_projects:
+						original_count = len(subresource_targets)
+						non_admin_subresources = [t for t in subresource_targets if not (t.get("project") and t["project"] in admin_projects)]
+						admin_subresources = [t for t in subresource_targets if t.get("project") and t["project"] in admin_projects]
+						
+						if admin_subresources:
+							print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
+							print(f"{Fore.RED}{Back.YELLOW}  PROJECT ADMINISTRATOR DETECTED                                                {Style.RESET_ALL}")
+							print(f"{Fore.RED}{Back.YELLOW}  User is admin of {len(admin_projects)} project(s): {', '.join(list(admin_projects)[:3])}{('...' if len(admin_projects) > 3 else '')}{' '*(40-len(', '.join(list(admin_projects)[:3])))}{Style.RESET_ALL}")
+							print(f"{Fore.RED}{Back.YELLOW}  Skipping enumeration of {len(admin_subresources)} sub-resources from admin projects{' '*(23)}{Style.RESET_ALL}")
+							print(f"{Fore.RED}{Back.YELLOW}  (Project admin has full access to all resources in the project)              {Style.RESET_ALL}")
+							print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
+							
+							# Add admin sub-resources without checking
+							for t in admin_subresources:
+								found_permissions.append(CloudResource(
+									resource_id=t["id"],
+									name=t["id"].split("/")[-1] if "/" in t["id"] else t["id"],
+									resource_type=t["type"],
+									permissions=[],
+									deny_perms=[],
+									is_admin=True
+								))
+						
+						subresource_targets = non_admin_subresources
+					
+					if subresource_targets:
+						print(f"Checking IAM policies for {len(subresource_targets)} sub-resources...")
+						with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+							futures = {}
+							for target in subresource_targets:
+								# These are sub-resources from non-admin projects
+								futures[executor.submit(process_target_iam, target, False)] = target
+							
+							for future in tqdm(as_completed(futures), total=len(futures), desc="Checking sub-resource IAM policies"):
+								res = future.result()
+								with lock:
+									found_permissions.append(res)
+		# Filter out resources for bruteforce phase based on admin access hierarchy
+		# Note: Org admin already handled above, targets already filtered
 		
+		if admin_orgs:
+			# Already handled - keep only orgs for bruteforce
+			targets = [t for t in targets if t["type"] == "organization"]
+		elif admin_folders:
+			print(f"{Fore.YELLOW}Folder administrator detected on {len(admin_folders)} folder(s): {', '.join(admin_folders)}")
+			print(f"{Fore.YELLOW}Skipping all projects and sub-resources under admin folders")
+			# Keep orgs, admin folders, and projects/resources NOT under admin control
+			# Since we don't track folder→project hierarchy easily, we conservatively skip all projects
+			# when ANY folder admin is detected (user can specify specific projects if needed)
+			original_count = len(targets)
+			targets = [t for t in targets if t["type"] in ["organization", "folder"]]
+			skipped_count = original_count - len(targets)
+			if skipped_count > 0:
+				print(f"{Fore.GREEN}Skipped {skipped_count} project(s) and sub-resource(s)")
+		elif admin_projects:
+			print(f"{Fore.YELLOW}Project administrator detected on {len(admin_projects)} project(s): {', '.join(admin_projects)}")
+			print(f"{Fore.YELLOW}Skipping sub-resources for admin projects")
+			original_count = len(targets)
+			# Skip sub-resources (vm, function, storage, service_account) from admin projects
+			targets = [t for t in targets if not (t.get("project") and t["project"] in admin_projects and t["type"] not in ["project", "folder", "organization"])]
+			skipped_count = original_count - len(targets)
+			if skipped_count > 0:
+				print(f"{Fore.GREEN}Skipped {skipped_count} sub-resource(s) from admin projects")
 
-
-		### Start bruteforcing permissions ###
-
-		# Function to process each target resource
+		# Function to process each target resource for bruteforcing
 		def process_target(target):
 			# Get relevant permissions based on target type
 			relevant_perms = self.get_relevant_permissions(target["type"])
@@ -646,23 +816,68 @@ class GCPPEASS(CloudPEASS):
 					result = future.result()
 					collected.extend(result)
 
-			return {
-				"id": target["id"],
-				"name": target["id"].split("/")[-1] if len(target["id"].split("/")) > 2 else target["id"],
-				"permissions": collected,
-				"type": target["type"]
-			}
+			# Check if user has admin access
+			is_admin = self._is_admin_gcp(collected, target["type"])
 
-		if not targets:
-			print(f"{Fore.RED}No targets found! Indicate a project, folder or organization manually. Exiting.")
-			exit(1)
+			return CloudResource(
+				resource_id=target["id"],
+				name=target["id"].split("/")[-1] if len(target["id"].split("/")) > 2 else target["id"],
+				resource_type=target["type"],
+				permissions=collected,
+				deny_perms=[],
+				is_admin=is_admin
+			)
 
-		if any(p for entry in found_permissions for p in entry["permissions"] if p):
+		### Start bruteforcing permissions ###
+		
+		# Check if user has admin/owner access - if so, skip bruteforcing
+		has_admin = False
+		admin_resources = []
+		for entry in found_permissions:
+			# Convert CloudResource to dict if needed
+			if isinstance(entry, CloudResource):
+				entry_dict = entry.to_dict()
+			else:
+				entry_dict = entry
+			
+			if entry_dict.get("is_admin", False):
+				has_admin = True
+				admin_resources.append({
+					"type": entry_dict["type"],
+					"name": entry_dict["name"]
+				})
+		
+		# If admin detected, show summary and skip bruteforcing
+		if has_admin:
+			# Group by type
+			by_type = {}
+			for res in admin_resources:
+				res_type = res["type"]
+				if res_type not in by_type:
+					by_type[res_type] = []
+				by_type[res_type].append(res["name"])
+			
+			print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
+			print(f"{Fore.RED}{Back.YELLOW}  ADMINISTRATOR ACCESS DETECTED - Skipping bruteforce                          {Style.RESET_ALL}")
+			for res_type, names in by_type.items():
+				if len(names) <= 3:
+					names_str = ', '.join(names)
+				else:
+					names_str = f"{', '.join(names[:3])}... ({len(names)} total)"
+				print(f"{Fore.RED}{Back.YELLOW}  - {len(names)} {res_type}(s): {names_str}{' '*(60-len(f'{len(names)} {res_type}(s): {names_str}'))}{Style.RESET_ALL}")
+			print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
+			return found_permissions
+		if any(p for entry in found_permissions for p in (entry.to_dict() if isinstance(entry, CloudResource) else entry)["permissions"] if p):
+			if self.skip_bruteforce:
+				return found_permissions
 			user_input = input(f"{Fore.YELLOW}Permissions were found accessing the IAM policies. Do you want to continue bruteforcing permissions? [Y/n]: {Fore.WHITE}")
 			if user_input.lower() == 'n':
 				return found_permissions
 			
 		# Check if the user has permissions to check the permissions
+		if len(targets) == 0:
+			return found_permissions
+			
 		relevant_perms = self.get_relevant_permissions(targets[0]["type"])
 		perms_chunks = [relevant_perms[i:i+20] for i in range(0, len(relevant_perms), 20)]
 		# Just pass some permissions to check if the API is enabled
@@ -670,7 +885,7 @@ class GCPPEASS(CloudPEASS):
 		if can_bf_permissions:
 			with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
 				futures = {executor.submit(process_target, target): target for target in targets}
-				for future in tqdm(as_completed(futures), total=len(futures)):
+				for future in tqdm(as_completed(futures), total=len(futures), desc="Bruteforcing permissions"):
 					res = future.result()
 					with lock:
 						found_permissions.append(res)
@@ -681,6 +896,30 @@ class GCPPEASS(CloudPEASS):
 				print(f"{Fore.BLUE}{resource}: {', '.join(perms)}")
 
 		return found_permissions
+
+	def _is_admin_gcp(self, permissions, resource_type):
+		"""
+		Check if the permissions indicate admin/owner access in GCP.
+		Returns True if user has Owner-like access.
+		Only checks for project, folder, and organization resources.
+		"""
+		# Only check admin for high-level resources
+		if resource_type not in ["project", "folder", "organization"]:
+			return False
+		
+		perms_str = [str(p).lower() for p in permissions]
+
+		if resource_type == "project":
+			admin_perms = ["resourcemanager.projects.setiampolicy", "resourcemanager.projects.delete"]
+		elif resource_type == "folder":
+			admin_perms = ["resourcemanager.folders.setiampolicy", "resourcemanager.folders.delete"]
+		elif resource_type == "organization":
+			admin_perms = ["resourcemanager.organizations.setiampolicy", "resourcemanager.organizations.delete"]
+		
+		if all(ap in perms_str for ap in admin_perms):
+			return True
+		
+		return False
 	
 
 
@@ -957,6 +1196,7 @@ if __name__ == "__main__":
 
 	parser.add_argument('--extra-token', help="Extra token potentially with access over Gmail and/or Drive")
 	parser.add_argument('--dont-get-iam-policies', action="store_true", default=False, help="Do not get IAM policies for the resources")
+	parser.add_argument('--skip-bruteforce', action="store_true", default=False, help="Skip bruteforce permission enumeration without prompting")
 	parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/gcp_results.json)")
 	parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
 	parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to suggest attack paths")
@@ -986,6 +1226,7 @@ if __name__ == "__main__":
 		billing_project=args.billing_project,
 		proxy=args.proxy,
 		print_invalid_perms=args.print_invalid_permissions,
-		dont_get_iam_policies=args.dont_get_iam_policies
+		dont_get_iam_policies=args.dont_get_iam_policies,
+		skip_bruteforce=args.skip_bruteforce
 	)
 	gcp_peass.run_analysis()

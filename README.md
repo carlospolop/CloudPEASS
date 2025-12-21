@@ -42,11 +42,13 @@ To see the complete list of options, run:
 
 ```bash
 python3 ./AzurePEAS.py --help
-usage: AzurePEAS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--foci-refresh-token FOCI_REFRESH_TOKEN] [--not-enumerate-m365]
-                    [--username USERNAME] [--password PASSWORD] [--use-username-password] [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai]
 
-Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To check for Azure permissions an ARM token
-is needed. To check for Entra ID permissions a Graph token is needed.
+usage: AzurePEAS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--foci-refresh-token FOCI_REFRESH_TOKEN] [--not-enumerate-m365] [--skip-entraid]
+                    [--username USERNAME] [--password PASSWORD] [--use-username-password] [--check-only-these-subs CHECK_ONLY_THESE_SUBS] [--out-json-path OUT_JSON_PATH]
+                    [--threads THREADS] [--not-use-hacktricks-ai]
+
+Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To check for Azure permissions an ARM token is needed.
+To check for Entra ID permissions a Graph token is needed.
 
 options:
   -h, --help            show this help message and exit
@@ -59,15 +61,18 @@ options:
   --foci-refresh-token FOCI_REFRESH_TOKEN
                         FOCI Refresh Token
   --not-enumerate-m365  Don't enumerate M365 permissions
+  --skip-entraid        Skip EntraID permissions enumeration and only focus on Azure subscriptions
   --username USERNAME   Username for authentication (used with --use-username-password)
   --password PASSWORD   Password for authentication (used with --use-username-password)
   --use-username-password
                         Use username/password flow instead of device code flow (only works without MFA)
+  --check-only-these-subs CHECK_ONLY_THESE_SUBS
+                        In case you just want to check specific subscriptions, provide a comma-separated list of subscription IDs (e.g. 'sub1,sub2')
   --out-json-path OUT_JSON_PATH
                         Output JSON file path (e.g. /tmp/azure_results.json)
   --threads THREADS     Number of threads to use
   --not-use-hacktricks-ai
-                        Don't use Hacktricks AI to suggest attack paths (permissions are categorized locally)
+                        Don't use Hacktricks AI to suggest attack paths
 ```
 
 ### AzurePEAS Usage Examples
@@ -119,7 +124,7 @@ export AZURE_GRAPH_TOKEN=<TOKEN>
 python3 AzurePEAS.py
 ```
 
-**4. Username/Password Authentication (Non-MFA only)** ⚠️
+**4. Username/Password Authentication (Non-MFA or Service Principals)** ⚠️
 
 For automation scripts with non-MFA accounts:
 
@@ -133,6 +138,22 @@ For M365 enumeration capabilities:
 
 ```bash
 python3 AzurePEAS.py --tenant-id <TENANT_ID> --foci-refresh-token <TOKEN>
+```
+
+**6. Focus on Azure Subscriptions Only**
+
+Skip EntraID and M365 enumeration to only check Azure subscription permissions:
+
+```bash
+python3 AzurePEAS.py --skip-entraid
+```
+
+**7. Check Specific Subscriptions Only**
+
+Limit enumeration to specific subscriptions:
+
+```bash
+python3 AzurePEAS.py --check-only-these-subs <SUB_ID1>,<SUB_ID2>
 ```
 
 ---
@@ -262,14 +283,13 @@ print("Access Token:", creds.token)
 - **Help:**  
   To display all available command options, run:
   
-  ```bash
-  python3 ./GCPPEAS.py --help
-  usage: GCPPEAS.py [-h] [--projects PROJECTS | --folders FOLDERS | --organizations ORGANIZATIONS |
-                  --service-accounts SERVICE_ACCOUNTS] (--sa-credentials-path SA_CREDENTIALS_PATH | --token TOKEN)
-                  [--extra-token EXTRA_TOKEN] [--dont-get-iam-policies] [--out-json-path OUT_JSON_PATH] [--threads THREADS]
-                  [--not-use-hacktricks-ai] [--billing-project BILLING_PROJECT] [--proxy PROXY] [--print-invalid-permissions]
+```bash
+python3 ./GCPPEAS.py --help
+usage: GCPPEAS.py [-h] [--projects PROJECTS | --folders FOLDERS | --organizations ORGANIZATIONS | --service-accounts SERVICE_ACCOUNTS] (--sa-credentials-path SA_CREDENTIALS_PATH |
+                --token TOKEN) [--extra-token EXTRA_TOKEN] [--dont-get-iam-policies] [--skip-bruteforce] [--out-json-path OUT_JSON_PATH] [--threads THREADS]
+                [--not-use-hacktricks-ai] [--billing-project BILLING_PROJECT] [--proxy PROXY] [--print-invalid-permissions]
 
-GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks.
+GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks with HackTricks AI.
 
 options:
   -h, --help            show this help message and exit
@@ -286,11 +306,12 @@ options:
                         Extra token potentially with access over Gmail and/or Drive
   --dont-get-iam-policies
                         Do not get IAM policies for the resources
+  --skip-bruteforce     Skip bruteforce permission enumeration without prompting
   --out-json-path OUT_JSON_PATH
                         Output JSON file path (e.g. /tmp/gcp_results.json)
   --threads THREADS     Number of threads to use
   --not-use-hacktricks-ai
-                        Don't use Hacktricks AI to suggest attack paths (permissions are categorized locally)
+                        Don't use Hacktricks AI to suggest attack paths
   --billing-project BILLING_PROJECT
                         Indicate the billing project to use to brute-force permissions
   --proxy PROXY         Indicate a proxy to use to connect to GCP for debugging (e.g. 127.0.0.1:8080)
@@ -302,13 +323,13 @@ options:
 - **Usage Example:**  
   Set your environment token and run GCPPEAS with your desired parameters:
   
-  ```bash
-  # Get token from gcloud
-  export CLOUDSDK_AUTH_ACCES_TOKEN=$(gcloud auth print-access-token)
+```bash
+# Get token from gcloud
+export CLOUDSDK_AUTH_ACCES_TOKEN=$(gcloud auth print-access-token)
 
-  # Run GCPPEAS (you can also pass an extra token for Gmail/Drive access)
-  python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--projects <PROJECT_ID1>,<PROJECT_ID2>] [--folders <FOLDER_ID1>,<FOLDER_ID2>] [--organizations <ORGANIZATION_ID>] [--service-accounts <SA_EMAIL1>,<SA_EMAIL2>] [--billing-project <BILLING_PROJECT_ID>]
-  ```
+# Run GCPPEAS (you can also pass an extra token for Gmail/Drive access)
+python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--projects <PROJECT_ID1>,<PROJECT_ID2>] [--folders <FOLDER_ID1>,<FOLDER_ID2>] [--organizations <ORGANIZATION_ID>] [--service-accounts <SA_EMAIL1>,<SA_EMAIL2>] [--billing-project <BILLING_PROJECT_ID>]
+```
 
 ---
 
@@ -348,12 +369,11 @@ Before running AWSPEAS, ensure that you have:
 
 ```bash
 python3 ./AWSPEAS.py --help
-usage: AWSPEAS.py [-h] --profile PROFILE [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--debug]
-                  --region REGION [--aws-services AWS_SERVICES] [--skip-iam-policies] [--skip-simulation] [--force-bruteforce]
-                  [--skip-managed-policies-guess]
 
-Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEASS requires the
-name of the profile to use to connect to AWS.
+usage: AWSPEAS.py [-h] --profile PROFILE [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--debug] --region REGION [--aws-services AWS_SERVICES]
+                  [--skip-iam-policies] [--skip-simulation] [--force-bruteforce] [--skip-managed-policies-guess]
+
+Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEASS requires the name of the profile to use to connect to AWS.
 
 options:
   -h, --help            show this help message and exit
@@ -362,12 +382,12 @@ options:
                         Output JSON file path (e.g. /tmp/aws_results.json)
   --threads THREADS     Number of threads to use
   --not-use-hacktricks-ai
-                        Don't use Hacktricks AI to suggest attack paths (permissions are categorized locally)
+                        Don't use Hacktricks AI to suggest attack paths
   --debug               Print more infromation when brute-forcing permissions
   --region REGION       Indicate the region to use for brute-forcing permissions
   --aws-services AWS_SERVICES
-                        Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-
-                        services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)
+                        Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-services
+                        s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)
   --skip-iam-policies   Skip retrieving permissions from IAM policies
   --skip-simulation     Skip simulating permissions using simulate-principal-policy
   --force-bruteforce    Force brute-force without asking

@@ -4,6 +4,12 @@ from colorama import Fore, Style, init, Back
 import time
 import jwt
 
+# Import CloudResource for consistent output format
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from CloudPEASS.cloudpeass import CloudResource
+
 init(autoreset=True)
 
 class EntraIDPEASS():
@@ -108,13 +114,14 @@ class EntraIDPEASS():
             if odata_type.endswith("directoryRole"):
                 permissions = self.get_granular_permissions(obj_id)
 
-                return {
-                    "id": obj_id,
-                    "name": name,
-                    "type": odata_type,
-                    "permissions": permissions,
-                    "assignmentType": "Assigned"
-                }
+                return CloudResource(
+                    resource_id=obj_id,
+                    name=name,
+                    resource_type=odata_type,
+                    permissions=permissions,
+                    deny_perms=[],
+                    assignmentType="Assigned"
+                )
 
             return {} # Being a member is interesting but doesn't grant permissions as we get them recursively
 
@@ -131,7 +138,7 @@ class EntraIDPEASS():
         url = f"https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignmentScheduleInstances?$filter=principalId eq '{user_id}'&$expand=roleDefinition"
         active_roles = self.get_all_pages(url)
 
-        existing_role_ids = {entry["id"] for entry in sub_resources}
+        existing_role_ids = {(entry.id if hasattr(entry, 'id') else entry["id"]) for entry in sub_resources}
 
         for role in active_roles:
             directory_scope_id = role.get("directoryScopeId", "")
@@ -142,13 +149,14 @@ class EntraIDPEASS():
 
             granular_permissions = self.get_granular_permissions(role_definition_id)
 
-            resource_entry = {
-                "id": "roleDefinitionId:" + role_definition_id,
-                "name": self.get_role_name(role_definition_id),
-                "type": directory_scope_id,
-                "permissions": granular_permissions,
-                "assignmentType": "Assigned"
-            }
+            resource_entry = CloudResource(
+                resource_id="roleDefinitionId:" + role_definition_id,
+                name=self.get_role_name(role_definition_id),
+                resource_type=directory_scope_id,
+                permissions=granular_permissions,
+                deny_perms=[],
+                assignmentType="Assigned"
+            )
 
             sub_resources.append(resource_entry)
 
@@ -184,13 +192,14 @@ class EntraIDPEASS():
                 print(f"Failed to fetch perms for role {rd_id}: {e}")
                 perms = []
 
-            results.append({
-                "id": "#microsoft.graph:" + "roleDefinitionId:" + a.get("roleDefinitionId"),
-                "name": self.get_role_name(a.get("roleDefinitionId")),
-                "type": a.get("directoryScopeId"),
-                "permissions": perms,
-                "assignmentType": "Assigned"
-            })
+            results.append(CloudResource(
+                resource_id="#microsoft.graph:" + "roleDefinitionId:" + a.get("roleDefinitionId"),
+                name=self.get_role_name(a.get("roleDefinitionId")),
+                resource_type=a.get("directoryScopeId"),
+                permissions=perms,
+                deny_perms=[],
+                assignmentType="Assigned"
+            ))
 
         return results
 
@@ -217,13 +226,14 @@ class EntraIDPEASS():
             # Resolve granular appRole details from the service principal
             perms = self._get_app_role_value(a["resourceId"], a["appRoleId"])
 
-            result.append({
-                "id": "#microsoft.graph:" + a.get("resourceId") + "-" + a.get("resourceDisplayName") + "-" + a.get("principalType"),
-                "name": a.get("appRoleId"),
-                "type": "appRoleAssignment",
-                "permissions": perms,
-                "assignmentType": "Assigned"
-            })
+            result.append(CloudResource(
+                resource_id="#microsoft.graph:" + a.get("resourceId") + "-" + a.get("resourceDisplayName") + "-" + a.get("principalType"),
+                name=a.get("appRoleId"),
+                resource_type="appRoleAssignment",
+                permissions=perms,
+                deny_perms=[],
+                assignmentType="Assigned"
+            ))
 
         return result
 
@@ -264,13 +274,14 @@ class EntraIDPEASS():
 
             granular_permissions = self.get_granular_permissions(role_definition_id)
 
-            eligible_resources.append({
-                "id": role_definition_id,
-                "name": role_name,
-                "type": directory_scope,
-                "permissions": granular_permissions,
-                "assignmentType": assignment_type,
-            })
+            eligible_resources.append(CloudResource(
+                resource_id=role_definition_id,
+                name=role_name,
+                resource_type=directory_scope,
+                permissions=granular_permissions,
+                deny_perms=[],
+                assignmentType=assignment_type
+            ))
 
         return eligible_resources    
 
@@ -314,13 +325,14 @@ class EntraIDPEASS():
                     try:
                         perm_name = self._get_app_role_value(resource_app_id, perm_id)
                         if perm_name:
-                             api_permissions.append({
-                                'id': f'api-permission:{resource_app_id}/{perm_id}',
-                                'name': perm_name,
-                                'type': 'APIPermission-Application',
-                                'permissions': [perm_name],
-                                'assignmentType': 'Direct'
-                            })
+                             api_permissions.append(CloudResource(
+                                resource_id=f'api-permission:{resource_app_id}/{perm_id}',
+                                name=perm_name,
+                                resource_type='APIPermission-Application',
+                                permissions=[perm_name],
+                                deny_perms=[],
+                                assignmentType='Direct'
+                            ))
                     except Exception as e:
                         print(f"{Fore.YELLOW}Could not resolve permission name for role {perm_id} on resource {resource_app_id}: {e}{Style.RESET_ALL}")
                         
@@ -338,11 +350,12 @@ class EntraIDPEASS():
             obj_id = obj.get("id")
             name = obj.get("displayName") or obj.get("appDisplayName") or obj_id
 
-            sub_resources.append({
-                "id": obj_id,
-                "name": name,
-                "type": odata_type,
-                "permissions": [f"Owner of {obj_id} ({odata_type})"]
-            })
+            sub_resources.append(CloudResource(
+                resource_id=obj_id,
+                name=name,
+                resource_type=odata_type,
+                permissions=[f"Owner of {obj_id} ({odata_type})"],
+                deny_perms=[]
+            ))
         
         return sub_resources
