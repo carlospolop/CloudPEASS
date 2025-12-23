@@ -1,5 +1,6 @@
 import subprocess
 import re
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from tqdm import tqdm
@@ -10,7 +11,7 @@ from colorama import Fore, init
 
 class AWSBruteForce():
 
-    def __init__(self, debug, region, profile, aws_services, threads):
+    def __init__(self, debug, region, profile, aws_services, threads, access_key_id=None, secret_access_key=None, session_token=None):
         self.debug = debug
         self.region = region
         self.profile = profile
@@ -18,6 +19,9 @@ class AWSBruteForce():
         self.num_threads = threads
         self.found_permissions = []
         self.lock = threading.Lock()
+        self.access_key_id = access_key_id
+        self.secret_access_key = secret_access_key
+        self.session_token = session_token
 
         if shutil.which("aws") is None:
             print("AWS CLI is not installed or not in PATH. Please install the AWS CLI before running this tool.")
@@ -129,9 +133,23 @@ class AWSBruteForce():
         return ''.join(word.capitalize() for word in command.split('-'))
 
     def run_command(self, profile, region, service, command, extra='', cont=0):
-        full_command = f'aws --cli-connect-timeout 19 --profile {profile} --region {region} {service} {command} {extra}'
+        # Build base command
+        if profile:
+            full_command = f'aws --cli-connect-timeout 19 --profile {profile} --region {region} {service} {command} {extra}'
+            env = None
+        else:
+            # Use credentials via environment variables
+            full_command = f'aws --cli-connect-timeout 19 --region {region} {service} {command} {extra}'
+            env = os.environ.copy()
+            if self.access_key_id:
+                env['AWS_ACCESS_KEY_ID'] = self.access_key_id
+            if self.secret_access_key:
+                env['AWS_SECRET_ACCESS_KEY'] = self.secret_access_key
+            if self.session_token:
+                env['AWS_SESSION_TOKEN'] = self.session_token
+        
         try:
-            result = subprocess.run(full_command, shell=True, capture_output=True, timeout=20)
+            result = subprocess.run(full_command, shell=True, capture_output=True, timeout=20, env=env)
             output = result.stdout.decode() + result.stderr.decode()
 
             if result.returncode == 0 or re.search(r'NoSuchEntity|ResourceNotFoundException|NotFoundException', output, re.I):

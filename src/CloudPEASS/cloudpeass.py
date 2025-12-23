@@ -16,13 +16,12 @@ from typing import Optional
 
 
 from colorama import Fore, Style, init, Back
+from .permission_risk_classifier import classify_all, classify_permission
 
 init(autoreset=True)
 faulthandler.enable()
 
 HACKTRICKS_AI_ENDPOINT = "https://www.hacktricks.ai/api/ht-api"
-PERMISSIONS_CATALOG_BASE_URL = "https://raw.githubusercontent.com/carlospolop/Blue-CloudPEASS/main"
-PERMISSIONS_CATALOG_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
 class CloudResource:
@@ -151,7 +150,6 @@ class CloudPEASS:
         self.sensitive_response_format = SENSITIVE_RESPONSE_FORMAT.replace("__CLOUD_SPECIFIC_EXAMPLE__", example_sensitive_cloud_response).replace("__CLOUD_SPECIFIC_CLARIFICATIONS__", sensitive_perms_clarifications)
         self._rate_limit_lock = threading.Lock()
         self._request_timestamps = []
-        self._permissions_catalog = None
     
     def get_len_tokens(self, prompt) -> int:
         model="o3"
@@ -250,15 +248,18 @@ class CloudPEASS:
                         if fnmatch.fnmatch(perm, pattern):
                             found_sensitive.add(perm)
 
-        # Also include permissions from YAML catalog
-        catalog = self._load_permissions_catalog()
-        for perm in permissions:
-            if not isinstance(perm, str) or perm.startswith("-"):
-                continue
-            if perm in catalog.get("critical", set()):
-                found_very_sensitive.add(perm)
-            elif perm in catalog.get("high", set()):
-                found_sensitive.add(perm)
+        # Also use the new risk classifier from Blue-PEASS
+        try:
+            cloud_id = self.cloud_provider.lower().strip()
+            if cloud_id in {"aws", "azure", "gcp"}:
+                risk_categories = classify_all(cloud_id, permissions, unknown_default="medium")
+                # Add critical and high risk permissions to sensitive sets
+                for perm in risk_categories.get("critical", []):
+                    found_very_sensitive.add(perm)
+                for perm in risk_categories.get("high", []):
+                    found_sensitive.add(perm)
+        except Exception as e:
+            print(f"{Fore.YELLOW}Warning: Couldn't classify permissions with risk classifier: {e}")
 
         found_sensitive -= found_very_sensitive  # Avoid duplicates
 
@@ -267,97 +268,28 @@ class CloudPEASS:
             "sensitive_perms": found_sensitive
         }
 
-    def _catalog_cloud_id(self) -> str:
-        cloud = (self.cloud_provider or "").strip().lower()
-        if cloud in {"aws", "azure", "gcp"}:
-            return cloud
-        raise ValueError("Unsupported cloud provider. Supported providers are: Azure, AWS, GCP.")
-
-    def _catalog_cache_path(self) -> Path:
-        cloud = self._catalog_cloud_id()
-        filename = f"{cloud}_permissions_cat.yaml"
-        return Path.home() / ".cache" / "cloudpeass" / "permissions_catalog" / filename
-
-    def _should_refresh_catalog(self, path: Path) -> bool:
-        if not path.exists():
-            return True
-        try:
-            age_seconds = time.time() - path.stat().st_mtime
-        except OSError:
-            return True
-        return age_seconds > PERMISSIONS_CATALOG_CACHE_TTL_SECONDS
-
-    def _download_permissions_catalog(self) -> Optional[str]:
-        cloud = self._catalog_cloud_id()
-        url = f"{PERMISSIONS_CATALOG_BASE_URL}/{cloud}_permissions_cat.yaml"
-        try:
-            resp = requests.get(url, timeout=45)
-        except Exception as e:
-            print(f"{Fore.YELLOW}Warning: Couldn't download permissions catalog: {e}")
-            return None
-
-        if resp.status_code != 200:
-            print(f"{Fore.YELLOW}Warning: Couldn't download permissions catalog ({resp.status_code}): {resp.text[:200]}")
-            return None
-        return resp.text
-
-    def _load_permissions_catalog(self) -> dict:
-        if self._permissions_catalog is not None:
-            return self._permissions_catalog
-
-        cache_path = self._catalog_cache_path()
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-
-        catalog_text = None
-        if self._should_refresh_catalog(cache_path):
-            catalog_text = self._download_permissions_catalog()
-            if catalog_text:
-                try:
-                    cache_path.write_text(catalog_text, encoding="utf-8")
-                except OSError:
-                    pass
-
-        if catalog_text is None and cache_path.exists():
-            try:
-                catalog_text = cache_path.read_text(encoding="utf-8")
-            except OSError:
-                catalog_text = None
-
-        if not catalog_text:
-            self._permissions_catalog = {"critical": set(), "high": set(), "medium": set(), "low": set()}
-            return self._permissions_catalog
-
-        try:
-            parsed = yaml.safe_load(catalog_text) or {}
-        except Exception as e:
-            print(f"{Fore.YELLOW}Warning: Couldn't parse permissions catalog YAML: {e}")
-            parsed = {}
-
-        catalog = {}
-        for level in ("critical", "high", "medium", "low"):
-            values = parsed.get(level) or []
-            if not isinstance(values, list):
-                values = []
-            catalog[level] = set(v for v in values if isinstance(v, str))
-
-        self._permissions_catalog = catalog
-        return self._permissions_catalog
-
     def categorize_permissions_from_catalog(self, permissions):
-        catalog = self._load_permissions_catalog()
-        categorized = {"critical": set(), "high": set(), "medium": set(), "low": set()}
-        for perm in permissions or []:
-            if not isinstance(perm, str) or perm.startswith("-"):
-                continue
-            if perm in catalog["critical"]:
-                categorized["critical"].add(perm)
-            elif perm in catalog["high"]:
-                categorized["high"].add(perm)
-            elif perm in catalog["medium"]:
-                categorized["medium"].add(perm)
-            elif perm in catalog["low"]:
-                categorized["low"].add(perm)
-        return categorized
+        """
+        Categorize permissions using the Blue-PEASS risk classifier.
+        Downloads risk_rules YAML patterns from Blue-PEASS repo at runtime.
+        """
+        cloud_id = self.cloud_provider.lower().strip()
+        if cloud_id not in {"aws", "azure", "gcp"}:
+            return {"critical": set(), "high": set(), "medium": set(), "low": set()}
+        
+        try:
+            # Use the new classifier from Blue-PEASS
+            risk_categories = classify_all(cloud_id, permissions, unknown_default="medium")
+            # Convert lists to sets for compatibility
+            return {
+                "critical": set(risk_categories.get("critical", [])),
+                "high": set(risk_categories.get("high", [])),
+                "medium": set(risk_categories.get("medium", [])),
+                "low": set(risk_categories.get("low", [])),
+            }
+        except Exception as e:
+            print(f"{Fore.YELLOW}Warning: Couldn't classify permissions: {e}")
+            return {"critical": set(), "high": set(), "medium": set(), "low": set()}
 
     def sumarize_resources(self, resources):
         """

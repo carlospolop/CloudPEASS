@@ -49,21 +49,33 @@ AWS_SENSITIVE_RESPONSE_EXAMPLE = """[
 AWS_CLARIFICATIONS = ""
 
 class AWSPEASS(CloudPEASS):
-    def __init__(self, profile_name, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, debug, region, aws_services, skip_iam_policies=False, skip_simulation=False, force_bruteforce=False, skip_managed_policies_guess=False, out_path=None):
+    def __init__(self, profile_name, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, debug, region, aws_services, skip_iam_policies=False, skip_simulation=False, skip_bruteforce=False, skip_managed_policies_guess=False, out_path=None, access_key_id=None, secret_access_key=None, session_token=None):
         self.profile_name = profile_name
         self.num_threads = num_threads
         self.region = region
         self.skip_iam_policies = skip_iam_policies
         self.skip_simulation = skip_simulation
-        self.force_bruteforce = force_bruteforce
+        self.skip_bruteforce = skip_bruteforce
         self.skip_managed_policies_guess = skip_managed_policies_guess
+        self.access_key_id = access_key_id
+        self.secret_access_key = secret_access_key
+        self.session_token = session_token
 
-        # Initialize session using the profile
-        self.session = boto3.Session(profile_name=self.profile_name, region_name=self.region)
+        # Initialize session using credentials or profile
+        if access_key_id and secret_access_key:
+            self.session = boto3.Session(
+                aws_access_key_id=access_key_id,
+                aws_secret_access_key=secret_access_key,
+                aws_session_token=session_token,
+                region_name=self.region
+            )
+        else:
+            self.session = boto3.Session(profile_name=self.profile_name, region_name=self.region)
+        
         self.credentials = self.session.get_credentials()
 
-        # Initialize AWSBruteForce using the profile and region
-        self.AWSBruteForce = AWSBruteForce(debug, self.region, self.profile_name, aws_services, self.num_threads)
+        # Initialize AWSBruteForce using the credentials and region
+        self.AWSBruteForce = AWSBruteForce(debug, self.region, self.profile_name, aws_services, self.num_threads, access_key_id, secret_access_key, session_token)
 
         # Create IAM and STS clients from the session
         self.iam_client = self.session.client('iam')
@@ -483,10 +495,21 @@ class AWSPEASS(CloudPEASS):
         principal_name = ""
         principal_type = ""
 
-        cmd = f"""aws sns publish --profile {self.profile_name} --topic-arn "arn:aws:sns:us-east-1:791397163361:AWSPEASSTopic" --message "Hello from AWSPEASS." --region us-east-1"""
+        if self.profile_name:
+            cmd = f"""aws sns publish --profile {self.profile_name} --topic-arn "arn:aws:sns:us-east-1:791397163361:AWSPEASSTopic" --message "Hello from AWSPEASS." --region us-east-1"""
+            env = None
+        else:
+            cmd = f"""aws sns publish --region us-east-1 --topic-arn "arn:aws:sns:us-east-1:791397163361:AWSPEASSTopic" --message "Hello from AWSPEASS." """
+            env = os.environ.copy()
+            if self.access_key_id:
+                env['AWS_ACCESS_KEY_ID'] = self.access_key_id
+            if self.secret_access_key:
+                env['AWS_SECRET_ACCESS_KEY'] = self.secret_access_key
+            if self.session_token:
+                env['AWS_SESSION_TOKEN'] = self.session_token
         
         # Use awscli to call aws cli and get the arn of the principal from the error printed
-        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=20)
+        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=20, env=env)
         output = result.stdout.decode() + result.stderr.decode()
 
         # Make sure we don't detect this
@@ -608,19 +631,19 @@ class AWSPEASS(CloudPEASS):
             ))
             return resources_data
         
-        # Now try to brute-force permissions using simulate-principal-policy, if allowed
+        # Now try to simulate permissions using simulate-principal-policy, if allowed and needed
         simulated_permissions = []
-        if not self.skip_simulation:
-            # If IAM policies were successfully retrieved, ask before simulating
-            should_simulate = True
-            if iam_policies_retrieved:
-                user_input = input(f"{Fore.YELLOW}Permissions were successfully retrieved from IAM policies. Do you want to also simulate permissions (may find additional permissions but slower)? (y/N): {Fore.RESET}")
-                should_simulate = user_input.lower() == 'y'
-            
-            if should_simulate:
-                simulated_permissions = aws_peass.simulate_permissions()
-        else:
+        simulation_performed = False
+        
+        if not self.skip_simulation and not iam_policies_retrieved:
+            # Only simulate if IAM policies didn't work
+            print(f"{Fore.YELLOW}IAM policies didn't work. Trying simulation...")
+            simulated_permissions = aws_peass.simulate_permissions()
+            simulation_performed = bool(simulated_permissions)
+        elif self.skip_simulation:
             print(f"{Fore.YELLOW}Skipping simulation of permissions (--skip-simulation flag set)")
+        elif iam_policies_retrieved:
+            print(f"{Fore.GREEN}IAM policies successfully retrieved. Skipping simulation.")
 
         if simulated_permissions:
             principal_perms["allow"].extend(simulated_permissions)
@@ -636,18 +659,26 @@ class AWSPEASS(CloudPEASS):
             is_admin=False
         ))
 
+        # Automatic bruteforce logic:
+        # - If IAM worked, don't bruteforce
+        # - If simulation worked, don't bruteforce
+        # - If neither worked (or both were skipped), bruteforce automatically
+        # - If --skip-bruteforce is set, never bruteforce
         brute_force = False
-        if self.force_bruteforce:
-            print(f"{Fore.YELLOW}Forcing brute-force (--force-bruteforce flag set)")
-            brute_force = True
-        elif resources_data[0].permissions:
-            # Ask the user if he wants to brute-force permissions
-            print(f"{Fore.GREEN}Found permissions for the principal.")
-            brute_force_input = input(f"{Fore.YELLOW}Do you still want to brute-force permissions? (y/N) ")
-            if brute_force_input.lower() == "y":
-                brute_force = True
+        
+        if self.skip_bruteforce:
+            print(f"{Fore.YELLOW}Skipping brute-force (--skip-bruteforce flag set)")
+            brute_force = False
+        elif iam_policies_retrieved or simulation_performed:
+            # Either IAM or simulation worked, skip bruteforce
+            if iam_policies_retrieved:
+                print(f"{Fore.GREEN}Found permissions via IAM policies. Skipping brute-force.")
+            else:
+                print(f"{Fore.GREEN}Found permissions via simulation. Skipping brute-force.")
+            brute_force = False
         else:
-            print(f"{Fore.GREEN}No permissions found for the principal. Strating brute-force...")
+            # Neither IAM nor simulation worked (or both were skipped)
+            print(f"{Fore.YELLOW}No permissions found via IAM or simulation. Starting brute-force automatically...")
             brute_force = True
         
         if brute_force:
@@ -733,9 +764,15 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description="Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks.\n"
-                    "AWSPEASS requires the name of the profile to use to connect to AWS."
+                    "AWSPEASS requires either a profile or AWS credentials (access key + secret key)."
     )
-    parser.add_argument('--profile', required=True, help="AWS profile to use")
+    
+    auth_group = parser.add_mutually_exclusive_group(required=True)
+    auth_group.add_argument('--profile', help="AWS profile to use")
+    auth_group.add_argument('--access-key-id', help="AWS Access Key ID")
+    
+    parser.add_argument('--secret-access-key', help="AWS Secret Access Key (required with --access-key-id)")
+    parser.add_argument('--session-token', help="AWS Session Token (optional, for temporary credentials)")
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/aws_results.json)")
     parser.add_argument('--threads', default=10, type=int, help="Number of threads to use")
     parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to suggest attack paths")
@@ -744,12 +781,29 @@ if __name__ == "__main__":
     parser.add_argument('--aws-services', help="Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)")
     parser.add_argument('--skip-iam-policies', action="store_true", default=False, help="Skip retrieving permissions from IAM policies")
     parser.add_argument('--skip-simulation', action="store_true", default=False, help="Skip simulating permissions using simulate-principal-policy")
-    parser.add_argument('--force-bruteforce', action="store_true", default=False, help="Force brute-force without asking")
+    parser.add_argument('--skip-bruteforce', action="store_true", default=False, help="Skip brute-force enumeration (automatic by default when IAM/simulation fail)")
     parser.add_argument('--skip-managed-policies-guess', action="store_true", default=False, help="Skip guessing permissions based on AWS managed policies")
 
     args = parser.parse_args()
 
-    profile = args.profile or os.getenv("AWS_PROFILE")
+    # Validate credential arguments
+    if args.access_key_id:
+        if not args.secret_access_key:
+            parser.error("--secret-access-key is required when using --access-key-id")
+        profile = None
+        access_key_id = args.access_key_id
+        secret_access_key = args.secret_access_key
+        session_token = args.session_token
+    else:
+        # Using profile - ensure credential options are not provided
+        if args.secret_access_key:
+            parser.error("--secret-access-key can only be used with --access-key-id")
+        if args.session_token:
+            parser.error("--session-token can only be used with --access-key-id")
+        profile = args.profile or os.getenv("AWS_PROFILE")
+        access_key_id = None
+        secret_access_key = None
+        session_token = None
 
     aws_services = args.aws_services.split(",") if args.aws_services else []
 
@@ -764,9 +818,12 @@ if __name__ == "__main__":
         aws_services=aws_services,
         skip_iam_policies=args.skip_iam_policies,
         skip_simulation=args.skip_simulation,
-        force_bruteforce=args.force_bruteforce,
+        skip_bruteforce=args.skip_bruteforce,
         skip_managed_policies_guess=args.skip_managed_policies_guess,
-        out_path=args.out_json_path
+        out_path=args.out_json_path,
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key,
+        session_token=session_token
     )
     # Run the analysis to get permissions from policies
     aws_peass.run_analysis()

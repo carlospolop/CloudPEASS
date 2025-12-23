@@ -1,10 +1,10 @@
 # Cloud Privilege Escalation Awesome Script Suite 🚀🛡️
 
-![/cloudpeass.jpg](/cloudpeass.jpg)
+![/cloudpeass.png](/cloudpeass.png)
 
-Welcome to the **Cloud Privilege Escalation Awesome Script Suite** – your one-stop solution to **find your permissions** whenever you compromise a principal in a **Red Team** across major cloud platforms: **Azure, GCP, and AWS**. This suite is designed to help you determine all your permissions and also what it's possible to accomplish using compromised them, focusing on **privilege escalation** and accessing **sensitive information** 🔥, and other potential attack vectors **without modifying any resources**.
+Welcome to the **Cloud Privilege Escalation Awesome Script Suite** – your one-stop solution to **find your permissions** whenever you compromise a principal in a **Red Team** across major cloud platforms: **Azure, GCP, and AWS**. This suite is designed to help you determine all your permissions and also what it's possible to accomplish with them, focusing on **privilege escalation** and accessing **sensitive information** 🔥, and other potential attack vectors **without modifying any resources**.
 
-This toolkit leverages advanced techniques to enumerate your permissions (it uses different permission enumreation tehcniques depending on the cloud) and utilizes insights from **[HackTricks Cloud](https://cloud.hacktricks.wiki/en/index.html)** plus a curated permissions catalog (**Blue-CloudPEASS**) to classify permissions as **critical / high / medium / low**. Optionally, it can use **HackTricks AI** 🤖 to suggest potential attack paths; to minimize data shared, it only sends resource identifiers and **critical/high** permission names (never medium/low). If you prefer not to use the AI, append **`--not-use-hacktricks-ai`** when executing the tools.
+This toolkit leverages advanced techniques to enumerate your permissions (it uses different permission enumeration techniques depending on the cloud) and utilizes insights from **[HackTricks Cloud](https://cloud.hacktricks.wiki/en/index.html)** plus a curated permissions catalog (**Blue-CloudPEASS**) to classify permissions as **critical / high / medium / low**. Optionally, it can use **HackTricks AI** 🤖 to suggest potential attack paths; to minimize data shared, it only sends resource identifiers and **critical/high** permission names (never medium/low). If you prefer not to use the AI, append **`--not-use-hacktricks-ai`** when executing the tools.
 
 ---
 
@@ -13,7 +13,7 @@ This toolkit leverages advanced techniques to enumerate your permissions (it use
 **AzurePEAS** is dedicated to **enumerating the principals permissions** within your **Azure** and **Entra ID** environments, with a special focus on detecting **privilege escalation pathways** and identifying **potential security risks**. It can also **enumerate several Microsoft 365** services for a quick recon. Here are the key features and requirements:
 
 - **Comprehensive Permissions Check**  
-  AzurePEAS finds all resources accessible to the principal and the permisions he has over them. It retrieves permissions for both **Azure (ARM API)** and **Entra ID (Graph API)**, ensuring a thorough analysis of your cloud permissions.
+  AzurePEAS finds all resources accessible to the principal and the permissions he has over them. It retrieves permissions for both **Azure (ARM API)** and **Entra ID (Graph API)**, ensuring a thorough analysis of your cloud permissions.
 
 - **Authentication Requirements**  
   AzurePEAS supports multiple authentication methods:
@@ -339,28 +339,36 @@ python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--projects <
 
 ### How It Works
 
-- **IAM Policy Enumeration:**  
-  Retrieves and reviews all IAM policies attached to the compromised principal. *(Requires appropriate IAM permissions.)*
+AWSPEAS uses an intelligent cascading approach to enumerate permissions:
 
-- **Permission Simulation:**  
-  If the previous technique didn't work, it simulates the effective permissions of the principal to determine what actions can be performed. *(Requires a single IAM permission.)*
+1. **IAM Policy Enumeration (First Priority):**  
+   Retrieves and reviews all IAM policies attached to the compromised principal. *(Requires appropriate IAM permissions.)*  
+   - ✅ **If successful**: Skips simulation and brute-force entirely
 
-- **Brute-Force Enumeration:**  
-  If the previous technique didn't work, it systematically tests **List, Get, and Describe API calls via the AWS CLI**.  
-  - **Service Filtering:** Use the **`--aws-services`** flag to target only specific services for a faster enumeration process.  
-  - **Policy Inference:** Integrates a version of **[aws-Perms2ManagedPolicies](https://github.com/carlospolop/aws-Perms2ManagedPolicies)** to predict additional permissions based on the identified permissions and AWS managed policies.
+2. **Permission Simulation (Second Priority):**  
+   If IAM retrieval fails, simulates the effective permissions of the principal using `simulate-principal-policy`. *(Requires a single IAM permission.)*  
+   - ✅ **If successful**: Skips brute-force
+
+3. **Brute-Force Enumeration (Automatic Fallback):**  
+   If both IAM and simulation fail (or are skipped), automatically tests **List, Get, and Describe API calls via the AWS CLI**.  
+   - **Service Filtering:** Use the **`--aws-services`** flag to target only specific services for faster enumeration.  
+   - **Policy Inference:** Integrates a version of **[aws-Perms2ManagedPolicies](https://github.com/carlospolop/aws-Perms2ManagedPolicies)** to predict additional permissions based on identified permissions and AWS managed policies.
+
+**Note:** You can skip any technique using `--skip-iam-policies`, `--skip-simulation`, or `--skip-bruteforce` flags.
 
 ### Operational Security Considerations ⚠️
 
 - **Canary Account Detection:**  
-  AWSPEAS tries to detect if the AWS account ID appears to belong to a **Canary service**. If a canary account is suspected, you'll be prompted for confirmation before the tool proceeds. Moreover, after the first interaction with the AWS API, the name of the principal is also gathered and AWSPEAS use it to try to detect if the principal is a canary account. Note that at this pioint it might be **too late** because an API interaction has already been done, but at least you will be warned about it.
+  AWSPEAS tries to detect if the AWS account ID appears to belong to a **Canary service**. If a canary account is suspected, you'll be prompted for confirmation before the tool proceeds. Moreover, after the first interaction with the AWS API, the name of the principal is also gathered and AWSPEAS use it to try to detect if the principal is a canary account. Note that at this point it might be **too late** because an API interaction has already been done, but at least you will be warned about it.
 
 
 ### Authentication & Execution Requirements
 
 Before running AWSPEAS, ensure that you have:
-- Properly configured the **AWS profile** (used to connect to the target AWS account)
-- The **AWS CLI** installed and configured on your PATH
+- **AWS CLI** installed and configured on your PATH
+- Either:
+  - A properly configured **AWS profile** (used to connect to the target AWS account), or
+  - AWS credentials: **Access Key ID** and **Secret Access Key** (with optional **Session Token** for temporary credentials)
 
 ### AWSPEAS Help & Usage
 
@@ -370,14 +378,21 @@ Before running AWSPEAS, ensure that you have:
 ```bash
 python3 ./AWSPEAS.py --help
 
-usage: AWSPEAS.py [-h] --profile PROFILE [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--debug] --region REGION [--aws-services AWS_SERVICES]
-                  [--skip-iam-policies] [--skip-simulation] [--force-bruteforce] [--skip-managed-policies-guess]
+usage: AWSPEAS.py [-h] (--profile PROFILE | --access-key-id ACCESS_KEY_ID) [--secret-access-key SECRET_ACCESS_KEY] [--session-token SESSION_TOKEN]
+                  [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--not-use-hacktricks-ai] [--debug] --region REGION [--aws-services AWS_SERVICES]
+                  [--skip-iam-policies] [--skip-simulation] [--skip-bruteforce] [--skip-managed-policies-guess]
 
-Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEASS requires the name of the profile to use to connect to AWS.
+Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEASS requires either a profile or AWS credentials (access key + secret key).
 
 options:
   -h, --help            show this help message and exit
   --profile PROFILE     AWS profile to use
+  --access-key-id ACCESS_KEY_ID
+                        AWS Access Key ID
+  --secret-access-key SECRET_ACCESS_KEY
+                        AWS Secret Access Key (required with --access-key-id)
+  --session-token SESSION_TOKEN
+                        AWS Session Token (optional, for temporary credentials)
   --out-json-path OUT_JSON_PATH
                         Output JSON file path (e.g. /tmp/aws_results.json)
   --threads THREADS     Number of threads to use
@@ -390,7 +405,7 @@ options:
                         s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)
   --skip-iam-policies   Skip retrieving permissions from IAM policies
   --skip-simulation     Skip simulating permissions using simulate-principal-policy
-  --force-bruteforce    Force brute-force without asking
+  --skip-bruteforce     Skip brute-force enumeration (automatic by default when IAM/simulation fail)
   --skip-managed-policies-guess
                         Skip guessing permissions based on AWS managed policies
 ```
@@ -398,21 +413,27 @@ options:
 - **Usage Examples:**  
 
 ```bash
-# Basic usage with profile and region
+# Basic usage with profile and region (IAM → Simulation → Brute-force automatically)
 python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION>
 
-# Usage with specific AWS services (e.g., S3, EC2, Lambda, etc.)
+# Using AWS credentials directly (Access Key + Secret Key)
+python3 AWSPEAS.py --access-key-id <ACCESS_KEY_ID> --secret-access-key <SECRET_ACCESS_KEY> --region <AWS_REGION>
+
+# Using temporary credentials (Access Key + Secret Key + Session Token)
+python3 AWSPEAS.py --access-key-id <ACCESS_KEY_ID> --secret-access-key <SECRET_ACCESS_KEY> --session-token <SESSION_TOKEN> --region <AWS_REGION>
+
+# Usage with specific AWS services (faster brute-force if needed)
 python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --aws-services s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb
 
-# Skip IAM policy retrieval and simulation, force brute-force (stealth mode)
-python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-iam-policies --skip-simulation --force-bruteforce
+# Skip IAM and simulation, go directly to brute-force
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-iam-policies --skip-simulation
 
-# Only skip simulation but still try IAM policies
-python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-simulation
+# Only use IAM policies (skip simulation and brute-force)
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-simulation --skip-bruteforce
 
-# Force brute-force without prompting (but still try other methods first)
-python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --force-bruteforce
+# Try IAM and simulation, but never brute-force
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-bruteforce
 
-# Full automation mode - skip all prompts and use only brute-force
-python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-iam-policies --skip-simulation --force-bruteforce --skip-managed-policies-guess
+# Full stealth mode - only brute-force, skip everything else
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-iam-policies --skip-simulation --skip-managed-policies-guess
 ```
