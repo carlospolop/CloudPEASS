@@ -8,7 +8,8 @@ This toolkit leverages advanced techniques to enumerate your permissions (it use
 
 ---
 
-## AzurePEAS 💼🖥️
+<details>
+<summary><h2>AzurePEAS 💼🖥️</h2></summary>
 
 **AzurePEAS** is dedicated to **enumerating the principals permissions** within your **Azure** and **Entra ID** environments, with a special focus on detecting **privilege escalation pathways** and identifying **potential security risks**. It can also **enumerate several Microsoft 365** services for a quick recon. Here are the key features and requirements:
 
@@ -156,10 +157,12 @@ Limit enumeration to specific subscriptions:
 python3 AzurePEAS.py --check-only-these-subs <SUB_ID1>,<SUB_ID2>
 ```
 
+</details>
+
 ---
 
-
-## GCPPEAS 🌐🔍
+<details>
+<summary><h2>GCPPEAS 🌐🔍</h2></summary>
 
 **GCPPEAS** is designed to enumerate **all your permissions on Google Cloud Platform (GCP)**, uncovering potential **privilege escalation** paths and other attack vectors—all without modifying any resources. It starts by **collecting the projects, folders, and organizations** that the compromised principal can enumerate, then expands its search to discover **additional assets such as Virtual Machines, Functions, Storage buckets, and Service Accounts**. This holistic approach minimizes blind spots and increases the chance of identifying permissions.
 
@@ -331,9 +334,12 @@ export CLOUDSDK_AUTH_ACCES_TOKEN=$(gcloud auth print-access-token)
 python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--projects <PROJECT_ID1>,<PROJECT_ID2>] [--folders <FOLDER_ID1>,<FOLDER_ID2>] [--organizations <ORGANIZATION_ID>] [--service-accounts <SA_EMAIL1>,<SA_EMAIL2>] [--billing-project <BILLING_PROJECT_ID>]
 ```
 
+</details>
+
 ---
 
-## AWSPEAS ⚡️🔐
+<details>
+<summary><h2>AWSPEAS ⚡️🔐</h2></summary>
 
 **AWSPEAS** is your ultimate tool for enumerating **AWS permissions** and uncovering potential **privilege escalation** paths and other attack vectors—all while leaving your target environment unchanged. It leverages multiple techniques to gather, simulate, and even infer permissions, giving you deep insights into the security posture of your AWS setup.
 
@@ -437,3 +443,5 @@ python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-brutefor
 # Full stealth mode - only brute-force, skip everything else
 python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-iam-policies --skip-simulation --skip-managed-policies-guess
 ```
+
+</details>
