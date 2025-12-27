@@ -638,7 +638,7 @@ class AWSPEASS(CloudPEASS):
         if not self.skip_simulation and not iam_policies_retrieved:
             # Only simulate if IAM policies didn't work
             print(f"{Fore.YELLOW}IAM policies didn't work. Trying simulation...")
-            simulated_permissions = aws_peass.simulate_permissions()
+            simulated_permissions = self.simulate_permissions()
             simulation_performed = bool(simulated_permissions)
         elif self.skip_simulation:
             print(f"{Fore.YELLOW}Skipping simulation of permissions (--skip-simulation flag set)")
