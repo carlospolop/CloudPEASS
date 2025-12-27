@@ -66,7 +66,7 @@ INVALID_PERMS = {}
 
 
 class GCPPEASS(CloudPEASS):
-	def __init__(self, credentials, extra_token, projects, folders, orgs, sas, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path, billing_project, proxy, print_invalid_perms, dont_get_iam_policies, skip_bruteforce=False):
+	def __init__(self, credentials, extra_token, projects, folders, orgs, sas, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, out_path, billing_project, proxy, print_invalid_perms, dont_get_iam_policies, skip_bruteforce=False, no_ask=False):
 		self.credentials = credentials
 		self.extra_token = extra_token
 		self.projects = [p.strip() for p in projects.split(",")] if projects else []
@@ -80,6 +80,7 @@ class GCPPEASS(CloudPEASS):
 		self.print_invalid_perms = print_invalid_perms
 		self.dont_get_iam_policies = dont_get_iam_policies
 		self.skip_bruteforce = skip_bruteforce
+		self.no_ask = no_ask
 		
 		if proxy:
 			proxy = proxy.split("//")[-1] # Porotocol not needed
@@ -385,7 +386,10 @@ class GCPPEASS(CloudPEASS):
 		except googleapiclient.errors.HttpError as e:
 			if "Cloud Resource Manager API has not been used" in str(e):
 				if self.billing_project:
-					user_input = input(f"{Fore.RED}Cloudresourcemanager found disabled with billing project {self.billing_project}. Do you want to try without it? (Y/n): ")
+					if self.no_ask:
+						user_input = 'n'
+					else:
+						user_input = input(f"{Fore.RED}Cloudresourcemanager found disabled with billing project {self.billing_project}. Do you want to try without it? (Y/n): ")
 					if user_input.lower() != "n":
 						self.billing_project = None
 						return self.can_check_permissions(resource_id, perms)
@@ -401,7 +405,10 @@ class GCPPEASS(CloudPEASS):
 						print(f"{Fore.RED}Could not determine project to enable Cloud Resource Manager API. Something went wrong...")
 						return False
 					
-					user_input = input(f"{Fore.YELLOW}Do you want to try to enable it in project {project}? [y/N]: {Fore.WHITE}")
+					if self.no_ask:
+						user_input = 'n'
+					else:
+						user_input = input(f"{Fore.YELLOW}Do you want to try to enable it in project {project}? [y/N]: {Fore.WHITE}")
 					if user_input.lower() == 'y':
 						print(f"{Fore.YELLOW}Trying to enable Cloud Resource Manager API...")
 						# Attempt to enable the API
@@ -870,7 +877,10 @@ class GCPPEASS(CloudPEASS):
 		if any(p for entry in found_permissions for p in (entry.to_dict() if isinstance(entry, CloudResource) else entry)["permissions"] if p):
 			if self.skip_bruteforce:
 				return found_permissions
-			user_input = input(f"{Fore.YELLOW}Permissions were found accessing the IAM policies. Do you want to continue bruteforcing permissions? [Y/n]: {Fore.WHITE}")
+			if self.no_ask:
+				user_input = 'y'
+			else:
+				user_input = input(f"{Fore.YELLOW}Permissions were found accessing the IAM policies. Do you want to continue bruteforcing permissions? [Y/n]: {Fore.WHITE}")
 			if user_input.lower() == 'n':
 				return found_permissions
 			
@@ -1010,13 +1020,19 @@ class GCPPEASS(CloudPEASS):
 		
 		if any("/gmail" in s for s in scopes):
 			print(f"{Fore.GREEN}Note: You have Gmail API access.")
-			user_input = input(f"{Fore.YELLOW}Do you want to list emails? [Y/n]: {Fore.WHITE}")
+			if self.no_ask:
+				user_input = 'n'
+			else:
+				user_input = input(f"{Fore.YELLOW}Do you want to list emails? [Y/n]: {Fore.WHITE}")
 			if user_input.lower() != 'n':
 				self.list_gmail_emails(google.oauth2.credentials.Credentials(token))
 		
 		if any("/drive" in s for s in scopes):
 			print(f"{Fore.GREEN}Note: You have Drive API access.")
-			user_input = input(f"{Fore.YELLOW}Do you want to list files in Google Drive? [Y/n]: {Fore.WHITE}")
+			if self.no_ask:
+				user_input = 'n'
+			else:
+				user_input = input(f"{Fore.YELLOW}Do you want to list files in Google Drive? [Y/n]: {Fore.WHITE}")
 			if user_input.lower() != 'n':
 				self.list_drive_files(google.oauth2.credentials.Credentials(token))
 		
@@ -1123,12 +1139,10 @@ class GCPPEASS(CloudPEASS):
 					print(f"{Fore.GREEN}No more files to display.")
 					break
 
+			if self.no_ask:
+				cont = 'n'
+			else:
 				cont = input("Do you want to see more files? (y/N): ")
-				if cont.lower() != 'y':
-					break
-
-		except Exception as e:
-			print(f"{Fore.RED}Error listing files: {e}")
 
 
 	def list_gmail_emails(self, creds):
@@ -1167,12 +1181,10 @@ class GCPPEASS(CloudPEASS):
 					print(f"{Fore.GREEN}No more emails to display.")
 					break
 
+			if self.no_ask:
+				cont = 'n'
+			else:
 				cont = input("Do you want to see more emails? (y/N): ")
-				if cont.lower() != 'y':
-					break
-
-		except Exception as e:
-			print(f"{Fore.RED}Error listing emails: {e}")
 
 
 
@@ -1197,6 +1209,7 @@ if __name__ == "__main__":
 	parser.add_argument('--extra-token', help="Extra token potentially with access over Gmail and/or Drive")
 	parser.add_argument('--dont-get-iam-policies', action="store_true", default=False, help="Do not get IAM policies for the resources")
 	parser.add_argument('--skip-bruteforce', action="store_true", default=False, help="Skip bruteforce permission enumeration without prompting")
+	parser.add_argument('--no-ask', action="store_true", default=False, help="Do not ask for user input during execution, use defaults instead")
 	parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/gcp_results.json)")
 	parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
 	parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to suggest attack paths")
@@ -1227,6 +1240,7 @@ if __name__ == "__main__":
 		proxy=args.proxy,
 		print_invalid_perms=args.print_invalid_permissions,
 		dont_get_iam_policies=args.dont_get_iam_policies,
-		skip_bruteforce=args.skip_bruteforce
+		skip_bruteforce=args.skip_bruteforce,
+		no_ask=args.no_ask
 	)
 	gcp_peass.run_analysis()
