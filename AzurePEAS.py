@@ -53,11 +53,12 @@ AZURE_CLARIFICATIONS = """- The permission "Microsoft.KeyVault/vaults/secrets/re
 
 
 class AzurePEASS(CloudPEASS):
-    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, not_enumerate_m365, skip_entraid, out_path=None, check_only_subs=[]):
+    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, not_use_ht_ai, num_threads, not_enumerate_m365, skip_entraid, out_path=None, check_only_subs=[], no_ask=False):
         self.foci_refresh_token = foci_refresh_token
         self.tenant_id = tenant_id
         self.not_enumerate_m365 = not_enumerate_m365
         self.skip_entraid = skip_entraid
+        self.no_ask = no_ask
 
         if self.foci_refresh_token:
             if not self.tenant_id:
@@ -389,7 +390,10 @@ class AzurePEASS(CloudPEASS):
             
             # Handle pagination for To-Do lists
             if '@odata.nextLink' in data:
-                cont = input("Show more To-Do lists? (y/n): ")
+                if self.no_ask:
+                    cont = 'n'
+                else:
+                    cont = input("Show more To-Do lists? (y/n): ")
                 if cont.lower() != 'y':
                     break
                 lists_url = data['@odata.nextLink']
@@ -415,7 +419,10 @@ class AzurePEASS(CloudPEASS):
             
             # Handle pagination if there's more data
             if '@odata.nextLink' in data:
-                cont = input("Show more Contacts? (y/N): ")
+                if self.no_ask:
+                    cont = 'n'
+                else:
+                    cont = input("Show more Contacts? (y/N): ")
                 if cont.lower() != 'y':
                     break
                 contacts_url = data['@odata.nextLink']
@@ -449,7 +456,10 @@ class AzurePEASS(CloudPEASS):
             
             # Check if there's more data to paginate
             if '@odata.nextLink' in data:
-                cont = input("Show more OneNote Notebooks? (y/N): ")
+                if self.no_ask:
+                    cont = 'n'
+                else:
+                    cont = input("Show more OneNote Notebooks? (y/N): ")
                 if cont.lower() != 'y':
                     break
                 notebooks_url = data['@odata.nextLink']
@@ -572,7 +582,10 @@ class AzurePEASS(CloudPEASS):
                 print("-" * 50)
 
             if '@odata.nextLink' in data:
-                cont = input("Show more Emails? (y/N): ")
+                if self.no_ask:
+                    cont = 'n'
+                else:
+                    cont = input("Show more Emails? (y/N): ")
                 if cont.lower() != 'y':
                     break
                 mail_url = data['@odata.nextLink']
@@ -637,7 +650,10 @@ class AzurePEASS(CloudPEASS):
                         print(f"{Fore.BLUE}  Description: {Fore.WHITE}{team['description']}")
                         print()
                     if '@odata.nextLink' in data:
-                        cont = input("Show more Joined Teams? (y/N): ")
+                        if self.no_ask:
+                            cont = 'n'
+                        else:
+                            cont = input("Show more Joined Teams? (y/N): ")
                         if cont.lower() != 'y':
                             break
                         teams_url = data['@odata.nextLink']
@@ -1050,6 +1066,7 @@ if __name__ == "__main__":
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
     parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
     parser.add_argument('--not-use-hacktricks-ai', action="store_true", default=False, help="Don't use Hacktricks AI to suggest attack paths")
+    parser.add_argument('--no-ask', action="store_true", default=False, help="Do not ask for user input during execution, use defaults instead")
     
     args = parser.parse_args()
     
@@ -1111,16 +1128,21 @@ if __name__ == "__main__":
         
         else:
             # Use device code flow (default - works with and without MFA)
+            no_ask = args.no_ask
             print(f"{Fore.CYAN}No tokens provided. Using device code flow for authentication...")
             print(f"{Fore.CYAN}(This works with and without MFA)")
             
             if not tenant_id:
                 print(f"{Fore.YELLOW}Tenant ID is required for authentication.")
                 print(f"{Fore.YELLOW}Provide --tenant-id <tenant_id> or use a common tenant:")
-                tenant_id = input(f"{Fore.CYAN}Enter tenant ID (or press Enter to use 'organizations'): {Fore.WHITE}").strip()
-                if not tenant_id:
+                if no_ask:
                     tenant_id = "organizations"
                     print(f"{Fore.GREEN}Using 'organizations' tenant (works for most Azure AD accounts)")
+                else:
+                    tenant_id = input(f"{Fore.CYAN}Enter tenant ID (or press Enter to use 'organizations'): {Fore.WHITE}").strip()
+                    if not tenant_id:
+                        tenant_id = "organizations"
+                        print(f"{Fore.GREEN}Using 'organizations' tenant (works for most Azure AD accounts)")
             
             # Authenticate and get FOCI refresh token
             foci_refresh_token = authenticate_with_device_code(tenant_id)
@@ -1149,6 +1171,7 @@ if __name__ == "__main__":
         not_enumerate_m365=args.not_enumerate_m365,
         skip_entraid=args.skip_entraid,
         out_path=args.out_json_path,
-        check_only_subs=check_only_subs
+        check_only_subs=check_only_subs,
+        no_ask=args.no_ask
     )
     azure_peass.run_analysis()
