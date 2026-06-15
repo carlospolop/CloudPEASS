@@ -1,4 +1,6 @@
 import argparse
+import json
+import logging
 import requests
 import jwt
 import time
@@ -10,6 +12,7 @@ import msal
 import re
 
 init(autoreset=True)
+logging.getLogger('msal').setLevel(logging.ERROR)
 
 from src.CloudPEASS.cloudpeass import CloudPEASS, CloudResource
 from src.sensitive_permissions.azure import very_sensitive_combinations, sensitive_combinations
@@ -831,8 +834,16 @@ class AzurePEASS(CloudPEASS):
         app = msal.PublicClientApplication(
                 client_id=client_id, authority=f"https://login.microsoftonline.com/{self.tenant_id}"
             )
-        tokens = app.acquire_token_by_refresh_token(foci_refresh_token, scopes=scopes, )
-        return tokens
+        for attempt in range(3):
+            try:
+                return app.acquire_token_by_refresh_token(foci_refresh_token, scopes=scopes)
+            except json.JSONDecodeError:
+                if attempt < 2:
+                    print(f"{Fore.YELLOW}Rate limited on token acquisition, retrying in 30s...{Fore.WHITE}")
+                    time.sleep(30)
+                else:
+                    print(f"{Fore.RED}Rate limited on token acquisition after 3 attempts, skipping.{Fore.WHITE}")
+        return {}
 
     def get_tokens_from_foci_with_scope(self, scope_app_ids={}):
         """
@@ -856,10 +867,10 @@ class AzurePEASS(CloudPEASS):
 
         app_ids = app_ids if app_ids else FOCI_APPS
         for app_id in app_ids:
-            token = self.get_accesstoken_from_foci(
+            token = (self.get_accesstoken_from_foci(
                 app_id,
                 scopes
-            ).get("access_token")
+            ) or {}).get("access_token")
             if token:
                 return token
         
