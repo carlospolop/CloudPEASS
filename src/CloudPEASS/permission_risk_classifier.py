@@ -1,10 +1,10 @@
 """
 Permission risk classifier for AWS, Azure, and GCP.
 Adapted from Blue-PEASS for CloudPEASS integration.
-Downloads risk_rules YAML files from Blue-PEASS repo at runtime.
+Downloads risk_rules YAML files from Blue-CloudPEASS repo at runtime.
 
-Note: The Blue-PEASS repository must be publicly accessible at:
-https://github.com/carlospolop/Blue-PEASS
+Note: The Blue-CloudPEASS repository must be publicly accessible at:
+https://github.com/peass-ng/Blue-CloudPEASS
 """
 
 from __future__ import annotations
@@ -23,9 +23,9 @@ import yaml
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 RISK_LEVELS = ("low", "medium", "high", "critical")
 
-# Blue-PEASS GitHub repository base URL
-# Note: Update this to match your Blue-PEASS repository name and branch
-BLUEPEASS_RISK_RULES_BASE_URL = "https://raw.githubusercontent.com/carlospolop/Blue-PEASS/main/risk_rules"
+# Blue-CloudPEASS GitHub repository base URL
+# Note: Update this to match your Blue-CloudPEASS repository name and branch
+BLUEPEASS_RISK_RULES_BASE_URL = "https://raw.githubusercontent.com/peass-ng/Blue-CloudPEASS/refs/heads/main/risk_rules"
 RISK_RULES_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
@@ -515,10 +515,10 @@ def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
         if any(lower.startswith(p) for p in rules.insights_medium_prefixes_write_or_action) and lower.endswith(("/write", "/action")):
             return "medium"
 
-        if lower.startswith(rules.insights_activitylogalerts_prefix) and (lower.endswith("/write") or lower.endswith("/activated/action")):
+        if rules.insights_activitylogalerts_prefix and lower.startswith(rules.insights_activitylogalerts_prefix) and (lower.endswith("/write") or lower.endswith("/activated/action")):
             return "medium"
 
-        if lower.startswith(rules.insights_alertrules_prefix) and lower.endswith(
+        if rules.insights_alertrules_prefix and lower.startswith(rules.insights_alertrules_prefix) and lower.endswith(
             ("/write", "/activated/action", "/resolved/action", "/throttled/action")
         ):
             return "medium"
@@ -530,17 +530,17 @@ def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
                 return None
             return "medium"
 
-    if lower.startswith(rules.resourcehealth_events_action_prefix) and lower.endswith("/action"):
+    if rules.resourcehealth_events_action_prefix and lower.startswith(rules.resourcehealth_events_action_prefix) and lower.endswith("/action"):
         return "medium"
 
-    if lower.startswith(rules.billing_provider_prefix):
+    if rules.billing_provider_prefix and lower.startswith(rules.billing_provider_prefix):
         if any(k in lower for k in rules.billing_exclude_keywords):
             return None
         last = _azure_last_segment(permission)
         if last in ("write", "action"):
             return "medium"
 
-    if lower.startswith(rules.appinsights_component_prefix):
+    if rules.appinsights_component_prefix and lower.startswith(rules.appinsights_component_prefix):
         if any(k in lower for k in rules.appinsights_exclude_keywords):
             return None
         last = _azure_last_segment(permission)
@@ -561,8 +561,21 @@ def azure_regex_classify(permission: str, rules: AzureRules) -> Optional[str]:
 
     lower = permission.lower()
 
-    if permission == "*" or permission.endswith("/*") or permission == "*/*":
+    # True full-admin wildcards remain critical.
+    if permission == "*" or permission == "*/*":
         return "critical"
+
+    # Root-namespace wildcard under Microsoft.Authorization/ grants RBAC breadth.
+    if lower == "microsoft.authorization/*":
+        return "critical"
+
+    # Other namespace-scoped wildcards (e.g. "Microsoft.HybridCompute/licenses/*") are not
+    # automatically critical. Classify them by the underlying namespace: strip the trailing
+    # "/*" and treat the result as a write/action (the most permissive standard verb), so
+    # the existing namespace-aware logic below assigns risk based on the resource type.
+    if permission.endswith("/*"):
+        permission = permission[:-2] + "/write"
+        lower = permission.lower()
 
     last = _azure_last_segment(permission)
     is_read = last == "read"

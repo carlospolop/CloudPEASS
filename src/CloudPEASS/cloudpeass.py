@@ -377,16 +377,13 @@ class CloudPEASS:
             print(f"{Fore.WHITE}Resources: {Fore.CYAN}{f'{Fore.WHITE} , {Fore.CYAN}'.join(result['resources'])}")
             
             # Organize permissions by category
-            wildcards_perms = []
             critical_perms = []
             high_perms = []
             medium_perms = []
             low_perms = []
             
             for perm in perms:
-                if '*' in perm:
-                    wildcards_perms.append(perm)
-                elif perm in critical:
+                if perm in critical:
                     critical_perms.append(perm)
                 elif perm in high:
                     high_perms.append(perm)
@@ -398,7 +395,7 @@ class CloudPEASS:
             # Build permissions message with sorted categories
             perms_msg = f"{Fore.WHITE}Permissions: "
             
-            for perm in wildcards_perms + critical_perms:
+            for perm in critical_perms:
                 perms_msg += f"{Fore.RED}{Back.YELLOW}{perm}{Style.RESET_ALL}, "
             
             for perm in high_perms:
