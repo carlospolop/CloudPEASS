@@ -1,10 +1,10 @@
 """
 Permission risk classifier for AWS, Azure, and GCP.
 Adapted from Blue-PEASS for CloudPEASS integration.
-Downloads risk_rules YAML files from Blue-PEASS repo at runtime.
+Downloads risk_rules YAML files from Blue-CloudPEASS repo at runtime.
 
-Note: The Blue-PEASS repository must be publicly accessible at:
-https://github.com/carlospolop/Blue-PEASS
+Note: The Blue-CloudPEASS repository must be publicly accessible at:
+https://github.com/peass-ng/Blue-CloudPEASS
 """
 
 from __future__ import annotations
@@ -23,9 +23,9 @@ import yaml
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 RISK_LEVELS = ("low", "medium", "high", "critical")
 
-# Blue-PEASS GitHub repository base URL
-# Note: Update this to match your Blue-PEASS repository name and branch
-BLUEPEASS_RISK_RULES_BASE_URL = "https://raw.githubusercontent.com/carlospolop/Blue-PEASS/main/risk_rules"
+# Blue-CloudPEASS GitHub repository base URL
+# Note: Update this to match your Blue-CloudPEASS repository name and branch
+BLUEPEASS_RISK_RULES_BASE_URL = "https://raw.githubusercontent.com/peass-ng/Blue-CloudPEASS/refs/heads/main/risk_rules"
 RISK_RULES_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
@@ -481,6 +481,16 @@ def _azure_contains_boundary_keywords(lower: str, rules: AzureRules) -> bool:
     return any(k in lower for k in rules.boundary_keywords)
 
 
+def _highest_risk(levels: Iterable[Optional[str]]) -> Optional[str]:
+    best = None
+    for level in levels:
+        if level is None:
+            continue
+        if best is None or RISK_ORDER[level] > RISK_ORDER[best]:
+            best = level
+    return best
+
+
 def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
     permission = permission.strip()
     if not permission:
@@ -515,10 +525,10 @@ def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
         if any(lower.startswith(p) for p in rules.insights_medium_prefixes_write_or_action) and lower.endswith(("/write", "/action")):
             return "medium"
 
-        if lower.startswith(rules.insights_activitylogalerts_prefix) and (lower.endswith("/write") or lower.endswith("/activated/action")):
+        if rules.insights_activitylogalerts_prefix and lower.startswith(rules.insights_activitylogalerts_prefix) and (lower.endswith("/write") or lower.endswith("/activated/action")):
             return "medium"
 
-        if lower.startswith(rules.insights_alertrules_prefix) and lower.endswith(
+        if rules.insights_alertrules_prefix and lower.startswith(rules.insights_alertrules_prefix) and lower.endswith(
             ("/write", "/activated/action", "/resolved/action", "/throttled/action")
         ):
             return "medium"
@@ -530,17 +540,17 @@ def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
                 return None
             return "medium"
 
-    if lower.startswith(rules.resourcehealth_events_action_prefix) and lower.endswith("/action"):
+    if rules.resourcehealth_events_action_prefix and lower.startswith(rules.resourcehealth_events_action_prefix) and lower.endswith("/action"):
         return "medium"
 
-    if lower.startswith(rules.billing_provider_prefix):
+    if rules.billing_provider_prefix and lower.startswith(rules.billing_provider_prefix):
         if any(k in lower for k in rules.billing_exclude_keywords):
             return None
         last = _azure_last_segment(permission)
         if last in ("write", "action"):
             return "medium"
 
-    if lower.startswith(rules.appinsights_component_prefix):
+    if rules.appinsights_component_prefix and lower.startswith(rules.appinsights_component_prefix):
         if any(k in lower for k in rules.appinsights_exclude_keywords):
             return None
         last = _azure_last_segment(permission)
@@ -550,19 +560,48 @@ def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
     return None
 
 
-def azure_regex_classify(permission: str, rules: AzureRules) -> Optional[str]:
+def _azure_wildcard_level(permission: str, rules: AzureRules) -> Optional[str]:
     permission = permission.strip()
     if not permission:
         return None
 
+    # True full-admin wildcards remain critical.
+    if permission == "*" or permission == "*/*":
+        return "critical"
+
+    if not permission.endswith("/*"):
+        return None
+
+    base = permission[:-2].strip("/")
+    lower_base = base.lower()
+
+    # Provider-root wildcards grant every operation under that provider namespace.
+    # That is broad enough to include unknown privileged child actions, so keep it
+    # critical instead of pretending it is only a provider-level write.
+    if lower_base.count("/") == 0:
+        return "critical"
+
+    if lower_base.startswith("microsoft.authorization/"):
+        if any(k in lower_base for k in ("roleassignments", "roledefinitions", "elevateaccess")):
+            return "critical"
+
+    if lower_base.startswith("microsoft.managedidentity/"):
+        if any(k in lower_base for k in ("userassignedidentities", "federatedidentitycredentials")):
+            return "critical"
+
+    if lower_base == "microsoft.storage/storageaccounts":
+        return "critical"
+
+    likely_child_permissions = [f"{base}/{verb}" for verb in ("read", "write", "delete", "action")]
+    return _highest_risk(_azure_classify_non_wildcard(child, rules) for child in likely_child_permissions)
+
+
+def _azure_classify_non_wildcard(permission: str, rules: AzureRules) -> Optional[str]:
     forced = azure_override_level(permission, rules)
     if forced is not None:
         return forced
 
     lower = permission.lower()
-
-    if permission == "*" or permission.endswith("/*") or permission == "*/*":
-        return "critical"
 
     last = _azure_last_segment(permission)
     is_read = last == "read"
@@ -615,6 +654,18 @@ def azure_regex_classify(permission: str, rules: AzureRules) -> Optional[str]:
         return "medium"
 
     return None
+
+
+def azure_regex_classify(permission: str, rules: AzureRules) -> Optional[str]:
+    permission = permission.strip()
+    if not permission:
+        return None
+
+    wildcard_level = _azure_wildcard_level(permission, rules)
+    if wildcard_level is not None:
+        return wildcard_level
+
+    return _azure_classify_non_wildcard(permission, rules)
 
 
 def classify_permission(provider: str, permission: str, *, unknown_default: str = "high") -> str:
