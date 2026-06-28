@@ -481,6 +481,16 @@ def _azure_contains_boundary_keywords(lower: str, rules: AzureRules) -> bool:
     return any(k in lower for k in rules.boundary_keywords)
 
 
+def _highest_risk(levels: Iterable[Optional[str]]) -> Optional[str]:
+    best = None
+    for level in levels:
+        if level is None:
+            continue
+        if best is None or RISK_ORDER[level] > RISK_ORDER[best]:
+            best = level
+    return best
+
+
 def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
     permission = permission.strip()
     if not permission:
@@ -550,32 +560,48 @@ def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
     return None
 
 
-def azure_regex_classify(permission: str, rules: AzureRules) -> Optional[str]:
+def _azure_wildcard_level(permission: str, rules: AzureRules) -> Optional[str]:
     permission = permission.strip()
     if not permission:
         return None
-
-    forced = azure_override_level(permission, rules)
-    if forced is not None:
-        return forced
-
-    lower = permission.lower()
 
     # True full-admin wildcards remain critical.
     if permission == "*" or permission == "*/*":
         return "critical"
 
-    # Root-namespace wildcard under Microsoft.Authorization/ grants RBAC breadth.
-    if lower == "microsoft.authorization/*":
+    if not permission.endswith("/*"):
+        return None
+
+    base = permission[:-2].strip("/")
+    lower_base = base.lower()
+
+    # Provider-root wildcards grant every operation under that provider namespace.
+    # That is broad enough to include unknown privileged child actions, so keep it
+    # critical instead of pretending it is only a provider-level write.
+    if lower_base.count("/") == 0:
         return "critical"
 
-    # Other namespace-scoped wildcards (e.g. "Microsoft.HybridCompute/licenses/*") are not
-    # automatically critical. Classify them by the underlying namespace: strip the trailing
-    # "/*" and treat the result as a write/action (the most permissive standard verb), so
-    # the existing namespace-aware logic below assigns risk based on the resource type.
-    if permission.endswith("/*"):
-        permission = permission[:-2] + "/write"
-        lower = permission.lower()
+    if lower_base.startswith("microsoft.authorization/"):
+        if any(k in lower_base for k in ("roleassignments", "roledefinitions", "elevateaccess")):
+            return "critical"
+
+    if lower_base.startswith("microsoft.managedidentity/"):
+        if any(k in lower_base for k in ("userassignedidentities", "federatedidentitycredentials")):
+            return "critical"
+
+    if lower_base == "microsoft.storage/storageaccounts":
+        return "critical"
+
+    likely_child_permissions = [f"{base}/{verb}" for verb in ("read", "write", "delete", "action")]
+    return _highest_risk(_azure_classify_non_wildcard(child, rules) for child in likely_child_permissions)
+
+
+def _azure_classify_non_wildcard(permission: str, rules: AzureRules) -> Optional[str]:
+    forced = azure_override_level(permission, rules)
+    if forced is not None:
+        return forced
+
+    lower = permission.lower()
 
     last = _azure_last_segment(permission)
     is_read = last == "read"
@@ -628,6 +654,18 @@ def azure_regex_classify(permission: str, rules: AzureRules) -> Optional[str]:
         return "medium"
 
     return None
+
+
+def azure_regex_classify(permission: str, rules: AzureRules) -> Optional[str]:
+    permission = permission.strip()
+    if not permission:
+        return None
+
+    wildcard_level = _azure_wildcard_level(permission, rules)
+    if wildcard_level is not None:
+        return wildcard_level
+
+    return _azure_classify_non_wildcard(permission, rules)
 
 
 def classify_permission(provider: str, permission: str, *, unknown_default: str = "high") -> str:
