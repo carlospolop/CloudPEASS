@@ -170,6 +170,49 @@ class AWSBruteForce():
         env["AWS_EC2_METADATA_DISABLED"] = "true"
         return env
 
+    def _get_aws_help(self, service=None):
+        env = os.environ.copy()
+        # AWS CLI help may inherit an interactive pager from the user's shell.
+        # Force plain output so help parsing behaves consistently across systems.
+        env["AWS_PAGER"] = ""
+        env["PAGER"] = "cat"
+        env["MANPAGER"] = "cat"
+
+        command = ["aws"]
+        if service:
+            command.append(service)
+        command.append("help")
+
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=30,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            if self.debug:
+                print(f"[DEBUG] Timed out while running: {' '.join(command)}")
+            return []
+
+        if result.returncode != 0:
+            if self.debug:
+                error = result.stderr.decode(errors="replace").strip()
+                print(f"[DEBUG] Failed to run {' '.join(command)}: {error}")
+            return []
+
+        output = result.stdout
+        if shutil.which("col"):
+            col_result = subprocess.run(
+                ["col", "-b"],
+                input=output,
+                capture_output=True,
+            )
+            if col_result.returncode == 0:
+                output = col_result.stdout
+
+        return output.decode(errors="replace").splitlines()
+
     def run_command(self, profile, region, service, command, extra='', cont=0):
         full_command = self._build_command(profile, region, service, command, extra)
         env = self._build_env(profile)
@@ -236,7 +279,7 @@ class AWSBruteForce():
             print(f"[-] Timeout: {full_command}")
 
     def get_aws_services(self):
-        output = subprocess.run("aws help | col -b", shell=True, capture_output=True).stdout.decode().splitlines()
+        output = self._get_aws_help()
         start_string = "AVAILABLE SERVICES"
         end_string = "SEE ALSO"
         point = "o"
@@ -258,7 +301,7 @@ class AWSBruteForce():
         return services
 
     def get_commands_for_service(self, service):
-        output = subprocess.run(f"aws {service} help | col -b", shell=True, capture_output=True).stdout.decode().splitlines()
+        output = self._get_aws_help(service)
         start_string = "AVAILABLE COMMANDS"
         end_string = "SEE ALSO"
         in_range = False
@@ -289,7 +332,7 @@ class AWSBruteForce():
             filterred_services = [service for service in services if service.lower() in self.aws_services ]
             if not filterred_services:
                 print(f"{Fore.RED}No services found to test. Please check your input because you probably misspelled the filtering. Exiting...{Fore.RESET}")
-                return
+                return []
             else:
                 print(f"{Fore.YELLOW}Filtered services to bf: {', '.join(filterred_services)}{Fore.RESET}")
 
@@ -316,6 +359,14 @@ class AWSBruteForce():
                     if self.debug:
                         print(f"[DEBUG] Failed to get commands for {service}: {e}")
             pbar.close()
+
+        if not commands_to_run:
+            print(
+                f"{Fore.RED}No AWS CLI commands were discovered. "
+                "Unable to brute-force permissions. Run with --debug to check "
+                f"the AWS CLI help output.{Fore.RESET}"
+            )
+            return []
 
         with ThreadPoolExecutor(max_workers=self.num_threads*4) as executor:
             futures = [executor.submit(self.run_command, *args) for args in commands_to_run]
