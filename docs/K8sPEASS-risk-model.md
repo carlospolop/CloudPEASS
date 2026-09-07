@@ -59,6 +59,10 @@ control-plane modification, or a strong conditional escalation primitive:
 - Ingress create/update/patch when an active controller accepts the object.
   Create can expose an internal Service through a new host/path; patch can
   redirect a trusted route to another Service.
+- Gateway API HTTPRoute create/update/patch when an accepted Gateway permits
+  the attachment. Tested impacts include exposing an internal Service,
+  redirecting a trusted hostname, and silently mirroring requests—including
+  authorization headers—to another backend.
 - Exact deletion of an existing Service referenced by a
   `failurePolicy: Ignore` admission webhook. The resulting connection failure
   skips that webhook.

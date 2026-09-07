@@ -626,6 +626,12 @@ class PermissionModelTests(unittest.TestCase):
             PermissionKey(
                 "patch", group="networking.k8s.io", resource="ingresses"
             ),
+            PermissionKey(
+                "create", group="gateway.networking.k8s.io", resource="httproutes"
+            ),
+            PermissionKey(
+                "patch", group="gateway.networking.k8s.io", resource="httproutes"
+            ),
         )
         for key in cases:
             with self.subTest(permission=key.human()):

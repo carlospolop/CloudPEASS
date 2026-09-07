@@ -415,6 +415,16 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
             "Can expose an internal Service or redirect a trusted host/path when "
             "an active Ingress controller accepts the object.",
         )
+    if (
+        resource == "httproutes"
+        and _group_is(group, "gateway.networking.k8s.io")
+        and verb in CHANGE_VERBS
+    ):
+        return (
+            "high",
+            "Can expose an internal Service, redirect a trusted route, or mirror "
+            "requests when an accepted Gateway permits the HTTPRoute attachment.",
+        )
     if resource in STORAGE_CONTROL_RESOURCES and group in CORE_GROUPS and verb in {"create", "*"}:
         return (
             "high",
