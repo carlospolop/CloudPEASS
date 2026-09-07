@@ -58,6 +58,8 @@ high_exact:
   - bigtable.tables.mutateRows
   - bigtable.tables.readRows
   - cloudbuild.builds.approve
+  - cloudbuild.builds.get
+  - cloudbuild.builds.list
   - cloudbuild.repositories.accessReadToken
   - cloudbuild.repositories.accessReadWriteToken
   - cloudfunctions.functions.invoke
@@ -66,6 +68,10 @@ high_exact:
   - cloudsql.instances.connect
   - cloudsql.instances.export
   - cloudsql.instances.login
+  - cloudscheduler.jobs.get
+  - cloudscheduler.jobs.list
+  - cloudtasks.tasks.get
+  - cloudtasks.tasks.list
   - compute.instances.getSerialPortOutput
   - compute.instances.setServiceAccount
   - container.clusters.getCredentials
@@ -125,6 +131,12 @@ high_exact:
   - storage.objects.delete
   - storage.objects.get
   - workflows.executions.create
+  - workflows.executions.get
+  - workflows.executions.list
+  - workflows.stepEntries.get
+  - workflows.stepEntries.list
+  - workflows.workflows.get
+  - workflows.workflows.list
 
 # Exact overrides for names that contain security-looking words but disclose
 # only metadata or perform ordinary lifecycle operations.
