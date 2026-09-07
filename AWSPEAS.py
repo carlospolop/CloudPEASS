@@ -128,6 +128,12 @@ class AWSPEASS(CloudPEASS):
         # profile refresh chain. Long-lived credentials can be passed directly,
         # avoiding repeated credential_process/profile startup in every child.
         cli_profile = profile_name if profile_name and self.credentials.token else None
+        profiles = (
+            self.session._session.full_config.get("profiles", {}) if cli_profile else {}
+        )
+        profile_uses_environment = self._profile_chain_uses_environment(
+            profiles, cli_profile
+        )
         self.AWSBruteForce = AWSBruteForce(
             debug,
             self.region,
@@ -137,7 +143,22 @@ class AWSPEASS(CloudPEASS):
             access_key_id or self.credentials.access_key,
             secret_access_key or self.credentials.secret_key,
             session_token or self.credentials.token,
+            profile_uses_environment_credentials=profile_uses_environment,
         )
+
+    @staticmethod
+    def _profile_chain_uses_environment(profiles, profile_name):
+        """Detect credential_source=Environment through source_profile chains."""
+        seen = set()
+        while isinstance(profile_name, str) and profile_name and profile_name not in seen:
+            seen.add(profile_name)
+            config = profiles.get(profile_name, {}) if isinstance(profiles, dict) else {}
+            if not isinstance(config, dict):
+                return False
+            if str(config.get("credential_source", "")).casefold() == "environment":
+                return True
+            profile_name = config.get("source_profile")
+        return False
 
     # Identity and credential safety
     def get_caller_identity(self):
@@ -373,13 +394,18 @@ class AWSPEASS(CloudPEASS):
         try:
             response = requests.get(MANAGED_POLICIES_URL, timeout=(5, 20))
             response.raise_for_status()
-            for policy in response.json().get("policies", []):
+            payload = response.json()
+            if not isinstance(payload, dict) or not isinstance(payload.get("policies"), list):
+                raise ValueError("managed-policy dataset has an unexpected shape")
+            for policy in payload["policies"]:
+                if not isinstance(policy, dict):
+                    continue
                 arn = policy.get("arn", "")
                 path = arn.split(":policy/", 1)[-1] if ":policy/" in arn else ""
                 actions = policy.get("effective_action_names") or []
-                if path and actions:
+                if path and isinstance(actions, list) and actions:
                     self.public_managed_policy_actions[path] = actions
-        except (requests.RequestException, ValueError, KeyError) as exc:
+        except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError) as exc:
             if self.debug:
                 print(f"{Fore.YELLOW}[DEBUG] Public AWS-managed policy fallback failed: {exc}")
         return self.public_managed_policy_actions
@@ -408,7 +434,14 @@ class AWSPEASS(CloudPEASS):
         attached_arns = set()
 
         if self.principal_type == "user":
-            entity_response, entity_ok = self._call_iam("get_user", UserName=self.principal_name)
+            # Omitting UserName is the most permission-friendly way for an IAM
+            # user to inspect itself. Retry the explicit name for unusual IAM
+            # policies/proxies that require it.
+            entity_response, entity_ok = self._call_iam("get_user")
+            if not entity_ok:
+                entity_response, entity_ok = self._call_iam(
+                    "get_user", UserName=self.principal_name
+                )
             complete &= entity_ok
             entity = entity_response.get("User", {})
             self.entity_arn = entity.get("Arn") or self.principal_arn
@@ -432,9 +465,14 @@ class AWSPEASS(CloudPEASS):
                 )
                 complete &= doc_ok
                 if doc_ok:
-                    documents.append(
-                        (f"inline user policy {policy_name}", self._policy_document(response.get("PolicyDocument")), False)
-                    )
+                    document = self._policy_document(response.get("PolicyDocument"))
+                    if document:
+                        documents.append((f"inline user policy {policy_name}", document, False))
+                    else:
+                        complete = False
+                        self.policy_notes.append(
+                            f"Ignored an empty or malformed inline user policy {policy_name}."
+                        )
 
             groups, groups_ok = self._paginate_iam(
                 "list_groups_for_user", "Groups", UserName=self.principal_name
@@ -459,13 +497,17 @@ class AWSPEASS(CloudPEASS):
                     )
                     complete &= doc_ok
                     if doc_ok:
-                        documents.append(
-                            (
-                                f"inline group policy {group_name}/{policy_name}",
-                                self._policy_document(response.get("PolicyDocument")),
-                                False,
+                        document = self._policy_document(response.get("PolicyDocument"))
+                        if document:
+                            documents.append(
+                                (f"inline group policy {group_name}/{policy_name}", document, False)
                             )
-                        )
+                        else:
+                            complete = False
+                            self.policy_notes.append(
+                                f"Ignored an empty or malformed inline group policy "
+                                f"{group_name}/{policy_name}."
+                            )
 
         elif self.principal_type == "role":
             entity_response, entity_ok = self._call_iam("get_role", RoleName=self.principal_name)
@@ -497,9 +539,14 @@ class AWSPEASS(CloudPEASS):
                 )
                 complete &= doc_ok
                 if doc_ok:
-                    documents.append(
-                        (f"inline role policy {policy_name}", self._policy_document(response.get("PolicyDocument")), False)
-                    )
+                    document = self._policy_document(response.get("PolicyDocument"))
+                    if document:
+                        documents.append((f"inline role policy {policy_name}", document, False))
+                    else:
+                        complete = False
+                        self.policy_notes.append(
+                            f"Ignored an empty or malformed inline role policy {policy_name}."
+                        )
         else:
             return [], False
 
@@ -557,28 +604,36 @@ class AWSPEASS(CloudPEASS):
 
         self.entity_arn = entity.get("Arn") or self.entity_arn
         documents = []
+        complete = True
         for inline in entity.get(inline_key, []):
-            documents.append(
-                (f"account snapshot inline policy {inline.get('PolicyName')}", self._policy_document(inline.get("PolicyDocument")), False)
-            )
+            document = self._policy_document(inline.get("PolicyDocument"))
+            if document:
+                documents.append(
+                    (f"account snapshot inline policy {inline.get('PolicyName')}", document, False)
+                )
+            else:
+                complete = False
         attached = list(entity.get("AttachedManagedPolicies", []))
         for group in groups:
             if group.get("GroupName") not in related_groups:
                 continue
             for inline in group.get("GroupPolicyList", []):
-                documents.append(
-                    (
-                        f"account snapshot group policy {group.get('GroupName')}/{inline.get('PolicyName')}",
-                        self._policy_document(inline.get("PolicyDocument")),
-                        False,
+                document = self._policy_document(inline.get("PolicyDocument"))
+                if document:
+                    documents.append(
+                        (
+                            f"account snapshot group policy {group.get('GroupName')}/{inline.get('PolicyName')}",
+                            document,
+                            False,
+                        )
                     )
-                )
+                else:
+                    complete = False
             attached.extend(group.get("AttachedManagedPolicies", []))
 
         boundary_arn = entity.get("PermissionsBoundary", {}).get("PermissionsBoundaryArn")
         if boundary_arn:
             self.permissions_boundary_arns.add(boundary_arn)
-        complete = True
         for attached_policy in attached:
             arn = attached_policy.get("PolicyArn")
             if managed_docs.get(arn):
@@ -601,11 +656,13 @@ class AWSPEASS(CloudPEASS):
             except Exception:
                 continue
             prefix = model.metadata.get("signingName") or model.endpoint_prefix or service
-            transformed = []
             for operation in model.operation_names:
-                action = self.AWSBruteForce.transform_command(f"{prefix}:{operation}")
-                transformed.append(action.split(":", 1)[1])
-            permissions.setdefault(prefix, []).extend(transformed)
+                normalized = self.AWSBruteForce.transform_command(f"{prefix}:{operation}")
+                if ":" not in normalized:
+                    continue
+                normalized_prefix, action = normalized.split(":", 1)
+                if normalized_prefix and action:
+                    permissions.setdefault(normalized_prefix, []).append(action)
         return {service: sorted(set(actions)) for service, actions in permissions.items()}
 
     def download_aws_permissions(self):
@@ -617,13 +674,24 @@ class AWSPEASS(CloudPEASS):
             payload = re.sub(r"^\s*app\.PolicyEditorConfig\s*=\s*", "", response.text)
             payload = payload.strip().rstrip(";")
             policies = json.loads(payload)
-            self.action_catalog = {
-                details["StringPrefix"]: details.get("Actions", [])
-                for details in policies.get("serviceMap", {}).values()
-                if details.get("StringPrefix")
-            }
+            if not isinstance(policies, dict) or not isinstance(policies.get("serviceMap"), dict):
+                raise ValueError("AWS action catalog has an unexpected shape")
+            catalog = {}
+            for details in policies["serviceMap"].values():
+                if not isinstance(details, dict):
+                    continue
+                prefix = details.get("StringPrefix")
+                actions = details.get("Actions")
+                if not isinstance(prefix, str) or not prefix or not isinstance(actions, list):
+                    continue
+                valid_actions = [action for action in actions if isinstance(action, str) and action]
+                if valid_actions:
+                    catalog[prefix] = valid_actions
+            if not catalog:
+                raise ValueError("AWS action catalog contained no valid services")
+            self.action_catalog = catalog
             self.action_catalog_source = "AWS Policy Generator"
-        except (requests.RequestException, ValueError, KeyError) as exc:
+        except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError) as exc:
             if self.debug:
                 print(f"{Fore.YELLOW}[DEBUG] AWS action catalog download failed: {exc}")
             self.action_catalog = self._botocore_action_catalog()
@@ -632,10 +700,18 @@ class AWSPEASS(CloudPEASS):
 
     def _all_actions(self):
         catalog = self.download_aws_permissions()
-        return {f"{service}:{action}" for service, actions in catalog.items() for action in actions}
+        return {
+            f"{service}:{action}"
+            for service, actions in catalog.items()
+            if isinstance(service, str) and service
+            for action in (actions if isinstance(actions, (list, tuple, set)) else [])
+            if isinstance(action, str) and action
+        }
 
     def _expand_not_actions(self, exclusions):
-        exclusions = [value.lower() for value in exclusions]
+        exclusions = [value.casefold() for value in exclusions if isinstance(value, str) and value]
+        if not exclusions:
+            return set()
         return {
             action
             for action in self._all_actions()
@@ -667,15 +743,20 @@ class AWSPEASS(CloudPEASS):
                 if not action_values and statement.get("NotAction") is not None:
                     action_values = sorted(self._expand_not_actions(self._as_list(statement.get("NotAction"))))
                     self.policy_notes.append(f"Expanded NotAction in {source} using the AWS action catalog.")
-                action_values = {str(action) for action in action_values if action}
+                action_values = {
+                    action for action in action_values if isinstance(action, str) and action
+                }
                 resources = self._as_list(statement.get("Resource")) or ["*"]
                 if statement.get("NotResource") is not None:
                     excluded = ", ".join(map(str, self._as_list(statement.get("NotResource"))))
                     resources = [f"* (except {excluded})"]
                     self.policy_notes.append(f"Preserved a NotResource scope from {source} as an exclusion label.")
-                conditions = statement.get("Condition") or {}
-                if not isinstance(conditions, dict):
+                raw_conditions = statement.get("Condition")
+                conditions = {} if raw_conditions is None else raw_conditions
+                malformed_condition = not isinstance(conditions, dict)
+                if malformed_condition:
                     self.policy_notes.append(f"Ignored a malformed Condition in {source}.")
+                    self.policy_conditions.add("<malformed>")
                     conditions = {}
                 for resource in resources:
                     add(
@@ -690,6 +771,7 @@ class AWSPEASS(CloudPEASS):
                     and "*" in action_values
                     and resources == ["*"]
                     and not conditions
+                    and not malformed_condition
                 ):
                     unrestricted_admin = True
 
@@ -702,9 +784,22 @@ class AWSPEASS(CloudPEASS):
             for statement in self._as_list(document.get("Statement")):
                 if not isinstance(statement, dict) or statement.get("Effect") not in {"Allow", "Deny"}:
                     continue
-                actions = set(map(str, self._as_list(statement.get("Action"))))
+                actions = {
+                    action
+                    for action in self._as_list(statement.get("Action"))
+                    if isinstance(action, str) and action
+                }
                 if not actions and statement.get("NotAction") is not None:
                     actions = self._expand_not_actions(self._as_list(statement.get("NotAction")))
+                raw_conditions = statement.get("Condition")
+                conditions = {} if raw_conditions is None else raw_conditions
+                if isinstance(conditions, dict):
+                    self.policy_conditions.update(conditions.keys())
+                else:
+                    self.policy_conditions.add("<malformed>")
+                    self.policy_notes.append(
+                        f"Ignored a malformed Condition in permissions boundary {source}."
+                    )
                 target = boundary_allow if statement["Effect"] == "Allow" else boundary_deny
                 target.update(actions)
         if boundary_documents or self.permissions_boundary_arns:
@@ -777,7 +872,9 @@ class AWSPEASS(CloudPEASS):
                     response = self.iam_client.simulate_principal_policy(**kwargs)
                     for result in response.get("EvaluationResults", []):
                         if str(result.get("EvalDecision", "")).lower() == "allowed":
-                            allowed.add(result.get("EvalActionName"))
+                            action = result.get("EvalActionName")
+                            if isinstance(action, str) and action:
+                                allowed.add(action)
                     if not response.get("IsTruncated"):
                         return allowed, True
                     marker = response.get("Marker")
@@ -824,6 +921,10 @@ class AWSPEASS(CloudPEASS):
             self.policy_notes.append(
                 "Simulator context values were unavailable for: " + ", ".join(sorted(context_keys))
             )
+        elif not context_ok:
+            self.policy_notes.append(
+                "Could not enumerate simulator context keys; conditional results may be incomplete."
+            )
 
         all_actions = sorted(self._all_actions())
         if not all_actions:
@@ -839,7 +940,13 @@ class AWSPEASS(CloudPEASS):
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             futures = [executor.submit(self.simulate_batch, batch) for batch in batches]
             for future in tqdm(as_completed(futures), total=len(futures), desc="Simulating permissions"):
-                batch_allowed, ok = future.result()
+                try:
+                    batch_allowed, ok = future.result()
+                except Exception as exc:
+                    if self.debug:
+                        print(f"{Fore.YELLOW}[DEBUG] Unexpected simulator worker failure: {exc}")
+                    self.policy_notes.append("An IAM simulator worker failed unexpectedly.")
+                    continue
                 allowed.update(batch_allowed)
                 successful_batches += int(ok)
         if successful_batches == 0:
@@ -1115,7 +1222,7 @@ def build_parser():
     parser.add_argument(
         "--skip-managed-policies-guess",
         action="store_true",
-        help="Skip offline managed-policy inference after live probes",
+        help="Skip public-dataset managed-policy inference after live probes",
     )
     parser.add_argument(
         "--no-ask",

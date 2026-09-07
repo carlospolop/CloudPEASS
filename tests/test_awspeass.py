@@ -206,6 +206,16 @@ def test_s3api_and_access_analyzer_permissions_are_normalized():
     assert instance.transform_command("accessanalyzer:ListAnalyzers") == (
         "access-analyzer:ListAnalyzers"
     )
+    assert instance.transform_command("codedeploy:ListApplications") == (
+        "codedeploy:ListApplications"
+    )
+    assert instance.permission_for_command("s3api", "get-bucket-acl") == "s3:GetBucketAcl"
+    assert instance.permission_for_command(
+        "cloudfront", "list-distributions-by-web-acl-id"
+    ) == "cloudfront:ListDistributionsByWebACLId"
+    assert instance.permission_for_command("deploy", "list-applications") == (
+        "codedeploy:ListApplications"
+    )
 
 
 def test_managed_policy_inference_is_case_insensitive_and_combines_policies():
@@ -216,6 +226,166 @@ def test_managed_policy_inference_is_case_insensitive_and_combines_policies():
     ]
     result = guesser.guess_permissions()
     assert result[0]["policies"] == ["ComputeRead", "StorageRead"]
+
+
+def test_managed_policy_inference_accepts_new_live_read_operations():
+    guesser = AWSManagedPoliciesGuesser({"newservice:GetNewThing"})
+    guesser.fetch_managed_policies = lambda url: [{
+        "name": "NewReadPolicy", "effective_action_names": ["newservice:GetNewThing"]
+    }]
+    assert guesser.guess_permissions()[0]["policies"] == ["NewReadPolicy"]
+
+
+def test_future_credential_and_token_getters_are_blocked():
+    blocked = AWSBruteForce._is_blocked_command
+    assert blocked("future-service", "get-project-credentials")
+    assert blocked("future-service", "get-new-access-token")
+    assert not blocked("future-service", "get-token-balance")
+    assert not blocked("iam", "get-credential-report")
+
+
+def test_profile_environment_is_sanitized_unless_profile_chain_requires_it(monkeypatch):
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "ambient")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")
+    monkeypatch.setenv("AWS_CONFIG_FILE", "/custom/config")
+    instance = object.__new__(AWSBruteForce)
+    instance.profile_uses_environment_credentials = False
+    clean = instance._build_env("selected-profile")
+    assert "AWS_ACCESS_KEY_ID" not in clean
+    assert clean["AWS_CONFIG_FILE"] == "/custom/config"
+
+    instance.profile_uses_environment_credentials = True
+    preserved = instance._build_env("environment-source-profile")
+    assert preserved["AWS_ACCESS_KEY_ID"] == "ambient"
+
+
+def test_profile_environment_source_is_detected_through_source_chain():
+    profiles = {
+        "target": {"source_profile": "base"},
+        "base": {"credential_source": "Environment"},
+        "cycle-a": {"source_profile": "cycle-b"},
+        "cycle-b": {"source_profile": "cycle-a"},
+    }
+    assert AWSPEASS._profile_chain_uses_environment(profiles, "target")
+    assert not AWSPEASS._profile_chain_uses_environment(profiles, "cycle-a")
+
+
+def test_malformed_inline_policy_marks_direct_enumeration_partial():
+    instance = bare_awspeass()
+    instance.principal_type = "role"
+    instance.principal_name = "app"
+    instance.principal_arn = "arn:aws:sts::123456789012:assumed-role/app/session"
+    instance.identity = {"Account": "123456789012"}
+
+    def call(operation, **kwargs):
+        if operation == "get_role":
+            return {"Role": {"Arn": "arn:aws:iam::123456789012:role/app"}}, True
+        if operation == "get_role_policy":
+            return {"PolicyDocument": None}, True
+        raise AssertionError(operation)
+
+    def paginate(operation, result_key, **kwargs):
+        if operation == "list_role_policies":
+            return ["broken"], True
+        if operation == "list_attached_role_policies":
+            return [], True
+        raise AssertionError(operation)
+
+    instance._call_iam = call
+    instance._paginate_iam = paginate
+    documents, complete = instance._collect_direct_policies()
+    assert documents == []
+    assert not complete
+    assert any("malformed inline role policy" in note for note in instance.policy_notes)
+
+
+def test_iam_user_self_lookup_omits_username_for_permission_friendly_access():
+    instance = bare_awspeass()
+    instance.principal_type = "user"
+    instance.principal_name = "alice"
+    instance.principal_arn = "arn:aws:iam::123456789012:user/alice"
+    calls = []
+
+    def call(operation, **kwargs):
+        calls.append((operation, kwargs))
+        assert operation == "get_user"
+        return {"User": {"Arn": instance.principal_arn}}, True
+
+    instance._call_iam = call
+    instance._paginate_iam = lambda *args, **kwargs: ([], True)
+    documents, complete = instance._collect_direct_policies()
+    assert documents == []
+    assert complete
+    assert calls == [("get_user", {})]
+
+
+def test_malformed_action_catalog_uses_offline_botocore_fallback(monkeypatch):
+    class Response:
+        text = "[]"
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+    instance = bare_awspeass()
+    instance.action_catalog = None
+    instance.debug = False
+    instance._botocore_action_catalog = lambda: {"s3": ["ListAllMyBuckets"]}
+    monkeypatch.setattr(awspeas_module.requests, "get", lambda *args, **kwargs: Response())
+
+    assert instance.download_aws_permissions() == {"s3": ["ListAllMyBuckets"]}
+    assert "offline fallback" in instance.action_catalog_source
+
+
+def test_offline_catalog_keeps_normalized_iam_service_prefix():
+    class Model:
+        metadata = {"signingName": "monitoring"}
+        endpoint_prefix = "monitoring"
+        operation_names = ["ListMetrics"]
+
+    class LowLevel:
+        @staticmethod
+        def get_service_model(service):
+            assert service == "cloudwatch"
+            return Model()
+
+    class Session:
+        _session = LowLevel()
+
+        @staticmethod
+        def get_available_services():
+            return ["cloudwatch"]
+
+    instance = bare_awspeass()
+    instance.session = Session()
+    instance.AWSBruteForce = object.__new__(AWSBruteForce)
+    assert instance._botocore_action_catalog() == {"cloudwatch": ["ListMetrics"]}
+
+
+def test_malformed_snapshot_inline_policy_is_partial():
+    class Paginator:
+        def paginate(self, **kwargs):
+            yield {
+                "RoleDetailList": [{
+                    "RoleName": "app",
+                    "Arn": "arn:aws:iam::123456789012:role/app",
+                    "RolePolicyList": [{"PolicyName": "broken", "PolicyDocument": None}],
+                }]
+            }
+
+    class IAM:
+        def get_paginator(self, operation):
+            return Paginator()
+
+    instance = bare_awspeass()
+    instance.iam_client = IAM()
+    instance.principal_type = "role"
+    instance.principal_name = "app"
+    instance.entity_arn = None
+    instance.iam_errors = []
+    documents, complete = instance._collect_account_authorization_fallback()
+    assert documents == []
+    assert not complete
 
 
 def test_evidence_sources_are_not_union_merged_for_the_same_resource():
@@ -419,14 +589,19 @@ def test_root_metadata_is_complete_and_explicit_live_validation_is_honored():
 
 def test_malformed_policy_and_condition_are_ignored_without_crashing():
     instance = bare_awspeass()
-    scopes, _, _, _ = instance._parse_policy_documents([
+    scopes, _, _, unrestricted = instance._parse_policy_documents([
         ("broken document", None, False),
         ("broken condition", {
-            "Statement": {"Effect": "Allow", "Action": "s3:GetObject", "Condition": "bad"}
+            "Statement": {"Effect": "Allow", "Action": "*", "Condition": "bad"}
+        }, False),
+        ("broken not-action", {
+            "Statement": {"Effect": "Allow", "NotAction": 123, "Resource": "*"}
         }, False),
     ])
 
-    assert scopes["*"]["allow"] == {"s3:GetObject"}
+    assert scopes["*"]["allow"] == {"*"}
+    assert not unrestricted
+    assert "<malformed>" in instance.policy_conditions
     assert any("malformed policy document" in note for note in instance.policy_notes)
     assert any("malformed Condition" in note for note in instance.policy_notes)
 

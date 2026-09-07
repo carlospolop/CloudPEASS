@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from tqdm import tqdm
 import shutil
 import shlex
+from functools import lru_cache
 
 import boto3
 
@@ -13,6 +14,11 @@ from colorama import Fore, init
 
 
 class AWSBruteForce():
+
+    CLI_MODEL_ALIASES = {
+        "deploy": "codedeploy",
+        "s3api": "s3",
+    }
 
     # These are named like reads but mint temporary credentials/tokens.
     # They are unnecessary for permission discovery and therefore never probed.
@@ -58,7 +64,30 @@ class AWSBruteForce():
         ("waf-regional", "get-change-token"),
     }
 
-    def __init__(self, debug, region, profile, aws_services, threads, access_key_id=None, secret_access_key=None, session_token=None):
+    # Guard new AWS CLI releases even before their token/credential getters are
+    # added to the explicit list above. These patterns intentionally do not
+    # block read-only token metadata/balance APIs.
+    BLOCKED_COMMAND_PATTERNS = (
+        re.compile(r"^get-.*credentials(?:-|$)"),
+        re.compile(
+            r"^get-(?:.*-)?(?:authorization|auth|access|identity-center-auth|open-id|"
+            r"federation|session|workload-access)-token(?:-|$)"
+        ),
+        re.compile(r"^get-(?:random-password|session-embed-url|change-token)$"),
+    )
+
+    def __init__(
+        self,
+        debug,
+        region,
+        profile,
+        aws_services,
+        threads,
+        access_key_id=None,
+        secret_access_key=None,
+        session_token=None,
+        profile_uses_environment_credentials=False,
+    ):
         self.debug = debug
         self.region = region
         self.profile = profile
@@ -69,6 +98,7 @@ class AWSBruteForce():
         self.access_key_id = access_key_id
         self.secret_access_key = secret_access_key
         self.session_token = session_token
+        self.profile_uses_environment_credentials = profile_uses_environment_credentials
         self.probe_stats = {"timeouts": 0, "os_errors": 0}
 
         self.aws_cli = shutil.which("aws")
@@ -76,39 +106,39 @@ class AWSBruteForce():
     # Utility functions
     def transform_command(self, command):
         substitutions = [
-            (r'accessanaly[sz]er:', 'access-analyzer:'),
-            (r'amp:', 'aps:'),
+            (r'^accessanaly[sz]er:', 'access-analyzer:'),
+            (r'^amp:', 'aps:'),
             (r'apigateway:Get.*', 'apigateway:GET'),
             (r'apigatewayv2:Get.*', 'apigateway:GET'),
-            (r'appintegrations:', 'app-integrations:'),
-            (r'application-insights:', 'applicationinsights:'),
+            (r'^appintegrations:', 'app-integrations:'),
+            (r'^application-insights:', 'applicationinsights:'),
             (r'athena:ListApplicationDpuSizes', 'athena:ListApplicationDPUSizes'),
-            (r'chime-.*:', 'chime:'),
-            (r'cloudcontrol:', 'cloudformation:'),
+            (r'^chime-.*:', 'chime:'),
+            (r'^(?:cloudcontrol|cloudcontrolapi):', 'cloudformation:'),
             (r'cloudfront:ListDistributionsByWebAclId', 'cloudfront:ListDistributionsByWebACLId'),
-            (r'cloudhsmv2:', 'cloudhsm:'),
-            (r'codeguruprofiler:', 'codeguru-profiler:'),
+            (r'^cloudhsmv2:', 'cloudhsm:'),
+            (r'^codeguruprofiler:', 'codeguru-profiler:'),
             (r'comprehendmedical:ListIcd10CmInferenceJobs', 'comprehendmedical:ListICD10CMInferenceJobs'),
             (r'comprehendmedical:ListPhiDetectionJobs', 'comprehendmedical:ListPHIDetectionJobs'),
             (r'comprehendmedical:ListSnomedctInferenceJobs', 'comprehendmedical:ListSNOMEDCTInferenceJobs'),
-            (r'configservice:', 'config:'),
-            (r'connectcampaigns:', 'connect-campaigns:'),
-            (r'connectcases:', 'cases:'),
-            (r'customer-profiles:', 'profile:'),
-            (r'deploy:', 'codedeploy:'),
+            (r'^configservice:', 'config:'),
+            (r'^connectcampaigns:', 'connect-campaigns:'),
+            (r'^connectcases:', 'cases:'),
+            (r'^customer-profiles:', 'profile:'),
+            (r'^deploy:', 'codedeploy:'),
             (r'detective:ListOrganizationAdminAccounts', 'detective:ListOrganizationAdminAccount'),
-            (r'docdb:', 'rds:'),
-            (r'dynamodbstreams:', 'dynamodb:'),
+            (r'^docdb:', 'rds:'),
+            (r'^dynamodbstreams:', 'dynamodb:'),
             (r'ecr:GetLoginPassword', 'ecr:GetAuthorizationToken'),
-            (r'efs:', 'elasticfilesystem:'),
-            (r'elbv2', 'elasticloadbalancing:'),
-            (r'elb:', 'elasticloadbalancing:'),
-            (r'emr:', 'elasticmapreduce:'),
+            (r'^efs:', 'elasticfilesystem:'),
+            (r'^elbv2:', 'elasticloadbalancing:'),
+            (r'^elb:', 'elasticloadbalancing:'),
+            (r'^emr:', 'elasticmapreduce:'),
             (r'frauddetector:GetKmsEncryptionKey', 'frauddetector:GetKMSEncryptionKey'),
             (r'gamelift:DescribeEc2InstanceLimits', 'gamelift:DescribeEC2InstanceLimits'),
             (r'glue:GetMlTransforms', 'glue:GetMLTransforms'),
             (r'glue:ListMlTransforms', 'glue:ListMLTransforms'),
-            (r'greengrassv2:', 'greengrass:'),
+            (r'^greengrassv2:', 'greengrass:'),
             (r'healthlake:ListFhirDatastores', 'healthlake:ListFHIRDatastores'),
             (r'iam:ListMfaDevices', 'iam:ListMFADevices'),
             (r'iam:ListOpenIdConnectProviders', 'iam:ListOpenIDConnectProviders'),
@@ -117,58 +147,59 @@ class AWSBruteForce():
             (r'iam:ListVirtualMfaDevices', 'iam:ListVirtualMFADevices'),
             (r'iot:ListCaCertificates', 'iot:ListCACertificates'),
             (r'iot:ListOtaUpdates', 'iot:ListOTAUpdates'),
-            (r'iot-data:', 'iot:'),
-            (r'iotsecuretunneling:', 'iot:'),
-            (r'ivs-realtime:', 'ivs:'),
-            (r'kinesis-video-archived-media:', 'kinesisvideo:'),
-            (r'kinesis-video-signaling:', 'kinesisvideo:'),
-            (r'kinesisanalyticsv2:', 'kinesisanalytics:'),
+            (r'^(?:iot-data|iotdata):', 'iot:'),
+            (r'^(?:iotsecuretunneling|IoTSecuredTunneling):', 'iot:'),
+            (r'^ivs-realtime:', 'ivs:'),
+            (r'^kinesis-video-archived-media:', 'kinesisvideo:'),
+            (r'^kinesis-video-signaling:', 'kinesisvideo:'),
+            (r'^kinesisanalyticsv2:', 'kinesisanalytics:'),
             (r'lakeformation:ListLfTags', 'lakeformation:ListLFTags'),
-            (r'lex-models:', 'lex:'),
-            (r'lexv2-models:', 'lex:'),
+            (r'^lex-models:', 'lex:'),
+            (r'^lexv2-models:', 'lex:'),
             (r'lightsail:GetContainerApiMetadata', 'lightsail:GetContainerAPIMetadata'),
-            (r'location:', 'geo:'),
-            (r'marketplace-entitlement:', 'aws-marketplace:'),
-            (r'migration-hub-refactor-spaces:', 'refactor-spaces:'),
-            (r'migrationhub-config:', 'mgh:'),
-            (r'migrationhuborchestrator:', 'migrationhub-orchestrator:'),
-            (r'migrationhubstrategy:', 'migrationhub-strategy:'),
-            (r'mwaa:', 'airflow:'),
-            (r'neptune:', 'rds:'),
+            (r'^location:', 'geo:'),
+            (r'^marketplace-entitlement:', 'aws-marketplace:'),
+            (r'^migration-hub-refactor-spaces:', 'refactor-spaces:'),
+            (r'^migrationhub-config:', 'mgh:'),
+            (r'^migrationhuborchestrator:', 'migrationhub-orchestrator:'),
+            (r'^migrationhubstrategy:', 'migrationhub-strategy:'),
+            (r'^monitoring:', 'cloudwatch:'),
+            (r'^mwaa:', 'airflow:'),
+            (r'^neptune:', 'rds:'),
             (r'network-firewall:ListTlsInspectionConfigurations', 'network-firewall:ListTLSInspectionConfigurations'),
-            (r'opensearch:', 'es:'),
-            (r'opensearchserverless:', 'aoss:'),
+            (r'^opensearch:', 'es:'),
+            (r'^opensearchserverless:', 'aoss:'),
             (r'organizations:ListAwsServiceAccessForOrganization', 'organizations:ListAWSServiceAccessForOrganization'),
-            (r'pinpoint:', 'mobiletargeting:'),
-            (r'pinpoint-email:', 'ses:'),
-            (r'pinpoint-sms-voice-v2:', 'sms-voice:'),
-            (r'privatenetworks:', 'private-networks:'),
+            (r'^pinpoint:', 'mobiletargeting:'),
+            (r'^pinpoint-email:', 'ses:'),
+            (r'^pinpoint-sms-voice-v2:', 'sms-voice:'),
+            (r'^privatenetworks:', 'private-networks:'),
             (r'Db', 'DB'),
-            (r'resourcegroupstaggingapi:', 'tag:'),
-            (r's3outposts:', 's3-outposts:'),
+            (r'^(?:resourcegroupstaggingapi|tagging):', 'tag:'),
+            (r'^s3outposts:', 's3-outposts:'),
             (r'sagemaker:ListAutoMlJobs', 'sagemaker:ListAutoMLJobs'),
             (r'sagemaker:ListCandidatesForAutoMlJob', 'sagemaker:ListCandidatesForAutoMLJob'),
-            (r'service-quotas:', 'servicequotas:'),
+            (r'^service-quotas:', 'servicequotas:'),
             (r'servicecatalog:GetAwsOrganizationsAccessStatus', 'servicecatalog:GetAWSOrganizationsAccessStatus'),
-            (r'servicecatalog-appregistry:', 'servicecatalog:'),
-            (r'sesv2:', 'ses:'),
+            (r'^servicecatalog-appregistry:', 'servicecatalog:'),
+            (r'^sesv2:', 'ses:'),
             (r'sns:GetSmsAttributes', 'sns:GetSMSAttributes'),
             (r'sns:GetSmsSandboxAccountStatus', 'sns:GetSMSSandboxAccountStatus'),
             (r'sns:ListSmsSandboxPhoneNumbers', 'sns:ListSMSSandboxPhoneNumbers'),
-            (r'sso-admin:', 'sso:'),
-            (r'stepfunctions:', 'states:'),
-            (r'support-app:', 'supportapp:'),
-            (r'timestream-query:', 'timestream:'),
-            (r'timestream-write:', 'timestream:'),
-            (r'voice-id:', 'voiceid:'),
+            (r'^(?:sso-admin|awsssoportal):', 'sso:'),
+            (r'^stepfunctions:', 'states:'),
+            (r'^support-app:', 'supportapp:'),
+            (r'^timestream-query:', 'timestream:'),
+            (r'^timestream-write:', 'timestream:'),
+            (r'^voice-id:', 'voiceid:'),
             (r'waf:ListIpSets', 'waf:ListIPSets'),
             (r'waf:ListWebAcls', 'waf:ListWebACLs'),
             (r'waf-regional:ListIpSets', 'waf-regional:ListIPSets'),
             (r'waf-regional:ListWebAcls', 'waf-regional:ListWebACLs'),
-            (r'keyspaces:ListKeyspaces', 'cassandra:Select'),
-            (r'keyspaces:ListTables', 'cassandra:Select'),
-            (r's3api:ListBuckets', 's3:ListAllMyBuckets'),
-            (r's3api:', 's3:'),
+            (r'^keyspaces:ListKeyspaces', 'cassandra:Select'),
+            (r'^keyspaces:ListTables', 'cassandra:Select'),
+            (r'^s3api:ListBuckets', 's3:ListAllMyBuckets'),
+            (r'^s3api:', 's3:'),
         ]
 
         for pattern, replacement in substitutions:
@@ -178,6 +209,31 @@ class AWSBruteForce():
 
     def capitalize(self, command):
         return ''.join(word.capitalize() for word in command.split('-'))
+
+    @classmethod
+    @lru_cache(maxsize=None)
+    def _operation_map(cls, service):
+        model_service = cls.CLI_MODEL_ALIASES.get(service, service)
+        try:
+            model = boto3.Session()._session.get_service_model(model_service)
+        except Exception:
+            return {}
+        result = {}
+        for operation in model.operation_names:
+            cli_name = re.sub(r"(.)([A-Z][a-z]+)", r"\1-\2", operation)
+            cli_name = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", cli_name).lower()
+            result[cli_name] = operation
+        return result
+
+    def permission_for_command(self, service, command):
+        operation = self._operation_map(service).get(command, self.capitalize(command))
+        return self.transform_command(f"{service}:{operation}")
+
+    @classmethod
+    def _is_blocked_command(cls, service, command):
+        return (service, command) in cls.BLOCKED_COMMANDS or any(
+            pattern.search(command) for pattern in cls.BLOCKED_COMMAND_PATTERNS
+        )
 
     def _build_command(self, profile, region, service, command, extra):
         base = [
@@ -201,6 +257,22 @@ class AWSBruteForce():
         env["AWS_PAGER"] = ""
         env["AWS_CLI_AUTO_PROMPT"] = "off"
         env["AWS_MAX_ATTEMPTS"] = "2"
+        # --profile must not silently probe as unrelated ambient credentials,
+        # except when its source chain explicitly uses credential_source=Environment.
+        if not (profile and self.profile_uses_environment_credentials):
+            for var_name in (
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN",
+                "AWS_SECURITY_TOKEN",
+                "AWS_WEB_IDENTITY_TOKEN_FILE",
+                "AWS_ROLE_ARN",
+                "AWS_ROLE_SESSION_NAME",
+                "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+                "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+                "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+            ):
+                env.pop(var_name, None)
         if profile:
             return env
         for var_name in (
@@ -209,14 +281,7 @@ class AWSBruteForce():
             "AWS_SHARED_CREDENTIALS_FILE",
             "AWS_CONFIG_FILE",
             "AWS_SDK_LOAD_CONFIG",
-            "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
-            "AWS_CONTAINER_CREDENTIALS_FULL_URI",
-            "AWS_CONTAINER_AUTHORIZATION_TOKEN",
-            "AWS_WEB_IDENTITY_TOKEN_FILE",
-            "AWS_ROLE_ARN",
-            "AWS_ROLE_SESSION_NAME",
             "AWS_CREDENTIAL_EXPIRATION",
-            "AWS_SECURITY_TOKEN",
         ):
             env.pop(var_name, None)
         if self.access_key_id:
@@ -271,10 +336,11 @@ class AWSBruteForce():
                     ["col", "-b"],
                     input=output,
                     capture_output=True,
+                    timeout=5,
                 )
                 if col_result.returncode == 0:
                     output = col_result.stdout
-            except OSError:
+            except (OSError, subprocess.TimeoutExpired):
                 pass
 
         return output.decode(errors="replace").splitlines()
@@ -322,7 +388,7 @@ class AWSBruteForce():
             if result.returncode == 0 or re.search(r'NoSuchEntity|ResourceNotFoundException|NotFoundException', output, re.I):
                 if self.debug:
                     print(f"[DEBUG] Successful or resource-not-found response: {display_command}")
-                perm_command = self.transform_command(f"{service}:{self.capitalize(command)}")
+                perm_command = self.permission_for_command(service, command)
                 confidence = "confirmed" if result.returncode == 0 else "likely; resource was not found"
                 print(f"{Fore.YELLOW}[+] {Fore.WHITE}Read access ({confidence}): {Fore.YELLOW}{service} {command} {Fore.BLUE}({display_command}) {Fore.GREEN}({perm_command}){Fore.RESET}")
                 
@@ -399,6 +465,7 @@ class AWSBruteForce():
 
     @staticmethod
     def _botocore_commands(service):
+        service = AWSBruteForce.CLI_MODEL_ALIASES.get(service, service)
         try:
             model = boto3.Session()._session.get_service_model(service)
         except Exception:
@@ -420,7 +487,7 @@ class AWSBruteForce():
         commands = self._help_entries(output, "AVAILABLE COMMANDS")
         commands = [c for c in commands if re.match(r'^(list|ls|describe|get|batch-get|head|lookup|search)', c)]
         commands = commands or self._botocore_commands(service)
-        return [command for command in commands if (service, command) not in self.BLOCKED_COMMANDS]
+        return [command for command in commands if not self._is_blocked_command(service, command)]
 
     def brute_force_permissions(self):
         self.found_permissions = []
@@ -431,7 +498,7 @@ class AWSBruteForce():
         if not self.aws_cli:
             print(
                 f"{Fore.YELLOW}AWS CLI is not installed; skipping live read-only probes. "
-                f"IAM policy parsing, simulation, and offline inference remain available.{Fore.RESET}"
+                f"IAM policy parsing, simulation, and public-dataset inference remain available.{Fore.RESET}"
             )
             return []
 

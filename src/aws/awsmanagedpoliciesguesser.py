@@ -331,11 +331,11 @@ aws_bf_permissions_detectable = [
     "codepipeline:ListPipelineExecutions",
     "codepipeline:ListPipelines",
     "codepipeline:ListWebhooks",
-    "codeploy:ListApplications",
-    "codeploy:ListDeploymentConfigs",
-    "codeploy:ListDeployments",
-    "codeploy:ListGitHubAccountTokenNames",
-    "codeploy:ListOnPremisesInstances",
+    "codedeploy:ListApplications",
+    "codedeploy:ListDeploymentConfigs",
+    "codedeploy:ListDeployments",
+    "codedeploy:ListGitHubAccountTokenNames",
+    "codedeploy:ListOnPremisesInstances",
     "codestar-connections:ListConnections",
     "codestar-connections:ListHosts",
     "codestar-notifications:ListEventTypes",
@@ -420,7 +420,6 @@ aws_bf_permissions_detectable = [
     "connect:DescribeSecurityProfile",
     "connect:DescribeView",
     "connect:DescribeVocabulary",
-    "connect:GetFederationToken",
     "connect:GetTaskTemplate",
     "connect:ListDefaultVocabularies",
     "connect:ListInstances",
@@ -677,13 +676,11 @@ aws_bf_permissions_detectable = [
     "ec2:ListSnapshotsInRecycleBin",
     "ecr-public:DescribeRegistries",
     "ecr-public:DescribeRepositories",
-    "ecr-public:GetAuthorizationToken",
     "ecr-public:GetLoginPassword",
     "ecr-public:GetRegistryCatalogData",
     "ecr:DescribePullThroughCacheRules",
     "ecr:DescribeRegistry",
     "ecr:DescribeRepositories",
-    "ecr:GetAuthorizationToken",
     "ecr:GetRegistryPolicy",
     "ecr:GetRegistryScanningConfiguration",
     "ecs:DescribeCapacityProviders",
@@ -740,10 +737,10 @@ aws_bf_permissions_detectable = [
     "elasticfilesystem:DescribeAccessPoints",
     "elasticfilesystem:DescribeAccountPreferences",
     "elasticfilesystem:DescribeFileSystems",
-    "elasticloadbalancing::DescribeAccountLimits",
-    "elasticloadbalancing::DescribeLoadBalancers",
-    "elasticloadbalancing::DescribeSslPolicies",
-    "elasticloadbalancing::DescribeTargetGroups",
+    "elasticloadbalancing:DescribeAccountLimits",
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "elasticloadbalancing:DescribeSslPolicies",
+    "elasticloadbalancing:DescribeTargetGroups",
     "elasticloadbalancing:DescribeAccountLimits",
     "elasticloadbalancing:DescribeLoadBalancerPolicies",
     "elasticloadbalancing:DescribeLoadBalancerPolicyTypes",
@@ -1825,7 +1822,6 @@ aws_bf_permissions_detectable = [
     "rds:DescribeReservedDBInstances",
     "rds:DescribeSourceRegions",
     "redshift-data:ListStatements",
-    "redshift-serverless:GetCredentials",
     "redshift-serverless:GetNamespace",
     "redshift-serverless:GetTableRestoreStatus",
     "redshift-serverless:GetWorkgroup",
@@ -2014,7 +2010,6 @@ aws_bf_permissions_detectable = [
     "schemas:ListSchemas",
     "sdb:ListDomains",
     "secretsmanager:DescribeSecret",
-    "secretsmanager:GetRandomPassword",
     "secretsmanager:GetResourcePolicy",
     "secretsmanager:GetSecretValue",
     "secretsmanager:ListSecretVersionIds",
@@ -2189,8 +2184,6 @@ aws_bf_permissions_detectable = [
     "storagegateway:ListTapes",
     "storagegateway:ListVolumes",
     "sts:GetCallerIdentity",
-    "sts:GetFederationToken",
-    "sts:GetSessionToken",
     "supportapp:GetAccountAlias",
     "supportapp:ListSlackChannelConfigurations",
     "supportapp:ListSlackWorkspaceConfigurations",
@@ -2253,7 +2246,6 @@ aws_bf_permissions_detectable = [
     "vpc-lattice:ListServiceNetworks",
     "vpc-lattice:ListServices",
     "vpc-lattice:ListTargetGroups",
-    "waf-regional:GetChangeToken",
     "waf-regional:ListByteMatchSets",
     "waf-regional:ListGeoMatchSets",
     "waf-regional:ListIPSets",
@@ -2267,7 +2259,6 @@ aws_bf_permissions_detectable = [
     "waf-regional:ListSubscribedRuleGroups",
     "waf-regional:ListWebACLs",
     "waf-regional:ListXssMatchSets",
-    "waf:GetChangeToken",
     "waf:ListByteMatchSets",
     "waf:ListGeoMatchSets",
     "waf:ListIPSets",
@@ -2331,8 +2322,12 @@ class AWSManagedPoliciesGuesser:
             try:
                 response = requests.get(url, timeout=(5, 20))
                 response.raise_for_status()
-                return response.json().get("policies", [])
-            except (requests.RequestException, ValueError, KeyError) as exc:
+                payload = response.json()
+                policies = payload.get("policies") if isinstance(payload, dict) else None
+                if not isinstance(policies, list):
+                    raise ValueError("managed-policy dataset has an unexpected shape")
+                return [policy for policy in policies if isinstance(policy, dict)]
+            except (requests.RequestException, ValueError, KeyError, TypeError, AttributeError) as exc:
                 error = exc
                 if attempt < 3:
                     time.sleep(2 ** attempt)
@@ -2342,14 +2337,22 @@ class AWSManagedPoliciesGuesser:
         policies = self.fetch_managed_policies(
             "https://raw.githubusercontent.com/iann0036/iam-dataset/main/aws/managed_policies.json"
         )
-        policy_actions = {
-            policy["name"]: set(policy.get("effective_action_names", []))
-            for policy in policies
-            if "name" in policy
-        }
+        policy_actions = {}
+        for policy in policies:
+            name = policy.get("name")
+            actions = policy.get("effective_action_names")
+            if isinstance(name, str) and name and isinstance(actions, list):
+                policy_actions[name] = {action for action in actions if isinstance(action, str)}
 
         detectable = {self._canonical(action) for action in aws_bf_permissions_detectable}
-        discovered = {self._canonical(action) for action in self.discovered_permissions}
+        discovered = {
+            self._canonical(action)
+            for action in self.discovered_permissions
+            if isinstance(action, str) and action
+        }
+        # Every live result is detectable by definition, including operations
+        # introduced after the bundled reference list was last refreshed.
+        detectable.update(discovered)
         target = discovered & detectable
         if not target:
             return {}
