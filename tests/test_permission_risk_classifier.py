@@ -242,6 +242,48 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             ),
             "high",
         )
+        self.assertEqual(
+            self.classify("Microsoft.SignalRService/SignalR/listkeys/action"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.SignalRService/WebPubSub/listkeys/action"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.Communication/CommunicationServices/ListKeys/action"
+            ),
+            "high",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.Relay/namespaces/HybridConnections/authorizationRules/listkeys/action"
+            ),
+            "high",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.NotificationHubs/Namespaces/NotificationHubs/authorizationRules/listkeys/action"
+            ),
+            "critical",
+        )
+        tested_credential_actions = {
+            "Microsoft.SignalRService/SignalR/regeneratekey/action": "high",
+            "Microsoft.SignalRService/WebPubSub/regeneratekey/action": "high",
+            "Microsoft.Communication/CommunicationServices/RegenerateKey/action": "high",
+            "Microsoft.Relay/namespaces/authorizationRules/listkeys/action": "high",
+            "Microsoft.Relay/namespaces/authorizationRules/regenerateKeys/action": "high",
+            "Microsoft.Relay/namespaces/HybridConnections/authorizationRules/regeneratekeys/action": "high",
+            "Microsoft.Relay/namespaces/WcfRelays/authorizationRules/listkeys/action": "high",
+            "Microsoft.Relay/namespaces/WcfRelays/authorizationRules/regeneratekeys/action": "high",
+            "Microsoft.NotificationHubs/Namespaces/authorizationRules/listkeys/action": "critical",
+            "Microsoft.NotificationHubs/Namespaces/authorizationRules/regenerateKeys/action": "critical",
+            "Microsoft.NotificationHubs/Namespaces/NotificationHubs/authorizationRules/regenerateKeys/action": "critical",
+        }
+        for permission, expected in tested_credential_actions.items():
+            with self.subTest(permission=permission):
+                self.assertEqual(self.classify(permission), expected)
 
     def test_graph_scopes_and_unresolved_entra_evidence_are_classified(self) -> None:
         self.assertEqual(self.classify("openid"), "low")

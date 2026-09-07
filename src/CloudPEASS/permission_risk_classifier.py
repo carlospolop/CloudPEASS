@@ -264,6 +264,12 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.web/sites/publishxml/action",
         "microsoft.storage/storageaccounts/listaccountsas/action",
         "microsoft.storage/storageaccounts/listservicesas/action",
+        # Default Notification Hubs management rules expose device registration
+        # data and permit arbitrary notification delivery.
+        "microsoft.notificationhubs/namespaces/authorizationrules/listkeys/action",
+        "microsoft.notificationhubs/namespaces/authorizationrules/regeneratekeys/action",
+        "microsoft.notificationhubs/namespaces/notificationhubs/authorizationrules/listkeys/action",
+        "microsoft.notificationhubs/namespaces/notificationhubs/authorizationrules/regeneratekeys/action",
     }
 )
 
@@ -283,6 +289,22 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.operationalinsights/workspaces/regeneratesharedkey/action",
         "microsoft.operationalinsights/workspaces/sharedkeys/action",
         "microsoft.operationalinsights/workspaces/sharedkeys/read",
+        # Live validation confirmed credential use against these data planes.
+        # Their escalation impact still depends on the application or relay
+        # connected to the service, so do not promote them to critical solely
+        # because the operation name contains keys.
+        "microsoft.communication/communicationservices/listkeys/action",
+        "microsoft.communication/communicationservices/regeneratekey/action",
+        "microsoft.relay/namespaces/authorizationrules/listkeys/action",
+        "microsoft.relay/namespaces/authorizationrules/regeneratekeys/action",
+        "microsoft.relay/namespaces/hybridconnections/authorizationrules/listkeys/action",
+        "microsoft.relay/namespaces/hybridconnections/authorizationrules/regeneratekeys/action",
+        "microsoft.relay/namespaces/wcfrelays/authorizationrules/listkeys/action",
+        "microsoft.relay/namespaces/wcfrelays/authorizationrules/regeneratekeys/action",
+        "microsoft.signalrservice/signalr/listkeys/action",
+        "microsoft.signalrservice/signalr/regeneratekey/action",
+        "microsoft.signalrservice/webpubsub/listkeys/action",
+        "microsoft.signalrservice/webpubsub/regeneratekey/action",
         "microsoft.authorization/roledefinitions/write",
         "microsoft.compute/virtualmachines/login/action",
         "microsoft.containerservice/managedclusters/listclusterusercredential/action",
