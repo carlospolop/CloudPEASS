@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8speass-test-open
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8speass-test-hidden
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zero
+  namespace: k8speass-test-hidden
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: limited
+  namespace: k8speass-test-hidden
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: named-reader
+  namespace: k8speass-test-hidden
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: only-this-secret
+  namespace: k8speass-test-hidden
+stringData:
+  value: synthetic-test-value
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: other-secret
+  namespace: k8speass-test-hidden
+stringData:
+  value: must-not-be-readable
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: limited-role
+  namespace: k8speass-test-hidden
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    verbs: ["create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: limited-binding
+  namespace: k8speass-test-hidden
+subjects:
+  - kind: ServiceAccount
+    name: limited
+    namespace: k8speass-test-hidden
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: limited-role
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: named-secret-reader
+  namespace: k8speass-test-hidden
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["only-this-secret"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: named-secret-reader
+  namespace: k8speass-test-hidden
+subjects:
+  - kind: ServiceAccount
+    name: named-reader
+    namespace: k8speass-test-hidden
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: named-secret-reader
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.k8speass.example
+spec:
+  group: k8speass.example
+  names:
+    kind: Widget
+    plural: widgets
+    singular: widget
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object

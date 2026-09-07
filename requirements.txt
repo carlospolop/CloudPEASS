@@ -7,3 +7,4 @@ colorama
 PyJWT
 boto3
 PyYAML
+kubernetes>=28.1.0
