@@ -67,6 +67,7 @@ def test_data_plane_and_context_dependent_permissions_are_high(permission):
         "run.jobs.run",
         "run.jobs.runWithOverrides",
         "secretmanager.secrets.update",
+        "storage.objects.update",
         "iam.roles.create",
         "future.widgets.frobnicate",
     ],

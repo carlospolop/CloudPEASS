@@ -85,7 +85,6 @@ high_exact:
   - storage.objects.create
   - storage.objects.delete
   - storage.objects.get
-  - storage.objects.update
   - workflows.executions.create
 
 # Exact overrides for names that contain security-looking words but disclose
@@ -158,6 +157,7 @@ medium_exact:
   - run.workerpools.sshRoot
   - secretmanager.secrets.update
   - spanner.databases.select
+  - storage.objects.update
   - transferappliance.credentials.get
   - vmwareengine.privateClouds.resetNsxCredentials
   - vmwareengine.privateClouds.resetVcenterCredentials

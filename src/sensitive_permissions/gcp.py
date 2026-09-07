@@ -156,7 +156,6 @@ risk_documentation = (
     ("logging.views.access", "gcp-post-exploitation/gcp-app-engine-post-exploitation.md"),
     ("pubsub.topics.publish", "gcp-post-exploitation/gcp-pub-sub-post-exploitation.md"),
     ("resourcemanager.projects.get", "gcp-post-exploitation/gcp-dataflow-post-exploitation.md"),
-    ("storage.objects.update", "gcp-post-exploitation/gcp-storage-post-exploitation.md"),
     ("apikeys.*", "gcp-privilege-escalation/gcp-serviceusage-privesc.md"),
     ("appengine.*", "gcp-privilege-escalation/gcp-appengine-privesc.md"),
     ("artifactregistry.*", "gcp-privilege-escalation/gcp-artifact-registry-privesc.md"),
