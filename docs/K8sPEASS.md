@@ -80,6 +80,8 @@ disable this or a value up to 5 for unstable links.
   discovery coverage, inaccessible optional inventories, admission evidence,
   and the discovered API-resource catalog. The concise console view hides
   low-risk and repeated entries unless `--show-all` is used.
+- JSON output is written through a private, uniquely named temporary file and
+  atomically replaced, avoiding partial reports and collisions between scans.
 
 Explicit impersonation is available for authorized testing:
 

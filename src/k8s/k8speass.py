@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -686,7 +688,24 @@ class K8sPEASS:
     def _write_json(self, report: dict[str, Any]) -> None:
         target = Path(self.out_path).expanduser()
         target.parent.mkdir(parents=True, exist_ok=True)
-        temporary = target.with_name(target.name + ".tmp")
-        temporary.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-        temporary.replace(target)
+        handle = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        )
+        temporary = Path(handle.name)
+        try:
+            json.dump(report, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            handle.close()
+            temporary.replace(target)
+        finally:
+            if not handle.closed:
+                handle.close()
+            temporary.unlink(missing_ok=True)
         print(f"{Fore.GREEN}Results saved to {target}")

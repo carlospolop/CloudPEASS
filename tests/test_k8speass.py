@@ -1,11 +1,15 @@
 import io
+import json
+import os
 import sys
+import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from src.CloudPEASS.interactive import confirm_slow_operation
-from src.k8s.client import K8sClient
+from src.k8s.client import APIError, K8sClient
+from src.k8s.discovery import discover_api_resources
 from src.k8s.k8speass import K8sPEASS
 from src.k8s.models import PermissionFinding, PermissionKey
 from src.k8s.passive import is_valid_namespace_name
@@ -115,6 +119,41 @@ class ReadOnlyGuardrailTests(unittest.TestCase):
         self.assertFalse(is_valid_namespace_name("../nodes"))
         self.assertFalse(is_valid_namespace_name("default?watch=true"))
 
+    def test_malformed_list_response_fails_with_a_bounded_api_error(self):
+        client = object.__new__(K8sClient)
+        client.get = lambda _path: {"items": {"not": "an array"}}
+        with self.assertRaises(APIError):
+            client.list_items("/api/v1/pods")
+
+    def test_client_close_always_attempts_credential_cleanup(self):
+        client = object.__new__(K8sClient)
+        client.api_client = SimpleNamespace(close=Mock(side_effect=RuntimeError("close")))
+        client._cleanup_temporary_kubeconfig = Mock()
+        with self.assertRaises(RuntimeError):
+            client.close()
+        client._cleanup_temporary_kubeconfig.assert_called_once_with()
+
+    def test_failed_temp_credential_cleanup_retains_path_for_atexit_retry(self):
+        client = object.__new__(K8sClient)
+        client._temporary_kubeconfig_path = "/tmp/k8speass-test.kubeconfig"
+        with patch("src.k8s.client.Path.unlink", side_effect=PermissionError("denied")):
+            with self.assertRaises(RuntimeError):
+                client._cleanup_temporary_kubeconfig()
+        self.assertEqual(
+            client._temporary_kubeconfig_path, "/tmp/k8speass-test.kubeconfig"
+        )
+
+    def test_malformed_discovery_is_partial_instead_of_fatal(self):
+        class MalformedDiscoveryClient:
+            def get(self, path):
+                if path == "/api":
+                    return {"versions": "v1"}
+                return {"groups": [None, {"versions": "v1"}]}
+
+        resources, warnings = discover_api_resources(MalformedDiscoveryClient())
+        self.assertEqual(resources, [])
+        self.assertGreaterEqual(len(warnings), 3)
+
     def test_noninteractive_slow_work_is_skipped(self):
         old_stdin = sys.stdin
         try:
@@ -172,6 +211,15 @@ class PermissionModelTests(unittest.TestCase):
         self.assertTrue(merged[0].allowed)
         self.assertEqual(merged[0].confidence, "summarized")
 
+    def test_malformed_rule_arrays_do_not_expand_strings_character_by_character(self):
+        status = {
+            "resourceRules": [
+                {"verbs": "get", "apiGroups": "", "resources": "secrets"}
+            ],
+            "nonResourceRules": [{"verbs": "get", "nonResourceURLs": "/api"}],
+        }
+        self.assertEqual(findings_from_rules(status, "demo"), [])
+
     def test_allowed_workload_write_is_marked_admission_unknown(self):
         finding = PermissionFinding(
             key=PermissionKey("create", resource="pods", namespace="demo"),
@@ -189,6 +237,21 @@ class PermissionModelTests(unittest.TestCase):
         result = K8sPEASS._annotate_admission([finding], admission)[0]
         self.assertIn("did not send a write probe", result.admission)
         self.assertIn("restricted", result.admission)
+
+    def test_json_report_is_atomic_private_and_cleans_failed_temporary_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = os.path.join(directory, "report.json")
+            scanner = object.__new__(K8sPEASS)
+            scanner.out_path = target
+            scanner._write_json({"ok": True})
+            with open(target, encoding="utf-8") as report:
+                self.assertEqual(json.load(report), {"ok": True})
+            self.assertEqual(os.stat(target).st_mode & 0o777, 0o600)
+
+            scanner.out_path = os.path.join(directory, "invalid.json")
+            with self.assertRaises(TypeError):
+                scanner._write_json({"not-json": {object()}})
+            self.assertEqual(os.listdir(directory), ["report.json"])
 
 
 if __name__ == "__main__":

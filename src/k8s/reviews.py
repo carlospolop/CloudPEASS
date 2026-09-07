@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from typing import Any
 
@@ -16,6 +17,12 @@ ACCESS_REVIEW_PATH = "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
 RULES_REVIEW_PATH = "/apis/authorization.k8s.io/v1/selfsubjectrulesreviews"
 
 
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(item) for item in value if isinstance(item, (str, int, float))]
+
+
 def decode_jwt_without_verification(token: str | None) -> dict[str, Any]:
     """Decode selected JWT claims without trusting them as live identity."""
     if not token or token.count(".") != 2:
@@ -24,7 +31,7 @@ def decode_jwt_without_verification(token: str | None) -> dict[str, Any]:
         payload = token.split(".", 2)[1]
         payload += "=" * (-len(payload) % 4)
         value = json.loads(base64.urlsafe_b64decode(payload.encode()).decode())
-    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error):
         return {}
     if not isinstance(value, dict):
         return {}
@@ -47,8 +54,9 @@ def get_identity(
     }
     try:
         response = client.post_review(SELF_REVIEW_PATH, body)
-        user_info = ((response.get("status") or {}).get("userInfo") or {})
-        if user_info:
+        status = response.get("status") or {}
+        user_info = (status.get("userInfo") or {}) if isinstance(status, dict) else {}
+        if isinstance(user_info, dict) and user_info:
             return user_info, "SelfSubjectReview", warnings
     except APIError as exc:
         warnings.append(f"SelfSubjectReview unavailable: {exc}")
@@ -104,6 +112,8 @@ def self_subject_access_review(
     try:
         response = client.post_review(ACCESS_REVIEW_PATH, body)
         status = response.get("status") or {}
+        if not isinstance(status, dict):
+            raise APIError("SelfSubjectAccessReview returned malformed status")
     except APIError as exc:
         severity, explanation = classify_permission(key)
         return PermissionFinding(
@@ -140,7 +150,10 @@ def self_subject_rules_review(
         response = client.post_review(RULES_REVIEW_PATH, body)
     except APIError as exc:
         return {}, str(exc)
-    return response.get("status") or {}, ""
+    status = response.get("status") or {}
+    if not isinstance(status, dict):
+        return {}, "SelfSubjectRulesReview returned malformed status"
+    return status, ""
 
 
 def findings_from_rules(
@@ -149,12 +162,20 @@ def findings_from_rules(
     """Convert a rules summary to readable findings without overclaiming."""
     findings: list[PermissionFinding] = []
     confidence = "incomplete" if status.get("incomplete") else "summarized"
-    for rule in status.get("resourceRules") or []:
-        names = [str(name) for name in (rule.get("resourceNames") or [])]
-        for group in rule.get("apiGroups") or [""]:
-            for resource_name in rule.get("resources") or ["*"]:
+    resource_rules = status.get("resourceRules") or []
+    if not isinstance(resource_rules, list):
+        resource_rules = []
+    for rule in resource_rules:
+        if not isinstance(rule, dict):
+            continue
+        names = _string_list(rule.get("resourceNames"))
+        groups = _string_list(rule.get("apiGroups")) or [""]
+        resources = _string_list(rule.get("resources")) or ["*"]
+        verbs = _string_list(rule.get("verbs"))
+        for group in groups:
+            for resource_name in resources:
                 resource, _, subresource = str(resource_name).partition("/")
-                for verb in rule.get("verbs") or []:
+                for verb in verbs:
                     for name in names or [""]:
                         is_collection = str(verb) in {"list", "watch"}
                         key = PermissionKey(
@@ -180,9 +201,16 @@ def findings_from_rules(
                                 resource_names=names,
                             )
                         )
-    for rule in status.get("nonResourceRules") or []:
-        for path in rule.get("nonResourceURLs") or []:
-            for verb in rule.get("verbs") or []:
+    non_resource_rules = status.get("nonResourceRules") or []
+    if not isinstance(non_resource_rules, list):
+        non_resource_rules = []
+    for rule in non_resource_rules:
+        if not isinstance(rule, dict):
+            continue
+        paths = _string_list(rule.get("nonResourceURLs"))
+        verbs = _string_list(rule.get("verbs"))
+        for path in paths:
+            for verb in verbs:
                 key = PermissionKey(verb=str(verb), non_resource_url=str(path))
                 severity, explanation = classify_permission(key)
                 findings.append(

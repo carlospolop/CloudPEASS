@@ -310,18 +310,26 @@ class K8sClient:
         atexit.register(self._cleanup_temporary_kubeconfig)
 
     def _cleanup_temporary_kubeconfig(self) -> None:
-        if not self._temporary_kubeconfig_path:
+        path = self._temporary_kubeconfig_path
+        if not path:
             return
         try:
-            Path(self._temporary_kubeconfig_path).unlink(missing_ok=True)
-        finally:
+            Path(path).unlink(missing_ok=True)
+        except OSError as exc:
+            # Keep the path so the registered atexit handler can try again.
+            raise RuntimeError(
+                f"Could not remove temporary kubeconfig {path}: {exc}"
+            ) from exc
+        else:
             self._temporary_kubeconfig_path = None
 
     def close(self) -> None:
         close = getattr(self.api_client, "close", None)
-        if callable(close):
-            close()
-        self._cleanup_temporary_kubeconfig()
+        try:
+            if callable(close):
+                close()
+        finally:
+            self._cleanup_temporary_kubeconfig()
 
     def _kubectl_run(
         self, args: list[str], body: dict[str, Any] | None = None
@@ -439,7 +447,11 @@ class K8sClient:
 
     @staticmethod
     def _is_transient(status: int | None, message: str) -> bool:
-        if status in {429, 500, 502, 503, 504}:
+        try:
+            normalized_status = int(status) if status is not None else None
+        except (TypeError, ValueError):
+            normalized_status = None
+        if normalized_status in {429, 500, 502, 503, 504}:
             return True
         lowered = message.lower()
         return any(
@@ -504,8 +516,15 @@ class K8sClient:
             )
             response = self.get(request_path)
             page_items = response.get("items") or []
+            if not isinstance(page_items, list):
+                raise APIError(f"List response items are not an array for {parts.path}")
             items.extend(item for item in page_items if isinstance(item, dict))
-            continue_token = ((response.get("metadata") or {}).get("continue") or "")
+            metadata = response.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                raise APIError(f"List response metadata is not an object for {parts.path}")
+            continue_token = metadata.get("continue") or ""
+            if not isinstance(continue_token, str):
+                raise APIError(f"List continuation token is invalid for {parts.path}")
             if not continue_token:
                 return items
             query["continue"] = continue_token
