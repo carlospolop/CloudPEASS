@@ -276,6 +276,34 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.app/managedenvironments/daprcomponents/listsecrets/action",
         "microsoft.devices/provisioningservices/listkeys/action",
         "microsoft.devices/provisioningservices/keys/listkeys/action",
+        # Live validation recovered credentials and used them against the
+        # corresponding data planes: Static Web Apps deployment, Language,
+        # Storage through Azure ML, and protected Functions.
+        "microsoft.web/staticsites/listsecrets/action",
+        "microsoft.cognitiveservices/accounts/listkeys/action",
+        # These long-standing credential paths are also configured as
+        # singleton critical attacks in sensitive_permissions.azure. Keep the
+        # standalone classifier aligned without promoting every unknown action
+        # merely because its name contains "keys".
+        "microsoft.appconfiguration/configurationstores/listkeys/action",
+        "microsoft.devices/iothubs/listkeys/action",
+        "microsoft.machinelearningservices/workspaces/listkeys/action",
+        "microsoft.machinelearningservices/workspaces/liststorageaccountkeys/action",
+        "microsoft.machinelearningservices/workspaces/connections/listsecrets/action",
+        "microsoft.machinelearningservices/workspaces/datastores/listsecrets/action",
+        "microsoft.web/sites/host/listkeys/action",
+        "microsoft.web/sites/functions/listkeys/action",
+        "microsoft.web/sites/functions/listsecrets/action",
+        # Foundry account/project connections returned a stored Cognitive
+        # Services key that successfully called the connected Language API.
+        "microsoft.cognitiveservices/accounts/connections/listsecrets/action",
+        "microsoft.cognitiveservices/accounts/projects/connections/listsecrets/action",
+        # APIM returned a cleartext Named Value, OAuth/OIDC client secrets,
+        # and even a Function master key embedded in backend credentials.
+        "microsoft.apimanagement/service/namedvalues/listvalue/action",
+        "microsoft.apimanagement/service/backends/read",
+        "microsoft.apimanagement/service/authorizationservers/listsecrets/action",
+        "microsoft.apimanagement/service/openidconnectproviders/listsecrets/action",
         "microsoft.managedidentity/userassignedidentities/federatedidentitycredentials/write",
         "microsoft.web/sites/config/list/action",
         "microsoft.web/sites/publishxml/action",
@@ -324,6 +352,19 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.signalrservice/signalr/regeneratekey/action",
         "microsoft.signalrservice/webpubsub/listkeys/action",
         "microsoft.signalrservice/webpubsub/regeneratekey/action",
+        # These live-tested credentials or signed callbacks reached only the
+        # configured API, bot, map service, artifact, or workflow. Their exact
+        # downstream impact is configuration-dependent, so keep them High.
+        "microsoft.maps/accounts/listkeys/action",
+        "microsoft.botservice/botservices/channels/listchannelwithkeys/action",
+        "microsoft.apimanagement/service/subscriptions/listsecrets/action",
+        "microsoft.logic/integrationaccounts/listcallbackurl/action",
+        "microsoft.logic/integrationaccounts/agreements/listcontentcallbackurl/action",
+        "microsoft.logic/integrationaccounts/assemblies/listcontentcallbackurl/action",
+        "microsoft.logic/integrationaccounts/maps/listcontentcallbackurl/action",
+        "microsoft.logic/integrationaccounts/partners/listcontentcallbackurl/action",
+        "microsoft.logic/integrationaccounts/schemas/listcontentcallbackurl/action",
+        "microsoft.logic/workflows/listcallbackurl/action",
         "microsoft.authorization/roledefinitions/write",
         "microsoft.compute/virtualmachines/login/action",
         "microsoft.containerservice/managedclusters/listclusterusercredential/action",
@@ -1425,7 +1466,11 @@ def _azure_classify_non_wildcard(permission: str, rules: AzureRules) -> Optional
         lower,
     )
     if rules.credential_action_re.search(lower) or credential_like_action:
-        return "medium" if is_delete else "critical"
+        # Operation names are not impact evidence. Known reusable credential
+        # paths are promoted by the exact sets or configured attack
+        # combinations; an otherwise unknown provider action stays Medium
+        # until its returned material is proven usable.
+        return "medium"
 
     if lower.startswith("microsoft.authorization/"):
         if lower.endswith("/roleassignments/write"):

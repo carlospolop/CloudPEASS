@@ -210,6 +210,31 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.EventGrid/domains/eventSubscriptions/getFullUrl/action": "high",
             "Microsoft.EventGrid/domains/topics/eventSubscriptions/getFullUrl/action": "high",
             "Microsoft.ContainerRegistry/registries/runs/listLogSasUrl/action": "high",
+            "Microsoft.Web/staticSites/listSecrets/action": "critical",
+            "Microsoft.CognitiveServices/accounts/listKeys/action": "critical",
+            "Microsoft.MachineLearningServices/workspaces/listKeys/action": "critical",
+            "Microsoft.MachineLearningServices/workspaces/listStorageAccountKeys/action": "critical",
+            "Microsoft.MachineLearningServices/workspaces/connections/listsecrets/action": "critical",
+            "Microsoft.MachineLearningServices/workspaces/datastores/listsecrets/action": "critical",
+            "Microsoft.Web/sites/host/listkeys/action": "critical",
+            "Microsoft.Web/sites/functions/listkeys/action": "critical",
+            "Microsoft.Web/sites/functions/listsecrets/action": "critical",
+            "Microsoft.CognitiveServices/accounts/connections/listsecrets/action": "critical",
+            "Microsoft.CognitiveServices/accounts/projects/connections/listsecrets/action": "critical",
+            "Microsoft.ApiManagement/service/namedValues/listValue/action": "critical",
+            "Microsoft.ApiManagement/service/backends/read": "critical",
+            "Microsoft.ApiManagement/service/authorizationServers/listSecrets/action": "critical",
+            "Microsoft.ApiManagement/service/openidConnectProviders/listSecrets/action": "critical",
+            "Microsoft.Maps/accounts/listKeys/action": "high",
+            "Microsoft.BotService/botServices/channels/listchannelwithkeys/action": "high",
+            "Microsoft.ApiManagement/service/subscriptions/listSecrets/action": "high",
+            "Microsoft.Logic/integrationAccounts/listCallbackUrl/action": "high",
+            "Microsoft.Logic/integrationAccounts/agreements/listContentCallbackUrl/action": "high",
+            "Microsoft.Logic/integrationAccounts/assemblies/listContentCallbackUrl/action": "high",
+            "Microsoft.Logic/integrationAccounts/maps/listContentCallbackUrl/action": "high",
+            "Microsoft.Logic/integrationAccounts/partners/listContentCallbackUrl/action": "high",
+            "Microsoft.Logic/integrationAccounts/schemas/listContentCallbackUrl/action": "high",
+            "Microsoft.Logic/workflows/listCallbackUrl/action": "high",
         }
         for permission, expected in tested_sensitive_data_credentials.items():
             with self.subTest(permission=permission):
@@ -320,6 +345,16 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         for permission, expected in tested_credential_actions.items():
             with self.subTest(permission=permission):
                 self.assertEqual(self.classify(permission), expected)
+
+    def test_unvalidated_credential_like_action_is_not_automatically_critical(self) -> None:
+        self.assertEqual(
+            self.classify("Microsoft.Example/widgets/listSecrets/action"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Example/widgets/listKeys/action"),
+            "medium",
+        )
 
     def test_graph_scopes_and_unresolved_entra_evidence_are_classified(self) -> None:
         self.assertEqual(self.classify("openid"), "low")
