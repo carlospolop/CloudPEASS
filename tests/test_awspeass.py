@@ -162,6 +162,145 @@ def test_sensitive_read_probes_use_valid_safe_placeholders():
     ) == "CloudPEASSProbe"
 
 
+def test_cloudtrail_history_supplies_valid_real_euc_id_and_is_cached(monkeypatch):
+    instance = AWSBruteForce(False, "eu-west-1", "example", [], 1)
+    instance.aws_cli = "/usr/bin/aws"
+    calls = []
+
+    class Result:
+        returncode = 0
+        stderr = b""
+        stdout = json.dumps(
+            {
+                "Events": [
+                    {
+                        "Resources": [
+                            {
+                                "ResourceName": "m-0123456789abcdef0123456789abcdef",
+                                "ResourceType": "AWS::WorkMail::Organization",
+                            }
+                        ],
+                        "CloudTrailEvent": json.dumps(
+                            {
+                                "requestParameters": {
+                                    "organizationId": "m-0123456789abcdef0123456789abcdef"
+                                }
+                            }
+                        ),
+                    }
+                ]
+            }
+        ).encode()
+
+    def run(*args, **kwargs):
+        calls.append(args[0])
+        return Result()
+
+    monkeypatch.setattr("src.aws.awsbruteforce.subprocess.run", run)
+    expected = "m-0123456789abcdef0123456789abcdef"
+    assert instance._probe_value_for(
+        "--organization-id", "example", "eu-west-1", "workmail", "list-users"
+    ) == expected
+    assert instance._probe_value_for(
+        "--organization-id", "example", "eu-west-1", "workmail", "list-users"
+    ) == expected
+    assert len(calls) == 1
+    assert calls[0][-7:] == [
+        "--lookup-attributes",
+        "AttributeKey=EventSource,AttributeValue=workmail.amazonaws.com",
+        "--max-results",
+        "50",
+        "--no-paginate",
+        "--output",
+        "json",
+    ]
+
+
+def test_cloudtrail_history_rejects_dummy_and_malformed_ids(monkeypatch):
+    instance = AWSBruteForce(False, "us-east-1", None, [], 1, "AKIAEXAMPLE", "secret")
+    instance.aws_cli = "/usr/bin/aws"
+
+    class Result:
+        returncode = 0
+        stderr = b""
+        stdout = json.dumps(
+            {
+                "Events": [
+                    {
+                        "CloudTrailEvent": json.dumps(
+                            {
+                                "eventID": "7bb5c9f7-87e0-48b9-8ea5-a3a9219c0993",
+                                "errorCode": "ResourceNotFoundException",
+                                "requestParameters": {
+                                    "workspaceId": "ws-00000000",
+                                    "portalId": "7bb5c9f7-87e0-48b9-8ea5-a3a9219c0993",
+                                    "unrelated": "ws-not valid",
+                                }
+                            }
+                        )
+                    }
+                ]
+            }
+        ).encode()
+
+    monkeypatch.setattr("src.aws.awsbruteforce.subprocess.run", lambda *a, **k: Result())
+    assert instance._probe_value_for(
+        "--workspace-id", None, "us-east-1", "workspaces", "describe-workspace-snapshots"
+    ) == "ws-00000000"
+    assert instance._probe_value_for(
+        "--portal-id", None, "us-east-1", "workspaces-web", "list-sessions"
+    ) == "00000000-0000-0000-0000-000000000000"
+
+
+def test_cloudtrail_history_malformed_outputs_fail_closed(monkeypatch):
+    for payload in (b"{", b"[]", b'{"Events":[null,1,"event"]}'):
+        instance = AWSBruteForce(
+            False, "us-east-1", None, [], 1, "AKIAEXAMPLE", "secret"
+        )
+        instance.aws_cli = "/usr/bin/aws"
+        result = SimpleNamespace(returncode=0, stdout=payload, stderr=b"")
+        monkeypatch.setattr(
+            "src.aws.awsbruteforce.subprocess.run", lambda *a, **k: result
+        )
+        assert instance._probe_value_for(
+            "--workspace-id",
+            None,
+            "us-east-1",
+            "workspaces",
+            "describe-workspace-snapshots",
+        ) == "ws-00000000"
+
+
+def test_cloudtrail_history_does_not_cross_assign_same_shape_ids(monkeypatch):
+    instance = AWSBruteForce(
+        False, "us-east-1", None, [], 1, "AKIAEXAMPLE", "secret"
+    )
+    instance.aws_cli = "/usr/bin/aws"
+    session_id = "7bb5c9f7-87e0-48b9-8ea5-a3a9219c0993"
+    payload = json.dumps(
+        {
+            "Events": [
+                {
+                    "CloudTrailEvent": json.dumps(
+                        {"requestParameters": {"sessionId": session_id}}
+                    )
+                }
+            ]
+        }
+    ).encode()
+    result = SimpleNamespace(returncode=0, stdout=payload, stderr=b"")
+    monkeypatch.setattr(
+        "src.aws.awsbruteforce.subprocess.run", lambda *a, **k: result
+    )
+
+    assert instance._probe_value_for(
+        "--portal-id", None, "us-east-1", "workspaces-web", "list-sessions"
+    ) == "00000000-0000-0000-0000-000000000000"
+    assert instance._probe_value_for(
+        "--session-id", None, "us-east-1", "workspaces-web", "get-session"
+    ) == session_id
+
+
 def test_caller_account_id_uses_safe_argv_and_validates_output(monkeypatch):
     instance = object.__new__(AWSBruteForce)
     instance.aws_cli = "/usr/bin/aws"
@@ -710,6 +849,34 @@ def test_expired_cli_credentials_stop_remaining_probes(monkeypatch):
     assert len(calls) == 1
     assert instance.stop_event.is_set()
     assert instance.probe_stats["credential_errors"] == 1
+
+
+def test_workmail_deleted_organization_state_proves_authorized_lookup(
+    monkeypatch, capsys
+):
+    instance = AWSBruteForce(
+        False, "eu-west-1", None, [], 1, "AKIAEXAMPLE", "secret"
+    )
+    instance.aws_cli = "/usr/bin/aws"
+
+    class Result:
+        returncode = 254
+        stdout = b""
+        stderr = (
+            b"OrganizationStateException: Organization m-0123456789abcdef0123456789abcdef "
+            b"is not Active, state: Deleted"
+        )
+
+    monkeypatch.setattr("src.aws.awsbruteforce.subprocess.run", lambda *a, **k: Result())
+    instance.run_command(
+        None,
+        "eu-west-1",
+        "workmail",
+        "list-users",
+        ["--organization-id", "m-0123456789abcdef0123456789abcdef"],
+    )
+    assert instance.found_permissions == ["workmail:ListUsers"]
+    assert "authorized resource-state response" in capsys.readouterr().out
 
 
 def test_static_admin_is_validated_by_simulator_instead_of_ending_early():

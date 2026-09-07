@@ -650,5 +650,28 @@ def test_workdocs_document_metadata_is_not_a_sensitive_data_finding():
     assert ["workdocs:GetDocument"] not in sensitive_combinations
 
 
+def test_unexecuted_euc_write_candidates_are_not_promoted():
+    for permission in (
+        "appstream:CreateStreamingURL",
+        "workmail:AssumeImpersonationRole",
+        "workmail:StartMailboxExportJob",
+    ):
+        assert classify_permission(
+            "aws", permission, unknown_default="medium"
+        ) == "medium"
+
+
+def test_workspaces_control_plane_reads_remain_low_without_data_evidence():
+    for permission in (
+        "workspaces:DescribeWorkspaceSnapshots",
+        "workspaces-web:ListSessions",
+        "workspaces-thin-client:GetDevice",
+        "workspaces-instances:GetWorkspaceInstance",
+    ):
+        assert classify_permission(
+            "aws", permission, unknown_default="medium"
+        ) == "low"
+
+
 if __name__ == "__main__":
     unittest.main()

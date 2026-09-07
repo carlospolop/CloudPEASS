@@ -1,6 +1,7 @@
 import subprocess
 import re
 import os
+import json
 import threading
 from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
@@ -19,6 +20,27 @@ class AWSBruteForce():
     CLI_MODEL_ALIASES = {
         "deploy": "codedeploy",
         "s3api": "s3",
+    }
+
+    # CloudTrail can preserve resource identifiers after list access is lost or
+    # after a resource is deleted. Only use formats validated for these EUC
+    # services; arbitrary historical strings would make probes less reliable.
+    HISTORICAL_EVENT_SOURCES = {
+        "workmail": "workmail.amazonaws.com",
+        "workspaces": "workspaces.amazonaws.com",
+        "workspaces-web": "workspaces-web.amazonaws.com",
+        "workspaces-thin-client": "workspaces-thin-client.amazonaws.com",
+        "workspaces-instances": "workspaces-instances.amazonaws.com",
+    }
+    HISTORICAL_ID_PATTERNS = {
+        ("workmail", "organization-id"): re.compile(r"^m-[0-9a-f]{32}$", re.I),
+        ("workspaces", "workspace-id"): re.compile(r"^ws-[0-9a-z]{8,63}$", re.I),
+        ("workspaces", "pool-id"): re.compile(r"^wspool-[0-9a-z]{9}$", re.I),
+        ("workspaces-web", "portal-id"): re.compile(r"^[0-9a-z-]{36}$", re.I),
+        ("workspaces-web", "session-id"): re.compile(r"^[0-9a-z-]{36}$", re.I),
+        ("workspaces-instances", "workspace-instance-id"): re.compile(
+            r"^wsinst-[0-9a-z]{8,63}$", re.I
+        ),
     }
 
     # These are named like reads but mint temporary credentials/tokens.
@@ -102,6 +124,9 @@ class AWSBruteForce():
         self.profile_uses_environment_credentials = profile_uses_environment_credentials
         self.probe_stats = {"timeouts": 0, "os_errors": 0, "credential_errors": 0}
         self.stop_event = threading.Event()
+        self.history_lock = threading.Lock()
+        self.history_cache = {}
+        self.historical_values_used = set()
 
         self.aws_cli = shutil.which("aws")
 
@@ -402,6 +427,121 @@ class AWSBruteForce():
         return "CloudPEASSProbe"
 
     @staticmethod
+    def _walk_named_strings(value, field_name=""):
+        if isinstance(value, str):
+            normalized = re.sub(r"[^a-z0-9]", "", field_name.casefold())
+            yield normalized, value
+        elif isinstance(value, dict):
+            for key, child in value.items():
+                yield from AWSBruteForce._walk_named_strings(child, str(key))
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                yield from AWSBruteForce._walk_named_strings(child, field_name)
+
+    def _historical_identifiers(self, profile, region, service):
+        """Return validated IDs from recent CloudTrail events, cached per service."""
+        event_source = self.HISTORICAL_EVENT_SOURCES.get(service)
+        if not event_source or not self.aws_cli:
+            return []
+        cache_key = (profile or "", region or "", service)
+        with self.history_lock:
+            if cache_key in self.history_cache:
+                return self.history_cache[cache_key]
+
+            command = self._build_command(
+                profile,
+                region,
+                "cloudtrail",
+                "lookup-events",
+                [
+                    "--lookup-attributes",
+                    f"AttributeKey=EventSource,AttributeValue={event_source}",
+                    "--max-results",
+                    "50",
+                    "--no-paginate",
+                    "--output",
+                    "json",
+                ],
+            )
+            values = []
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    timeout=20,
+                    env=self._build_env(profile),
+                )
+                if result.returncode == 0:
+                    response = json.loads(result.stdout.decode(errors="replace"))
+                    events = response.get("Events", []) if isinstance(response, dict) else []
+                    for event in events:
+                        if not isinstance(event, dict):
+                            continue
+                        candidates = []
+                        try:
+                            payload = json.loads(event.get("CloudTrailEvent", "{}"))
+                            # Never recycle a syntactically valid ID from a failed
+                            # probe. That creates a feedback loop where our own
+                            # dummy request is mistaken for an observed resource.
+                            # A WorkMail organization-state response is the one
+                            # tested exception: it identifies a real organization
+                            # after authorization but before the requested lookup.
+                            trusted_error = isinstance(payload, dict) and payload.get(
+                                "errorCode"
+                            ) in {None, "OrganizationStateException"}
+                            if trusted_error:
+                                candidates.extend(
+                                    [
+                                        payload.get("requestParameters"),
+                                        payload.get("responseElements"),
+                                        payload.get("resources"),
+                                    ]
+                                )
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            pass
+                        for candidate in candidates:
+                            values.extend(self._walk_named_strings(candidate))
+            except (
+                OSError,
+                subprocess.TimeoutExpired,
+                UnicodeError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
+                if self.debug:
+                    print(
+                        f"[DEBUG] Could not mine historical {service} IDs from "
+                        f"CloudTrail: {exc}"
+                    )
+
+            self.history_cache[cache_key] = list(dict.fromkeys(values))
+            return self.history_cache[cache_key]
+
+    def _probe_value_for(self, option, profile, region, service, command):
+        """Prefer a real historical ID, then fall back to a safe dummy value."""
+        option_name = option.lstrip("-").lower()
+        normalized_option = re.sub(r"[^a-z0-9]", "", option_name.casefold())
+        pattern = self.HISTORICAL_ID_PATTERNS.get((service, option_name))
+        fallback = self._placeholder_for(option, service, command)
+        if pattern:
+            for field_name, value in self._historical_identifiers(
+                profile, region, service
+            ):
+                if (
+                    field_name in {normalized_option, f"{normalized_option}s"}
+                    and value != fallback
+                    and pattern.fullmatch(value)
+                ):
+                    with self.lock:
+                        self.historical_values_used.add((service, option_name, value))
+                    if self.debug:
+                        print(
+                            f"[DEBUG] Using CloudTrail {service} {option} value: {value}"
+                        )
+                    return value
+        return fallback
+
+    @staticmethod
     def _required_options(output):
         """Extract required CLI options without depending on bullet or line characters."""
         matches = re.findall(
@@ -449,11 +589,23 @@ class AWSBruteForce():
             result = subprocess.run(full_command, capture_output=True, timeout=20, env=env)
             output = result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace")
 
-            if result.returncode == 0 or re.search(r'NoSuchEntity|ResourceNotFoundException|NotFoundException', output, re.I):
+            if result.returncode == 0 or re.search(
+                r'NoSuchEntity|ResourceNotFoundException|NotFoundException|OrganizationStateException',
+                output,
+                re.I,
+            ):
                 if self.debug:
-                    print(f"[DEBUG] Successful or resource-not-found response: {display_command}")
+                    print(
+                        f"[DEBUG] Successful or authorization-passing service response: "
+                        f"{display_command}"
+                    )
                 perm_command = self.permission_for_command(service, command)
-                confidence = "confirmed" if result.returncode == 0 else "likely; resource was not found"
+                if result.returncode == 0:
+                    confidence = "confirmed"
+                elif re.search(r"OrganizationStateException", output, re.I):
+                    confidence = "likely; authorized resource-state response"
+                else:
+                    confidence = "likely; resource was not found"
                 print(f"{Fore.YELLOW}[+] {Fore.WHITE}Read access ({confidence}): {Fore.YELLOW}{service} {command} {Fore.BLUE}({display_command}) {Fore.GREEN}({perm_command}){Fore.RESET}")
                 
                 with self.lock:
@@ -486,8 +638,12 @@ class AWSBruteForce():
                     added = False
                     for required_arg in self._required_options(output):
                         if required_arg not in extra:
-                            placeholder = self._placeholder_for(
-                                required_arg, service=service, command=command
+                            placeholder = self._probe_value_for(
+                                required_arg,
+                                profile,
+                                region,
+                                service,
+                                command,
                             )
                             if (
                                 service == "invoicing"
@@ -595,6 +751,7 @@ class AWSBruteForce():
     def brute_force_permissions(self):
         self.found_permissions = []
         self.probe_stats = {"timeouts": 0, "os_errors": 0, "credential_errors": 0}
+        self.historical_values_used = set()
         if not getattr(self, "stop_event", None):
             self.stop_event = threading.Event()
         else:
@@ -659,6 +816,11 @@ class AWSBruteForce():
             pbar.close()
 
         print("\n[+] Permission enumeration completed.")
+        if self.historical_values_used:
+            print(
+                f"{Fore.BLUE}Used {len(self.historical_values_used)} validated resource "
+                "identifier(s) recovered from CloudTrail instead of dummy IDs."
+            )
         if self.probe_stats["timeouts"]:
             print(
                 f"{Fore.YELLOW}{self.probe_stats['timeouts']} read-only probe(s) timed out; "
