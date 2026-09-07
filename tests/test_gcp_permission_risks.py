@@ -379,5 +379,11 @@ def test_every_high_or_critical_rule_has_hacktricks_evidence():
         ), permission
 
     for _, document in risk_documentation:
-        assert document.startswith(("gcp-privilege-escalation/", "gcp-post-exploitation/"))
+        assert document.startswith(
+            (
+                "gcp-privilege-escalation/",
+                "gcp-post-exploitation/",
+                "gcp-to-workspace-pivoting/",
+            )
+        )
         assert document.endswith(".md")

@@ -208,6 +208,22 @@ sensitive_combinations = [
 # concrete abuse or data-access procedure; tests prevent adding an unreferenced
 # high-severity permission by accident.
 risk_documentation = (
+    (
+        "iam.serviceAccounts.getAccessToken",
+        "gcp-to-workspace-pivoting/README.md",
+    ),
+    (
+        "iam.serviceAccounts.signBlob",
+        "gcp-to-workspace-pivoting/README.md",
+    ),
+    (
+        "iam.serviceAccounts.signJwt",
+        "gcp-to-workspace-pivoting/README.md",
+    ),
+    (
+        "resourcemanager.organizations.setIamPolicy",
+        "gcp-to-workspace-pivoting/README.md",
+    ),
     ("*.setIamPolicy", "gcp-privilege-escalation/gcp-misc-perms-privesc.md"),
     ("cloudbuild.builds.approve", "gcp-post-exploitation/gcp-cloud-build-post-exploitation.md"),
     ("cloudfunctions.functions.sourceCodeGet", "gcp-post-exploitation/gcp-cloud-functions-post-exploitation.md"),
