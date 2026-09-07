@@ -124,7 +124,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
 
     def test_resource_type_wildcards_are_not_automatically_critical(self) -> None:
         self.assertEqual(self.classify("Microsoft.HybridCompute/licenses/*"), "medium")
-        self.assertEqual(self.classify("Microsoft.Insights/actionGroups/*"), "medium")
+        self.assertEqual(self.classify("Microsoft.Insights/actionGroups/*"), "high")
         self.assertEqual(self.classify("Microsoft.Compute/virtualMachines/*"), "critical")
 
     def test_wildcards_keep_maximum_risk_from_likely_child_verbs(self) -> None:
@@ -210,6 +210,16 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.EventGrid/domains/eventSubscriptions/getFullUrl/action": "high",
             "Microsoft.EventGrid/domains/topics/eventSubscriptions/getFullUrl/action": "high",
             "Microsoft.ContainerRegistry/registries/runs/listLogSasUrl/action": "high",
+            "Microsoft.Insights/actionGroups/read": "high",
+            "Microsoft.Insights/webtests/read": "high",
+            "Microsoft.ContainerRegistry/registries/webhooks/getCallbackConfig/action": "high",
+            "Microsoft.ApiManagement/service/policies/read": "high",
+            "Microsoft.ApiManagement/service/apis/policies/read": "high",
+            "Microsoft.ApiManagement/service/apis/operations/policies/read": "high",
+            "Microsoft.ApiManagement/service/products/policies/read": "high",
+            "Microsoft.Network/vpnServerConfigurations/listAllRadiusServersSecrets/action": "high",
+            "Microsoft.AppConfiguration/configurationStores/ListKeyValue/action": "high",
+            "Microsoft.AppConfiguration/configurationStores/keyValues/read": "high",
             "Microsoft.Web/staticSites/listSecrets/action": "critical",
             "Microsoft.CognitiveServices/accounts/listKeys/action": "critical",
             "Microsoft.MachineLearningServices/workspaces/listKeys/action": "critical",

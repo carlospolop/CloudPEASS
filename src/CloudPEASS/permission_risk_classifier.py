@@ -394,6 +394,23 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.eventgrid/domains/eventsubscriptions/getfullurl/action",
         "microsoft.eventgrid/domains/topics/eventsubscriptions/getfullurl/action",
         "microsoft.containerregistry/registries/runs/listlogsasurl/action",
+        # Live validation recovered stored signed callback URLs or literal
+        # credentials and used each one against the protected canary. These
+        # reads/actions are configuration-dependent, so they remain High.
+        "microsoft.insights/actiongroups/read",
+        "microsoft.insights/webtests/read",
+        "microsoft.containerregistry/registries/webhooks/getcallbackconfig/action",
+        "microsoft.apimanagement/service/policies/read",
+        "microsoft.apimanagement/service/apis/policies/read",
+        "microsoft.apimanagement/service/apis/operations/policies/read",
+        "microsoft.apimanagement/service/products/policies/read",
+        # The normal VPN configuration GET redacts RADIUS secrets; this
+        # dedicated action returned the exact configured shared secret.
+        "microsoft.network/vpnserverconfigurations/listallradiusserverssecrets/action",
+        # Both ARM paths returned a seeded cleartext application secret from
+        # a Free App Configuration store, without requiring data-plane RBAC.
+        "microsoft.appconfiguration/configurationstores/listkeyvalue/action",
+        "microsoft.appconfiguration/configurationstores/keyvalues/read",
         # A read SAS from each operation was live-tested by downloading a
         # seeded byte range from the raw managed VHD. This exposes the complete
         # disk/snapshot without requiring attachment to an attacker VM.
