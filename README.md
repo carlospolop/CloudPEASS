@@ -121,7 +121,7 @@ python3 GCPPEAS.py
 python3 GCPPEAS.py --project victim-project --out-json-path gcp-results.json
 ```
 
-GCPPEAS reports Workspace-capable OAuth scopes—including Gmail, Drive, Calendar, Admin SDK, Chat, Classroom, and editors—but does not automatically read Workspace content. A token containing both Workspace and Cloud scopes is called out as a cross-control-plane credential. Service-account signing/key permissions and complete Cloud DNS record-write pairs also receive concise GCP↔Workspace pivot notes with their required conditions.
+GCPPEAS reports Workspace-capable OAuth scopes—including Gmail, Drive, Calendar, Admin SDK, Chat, Classroom, and editors—but does not automatically read Workspace content. A token containing both Workspace and Cloud scopes is called out as a cross-control-plane credential. Service-account impersonation/signing/key permissions now distinguish directly shared Workspace resources (which do not require domain-wide delegation) from user impersonation through DWD. Complete Cloud DNS record-write pairs and user access to organization `setIamPolicy` also receive concise GCP↔Workspace pivot notes with their required conditions and known-resource fallbacks.
 
 ### Useful controls
 

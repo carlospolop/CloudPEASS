@@ -1658,12 +1658,30 @@ class GCPPEASS(CloudPEASS):
             enumeration_note=" ".join(notes),
         )
 
-    @staticmethod
-    def _cross_cloud_pivot_notes(target: dict, permissions: Sequence[str]) -> List[str]:
+    def _cross_cloud_pivot_notes(self, target: dict, permissions: Sequence[str]) -> List[str]:
         """Explain high-signal GCP/Workspace trust edges without attempting abuse."""
         permission_set = set(permissions)
         notes: List[str] = []
         if target.get("type") == "service_account":
+            workspace_identity = sorted(
+                permission_set
+                & {
+                    "iam.serviceAccounts.getAccessToken",
+                    "iam.serviceAccounts.signBlob",
+                    "iam.serviceAccounts.signJwt",
+                    "iam.serviceAccountKeys.create",
+                }
+            )
+            if workspace_identity:
+                notes.append(
+                    "Workspace resource pivot check: this service account is usable through "
+                    f"{', '.join(workspace_identity)}. Request only authorized Workspace OAuth "
+                    "scopes and check resources shared directly with the service-account email, "
+                    "such as Drive files/folders or calendars. Direct sharing does not require "
+                    "domain-wide delegation, a Workspace user subject, or service-account list "
+                    "permission; an empty API result only means this account saw no resources for "
+                    "that API and scope."
+                )
             signing = sorted(
                 permission_set
                 & {
@@ -1680,6 +1698,21 @@ class GCPPEASS(CloudPEASS):
                     "JWT for a known Workspace user without needing ordinary GCP roles held by that "
                     "user. The requested OAuth scope must be present in the DWD grant."
                 )
+
+        if (
+            target.get("type") == "organization"
+            and "resourcemanager.organizations.setIamPolicy" in permission_set
+            and self.email
+            and not self.is_sa
+        ):
+            notes.append(
+                "Workspace to GCP pivot: this user can change organization IAM and grant a "
+                "controlled principal roles/resourcemanager.organizationAdmin. If no explicit "
+                "binding explains the permission, check whether the identity is a Google "
+                "Workspace or Cloud Identity super administrator using Google's implicit "
+                "organization-recovery authority. A known numeric organization ID is enough for "
+                "this test; organization listing and policy visibility are not prerequisites."
+            )
 
         dns_writes = sorted(
             permission_set

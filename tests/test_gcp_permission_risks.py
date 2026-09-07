@@ -17,6 +17,10 @@ from src.sensitive_permissions.gcp import (
     "permission",
     [
         "resourcemanager.projects.setIamPolicy",
+        "resourcemanager.organizations.setIamPolicy",
+        "iam.serviceAccounts.getAccessToken",
+        "iam.serviceAccounts.signBlob",
+        "iam.serviceAccounts.signJwt",
         "container.pods.exec",
         "container.nodes.proxy",
         "container.serviceAccounts.createToken",

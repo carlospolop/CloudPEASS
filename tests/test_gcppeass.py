@@ -465,7 +465,7 @@ def test_cloud_dns_zone_discovery_and_read_only_request_builders():
     assert body == {"permissions": ["dns.changes.create"]}
 
 
-def test_cross_cloud_notes_require_complete_dns_pair_and_specific_sa_target():
+def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
     peass = bare_peass()
     project = peass.normalize_resource("projects/demo-project")
     assert peass._cross_cloud_pivot_notes(
@@ -489,10 +489,30 @@ def test_cross_cloud_notes_require_complete_dns_pair_and_specific_sa_target():
     sa_notes = peass._cross_cloud_pivot_notes(
         sa, ["iam.serviceAccounts.signJwt"]
     )
-    assert len(sa_notes) == 1
-    assert "domain-wide delegation" in sa_notes[0]
+    assert len(sa_notes) == 2
+    assert any("Direct sharing does not require" in note for note in sa_notes)
+    assert any("domain-wide delegation" in note for note in sa_notes)
+
+    access_token_notes = peass._cross_cloud_pivot_notes(
+        sa, ["iam.serviceAccounts.getAccessToken"]
+    )
+    assert len(access_token_notes) == 1
+    assert "Drive files/folders or calendars" in access_token_notes[0]
     assert peass._cross_cloud_pivot_notes(
         project, ["iam.serviceAccounts.signJwt"]
+    ) == []
+
+    organization = peass.normalize_resource("organizations/123456789")
+    organization_notes = peass._cross_cloud_pivot_notes(
+        organization, ["resourcemanager.organizations.setIamPolicy"]
+    )
+    assert len(organization_notes) == 1
+    assert "roles/resourcemanager.organizationAdmin" in organization_notes[0]
+    assert "listing and policy visibility are not prerequisites" in organization_notes[0]
+
+    peass.is_sa = True
+    assert peass._cross_cloud_pivot_notes(
+        organization, ["resourcemanager.organizations.setIamPolicy"]
     ) == []
 
 
