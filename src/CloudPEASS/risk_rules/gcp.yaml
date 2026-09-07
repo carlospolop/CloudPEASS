@@ -17,6 +17,7 @@ critical_exact:
   - clientauthconfig.clients.getWithSecret
   - clientauthconfig.clients.listWithSecrets
   - cloudbuild.builds.create
+  - composer.environments.executeAirflowCommand
   - composer.environments.update
   - cloudkms.cryptoKeyVersions.useToDecrypt
   - cloudkms.cryptoKeyVersions.useToDecryptViaDelegation
@@ -66,17 +67,22 @@ high_exact:
   - compute.instances.setServiceAccount
   - container.clusters.getCredentials
   - container.pods.portForward
+  - datastore.entities.create
+  - datastore.entities.delete
+  - datastore.entities.get
+  - datastore.entities.update
   - logging.logMetrics.delete
   - logging.logs.delete
   - logging.sinks.delete
-  - logging.views.access
   - iam.serviceAccounts.getOpenIdToken
   - monitoring.alertPolicies.delete
   - monitoring.notificationChannels.delete
   - pubsub.snapshots.seek
   - pubsub.subscriptions.consume
   - pubsub.topics.publish
+  - redis.instances.getAuthString
   - run.routes.invoke
+  - secretmanager.versions.add
   - orgpolicy.policy.set
   - securitycenter.findings.bulkMuteUpdate
   - securitycenter.findings.setMute
@@ -121,7 +127,6 @@ medium_exact:
   - cloudfunctions.functions.call
   - cloudfunctions.functions.sourceCodeSet
   - cloudsql.instances.executeSql
-  - composer.environments.executeAirflowCommand
   - composer.environments.create
   - datafusion.namespaces.provisionCredential
   - datafusion.secureKeys.getSecret
@@ -141,6 +146,7 @@ medium_exact:
   - iam.googleapis.com/oauthClientCredentials.create
   - iam.googleapis.com/oauthClientCredentials.update
   - iamconnectors.connectors.retrieveCredentials
+  - logging.views.access
   - managedidentities.domains.resetpassword
   - monitoring.dashboards.delete
   - networkmanagement.providers.generateProviderAccessToken
