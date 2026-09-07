@@ -6,6 +6,7 @@ from sensitive_permissions.aws import (
 
 
 LIVE_VALIDATED_HIGH_ACTIONS = {
+    "account:GetContactInformation",
     "amplify:GetApp",
     "amplify:GetJob",
     "apigateway:GET",
@@ -14,6 +15,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "cloudfront:GetFunction",
     "cloudfront:ListDistributions",
     "cloudtrail:LookupEvents",
+    "ce:GetCostAndUsage",
     "codebuild:BatchGetBuilds",
     "codebuild:BatchGetProjects",
     "codecommit:GetBlob",
@@ -36,10 +38,17 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "lambda:GetLayerVersion",
     "logs:FilterLogEvents",
     "logs:GetLogEvents",
+    "invoicing:BatchGetInvoiceProfile",
+    "invoicing:GetInvoicePDF",
+    "invoicing:ListInvoiceSummaries",
     "sagemaker:DescribeTrainingJob",
+    "ses:GetSuppressedDestination",
+    "ses:ListSuppressedDestinations",
     "sns:ListSubscriptions",
     "sns:ListSubscriptionsByTopic",
     "ssm:GetParameterHistory",
+    "tax:GetTaxRegistration",
+    "tax:ListTaxRegistrations",
 }
 
 

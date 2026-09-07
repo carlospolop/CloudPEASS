@@ -2,6 +2,7 @@ import subprocess
 import re
 import os
 import threading
+from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from tqdm import tqdm
 import shutil
@@ -190,6 +191,7 @@ class AWSBruteForce():
             (r'^(?:sso-admin|awsssoportal):', 'sso:'),
             (r'^stepfunctions:', 'states:'),
             (r'^support-app:', 'supportapp:'),
+            (r'^taxsettings:', 'tax:'),
             (r'^timestream-query:', 'timestream:'),
             (r'^timestream-write:', 'timestream:'),
             (r'^voice-id:', 'voiceid:'),
@@ -351,8 +353,25 @@ class AWSBruteForce():
         return shlex.join(command)
 
     @staticmethod
-    def _placeholder_for(option):
+    def _placeholder_for(option, service=None, command=None):
         option_name = option.lstrip("-").lower()
+        if (
+            service == "invoicing"
+            and command == "list-invoice-summaries"
+            and option_name == "selector"
+        ):
+            return "ResourceType=INVOICE_ID,Value=CloudPEASSProbe"
+        if service == "ce" and command == "get-cost-and-usage":
+            if option_name == "time-period":
+                end = date.today()
+                start = end - timedelta(days=1)
+                return f"Start={start.isoformat()},End={end.isoformat()}"
+            if option_name == "granularity":
+                return "DAILY"
+            if option_name == "metrics":
+                return "UnblendedCost"
+        if "email" in option_name:
+            return "cloudpeass-probe@example.invalid"
         if "arn" in option_name:
             return "arn:aws:iam::123456789012:role/CloudPEASSProbe"
         if any(part in option_name for part in ("account", "owner")):
@@ -375,6 +394,29 @@ class AWSBruteForce():
         for match in matches:
             options.extend(re.findall(r"--[a-zA-Z0-9][a-zA-Z0-9-]*", match))
         return list(dict.fromkeys(options))
+
+    def _caller_account_id(self, profile, region):
+        """Return the caller account for probes that reject fabricated IDs."""
+        command = self._build_command(
+            profile,
+            region,
+            "sts",
+            "get-caller-identity",
+            ["--query", "Account", "--output", "text"],
+        )
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=10,
+                env=self._build_env(profile),
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        account_id = result.stdout.decode(errors="replace").strip()
+        if result.returncode == 0 and re.fullmatch(r"\d{12}", account_id):
+            return account_id
+        return None
 
     def run_command(self, profile, region, service, command, extra=None, cont=0):
         if getattr(self, "stop_event", None) and self.stop_event.is_set():
@@ -425,7 +467,23 @@ class AWSBruteForce():
                     added = False
                     for required_arg in self._required_options(output):
                         if required_arg not in extra:
-                            extra.extend([required_arg, self._placeholder_for(required_arg)])
+                            placeholder = self._placeholder_for(
+                                required_arg, service=service, command=command
+                            )
+                            if (
+                                service == "invoicing"
+                                and command == "batch-get-invoice-profile"
+                                and required_arg == "--account-ids"
+                            ):
+                                placeholder = (
+                                    self._caller_account_id(profile, region) or placeholder
+                                )
+                            extra.extend(
+                                [
+                                    required_arg,
+                                    placeholder,
+                                ]
+                            )
                             added = True
                     if added:
                         self.run_command(profile, region, service, command, extra, cont + 1)

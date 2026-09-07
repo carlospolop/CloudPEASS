@@ -142,10 +142,12 @@ very_sensitive_combinations = [
 ]
 
 sensitive_combinations = [
+    ["account:GetContactInformation"],
     ["amplify:GetApp"],
     ["amplify:GetJob"],
     ["cloudfront:GetFunction"],
     ["cloudtrail:LookupEvents"],
+    ["ce:GetCostAndUsage"],
     ["cloudfront:GetDistribution"],
     ["cloudfront:GetDistributionConfig"],
     ["cloudfront:ListDistributions"],
@@ -167,13 +169,20 @@ sensitive_combinations = [
     ["lambda:GetLayerVersion"],
     ["logs:FilterLogEvents"],
     ["logs:GetLogEvents"],
+    ["invoicing:BatchGetInvoiceProfile"],
+    ["invoicing:GetInvoicePDF"],
+    ["invoicing:ListInvoiceSummaries"],
     ["lambda:GetFunction"],
     ["route53domains:GetDomainDetail"],
     ["sagemaker:DescribeTrainingJob"],
+    ["ses:GetSuppressedDestination"],
+    ["ses:ListSuppressedDestinations"],
     ["sns:ListSubscriptions"],
     ["sns:ListSubscriptionsByTopic"],
     ["ssm:GetParameterHistory"],
     ["sts:GetFederationToken"],
+    ["tax:GetTaxRegistration"],
+    ["tax:ListTaxRegistrations"],
 
     ["apigateway:POST"],
     ["apigateway:GET"],
@@ -335,6 +344,7 @@ tested_risk_documentation = {
 
 
 live_validated_disclosure_documentation = {
+    "account:GetContactInformation": "aws-services/aws-account-management-enum.md",
     "amplify:GetApp": "aws-privilege-escalation/aws-amplify-privesc/README.md",
     "amplify:GetJob": "aws-privilege-escalation/aws-amplify-privesc/README.md",
     "apigateway:GET": "aws-services/aws-api-gateway-enum.md",
@@ -343,6 +353,7 @@ live_validated_disclosure_documentation = {
     "cloudfront:GetFunction": "aws-services/aws-cloudfront-enum.md",
     "cloudfront:ListDistributions": "aws-services/aws-cloudfront-enum.md",
     "cloudtrail:LookupEvents": "aws-services/aws-security-and-detection-services/aws-cloudtrail-enum.md",
+    "ce:GetCostAndUsage": "aws-services/aws-security-and-detection-services/aws-cost-explorer-enum.md",
     "codebuild:BatchGetBuilds": "aws-privilege-escalation/aws-codebuild-privesc/README.md",
     "codebuild:BatchGetProjects": "aws-privilege-escalation/aws-codebuild-privesc/README.md",
     "codecommit:GetBlob": "aws-services/aws-datapipeline-codepipeline-codebuild-and-codecommit.md",
@@ -365,8 +376,15 @@ live_validated_disclosure_documentation = {
     "lambda:GetLayerVersion": "aws-privilege-escalation/aws-lambda-privesc/README.md",
     "logs:FilterLogEvents": "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md",
     "logs:GetLogEvents": "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md",
+    "invoicing:BatchGetInvoiceProfile": "aws-services/aws-invoicing-enum.md",
+    "invoicing:GetInvoicePDF": "aws-services/aws-invoicing-enum.md",
+    "invoicing:ListInvoiceSummaries": "aws-services/aws-invoicing-enum.md",
     "sagemaker:DescribeTrainingJob": "aws-services/aws-sagemaker-enum/README.md",
+    "ses:GetSuppressedDestination": "aws-services/aws-ses-enum.md",
+    "ses:ListSuppressedDestinations": "aws-services/aws-ses-enum.md",
     "sns:ListSubscriptions": "aws-services/aws-sns-enum.md",
     "sns:ListSubscriptionsByTopic": "aws-services/aws-sns-enum.md",
     "ssm:GetParameterHistory": "aws-privilege-escalation/aws-ssm-privesc/README.md",
+    "tax:GetTaxRegistration": "aws-services/aws-tax-settings-enum.md",
+    "tax:ListTaxRegistrations": "aws-services/aws-tax-settings-enum.md",
 }

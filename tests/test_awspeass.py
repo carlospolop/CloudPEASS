@@ -1,4 +1,6 @@
 import json
+from datetime import date, timedelta
+from types import SimpleNamespace
 from urllib.parse import quote
 
 import AWSPEAS as awspeas_module
@@ -114,6 +116,50 @@ def test_required_cli_options_handle_multiple_delimiters():
     assert AWSBruteForce._required_options(wrapped) == ["--role-name", "--policy-name"]
 
 
+def test_sensitive_read_probes_use_valid_safe_placeholders():
+    placeholder = AWSBruteForce._placeholder_for
+    assert placeholder(
+        "--selector", "invoicing", "list-invoice-summaries"
+    ) == "ResourceType=INVOICE_ID,Value=CloudPEASSProbe"
+    assert placeholder(
+        "--email-address", "sesv2", "get-suppressed-destination"
+    ) == "cloudpeass-probe@example.invalid"
+    assert placeholder(
+        "--granularity", "ce", "get-cost-and-usage"
+    ) == "DAILY"
+    assert placeholder("--metrics", "ce", "get-cost-and-usage") == "UnblendedCost"
+    assert placeholder("--time-period", "ce", "get-cost-and-usage") == (
+        f"Start={(date.today() - timedelta(days=1)).isoformat()},"
+        f"End={date.today().isoformat()}"
+    )
+
+
+def test_caller_account_id_uses_safe_argv_and_validates_output(monkeypatch):
+    instance = object.__new__(AWSBruteForce)
+    instance.aws_cli = "/usr/bin/aws"
+    instance.profile_uses_environment_credentials = False
+    instance.access_key_id = None
+    instance.secret_access_key = None
+    instance.session_token = None
+    seen = {}
+
+    def fake_run(command, **kwargs):
+        seen["command"] = command
+        return SimpleNamespace(returncode=0, stdout=b"123456789012\n")
+
+    monkeypatch.setattr("src.aws.awsbruteforce.subprocess.run", fake_run)
+
+    assert instance._caller_account_id("profile name", "us-east-1") == "123456789012"
+    assert seen["command"][-6:] == [
+        "sts",
+        "get-caller-identity",
+        "--query",
+        "Account",
+        "--output",
+        "text",
+    ]
+
+
 def test_token_minting_get_commands_are_never_probed(monkeypatch):
     instance = object.__new__(AWSBruteForce)
     instance._get_aws_help = lambda service: [
@@ -220,6 +266,9 @@ def test_s3api_and_access_analyzer_permissions_are_normalized():
     )
     assert instance.transform_command("codedeploy:ListApplications") == (
         "codedeploy:ListApplications"
+    )
+    assert instance.transform_command("taxsettings:GetTaxRegistration") == (
+        "tax:GetTaxRegistration"
     )
     assert instance.permission_for_command("s3api", "get-bucket-acl") == "s3:GetBucketAcl"
     assert instance.permission_for_command(

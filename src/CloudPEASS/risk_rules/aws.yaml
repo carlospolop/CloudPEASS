@@ -60,6 +60,7 @@ medium_override_exact:
 
 ## Exact action names that must always be classified as `high`.
 high_exact:
+  - account:GetContactInformation
   - amplify:GetApp
   - amplify:GetJob
   - apigateway:GET
@@ -68,6 +69,7 @@ high_exact:
   - cloudfront:GetFunction
   - cloudfront:ListDistributions
   - cloudtrail:LookupEvents
+  - ce:GetCostAndUsage
   - codebuild:BatchGetBuilds
   - codebuild:BatchGetProjects
   - codecommit:GetBlob
@@ -91,18 +93,26 @@ high_exact:
   - lambda:GetLayerVersion
   - logs:FilterLogEvents
   - logs:GetLogEvents
+  - invoicing:BatchGetInvoiceProfile
+  - invoicing:GetInvoicePDF
+  - invoicing:ListInvoiceSummaries
   - route53domains:GetDomainDetail
   - sagemaker:DescribeTrainingJob
+  - ses:GetSuppressedDestination
+  - ses:ListSuppressedDestinations
   - secretsmanager:PutSecretValue
   - secretsmanager:UpdateSecret
   - sns:ListSubscriptions
   - sns:ListSubscriptionsByTopic
   - ssm:GetParameterHistory
   - sts:GetFederationToken
+  - tax:GetTaxRegistration
+  - tax:ListTaxRegistrations
 
 ## Evidence-backed corrections for stale upstream/cache entries. These take
 ## precedence over critical_exact and low_exact during classification.
 high_override_exact:
+  - account:GetContactInformation
   - amplify:GetApp
   - amplify:GetJob
   - apigateway:GET
@@ -111,6 +121,7 @@ high_override_exact:
   - cloudfront:GetFunction
   - cloudfront:ListDistributions
   - cloudtrail:LookupEvents
+  - ce:GetCostAndUsage
   - codeartifact:GetAuthorizationToken
   - codecommit:GetBlob
   - codecommit:GetCommit
@@ -128,7 +139,12 @@ high_override_exact:
   - ec2:GetPasswordData
   - ecr:GetDownloadUrlForLayer
   - ecs:DescribeTaskDefinition
+  - invoicing:BatchGetInvoiceProfile
+  - invoicing:GetInvoicePDF
+  - invoicing:ListInvoiceSummaries
   - sagemaker:DescribeTrainingJob
+  - ses:GetSuppressedDestination
+  - ses:ListSuppressedDestinations
   - sns:ListSubscriptions
   - sns:ListSubscriptionsByTopic
   - ssm:GetParameterHistory
@@ -136,6 +152,8 @@ high_override_exact:
   - logs:FilterLogEvents
   - sts:GetFederationToken
   - sts:GetServiceBearerToken
+  - tax:GetTaxRegistration
+  - tax:ListTaxRegistrations
 
 ## =====================
 ## MEDIUM RULES
