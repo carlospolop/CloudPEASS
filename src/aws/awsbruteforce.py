@@ -17,13 +17,45 @@ class AWSBruteForce():
     # These are named like reads but mint temporary credentials/tokens.
     # They are unnecessary for permission discovery and therefore never probed.
     BLOCKED_COMMANDS = {
+        ("amplifybackend", "get-token"),
+        ("bedrock-agentcore", "get-resource-oauth2-token"),
+        ("bedrock-agentcore", "get-workload-access-token"),
+        ("bedrock-agentcore", "get-workload-access-token-for-jwt"),
+        ("bedrock-agentcore", "get-workload-access-token-for-user-id"),
+        ("codeartifact", "get-authorization-token"),
+        ("cognito-identity", "get-credentials-for-identity"),
+        ("cognito-identity", "get-open-id-token"),
+        ("cognito-identity", "get-open-id-token-for-developer-identity"),
+        ("cognito-idp", "get-tokens-from-refresh-token"),
+        ("connect", "get-federation-token"),
+        ("datazone", "get-environment-credentials"),
         ("ecr", "get-authorization-token"),
         ("ecr", "get-login-password"),
         ("ecr-public", "get-authorization-token"),
         ("ecr-public", "get-login-password"),
+        ("emr", "get-cluster-session-credentials"),
+        ("emr-containers", "get-managed-endpoint-session-credentials"),
+        ("finspace-data", "get-programmatic-access-credentials"),
+        ("gamelift", "get-compute-auth-token"),
+        ("lakeformation", "get-temporary-glue-partition-credentials"),
+        ("lakeformation", "get-temporary-glue-table-credentials"),
+        ("license-manager", "get-access-token"),
+        ("quicksight", "get-session-embed-url"),
+        ("redshift", "get-cluster-credentials"),
+        ("redshift", "get-cluster-credentials-with-iam"),
+        ("redshift", "get-identity-center-auth-token"),
+        ("redshift-serverless", "get-credentials"),
+        ("redshift-serverless", "get-identity-center-auth-token"),
+        ("route53globalresolver", "get-access-token"),
+        ("secretsmanager", "get-random-password"),
+        ("ssm", "get-access-token"),
+        ("sso", "get-role-credentials"),
+        ("sts", "get-delegated-access-token"),
         ("sts", "get-federation-token"),
         ("sts", "get-session-token"),
         ("sts", "get-web-identity-token"),
+        ("waf", "get-change-token"),
+        ("waf-regional", "get-change-token"),
     }
 
     def __init__(self, debug, region, profile, aws_services, threads, access_key_id=None, secret_access_key=None, session_token=None):
@@ -31,12 +63,13 @@ class AWSBruteForce():
         self.region = region
         self.profile = profile
         self.aws_services = [a.lower() for a in aws_services]
-        self.num_threads = threads
+        self.num_threads = max(1, min(int(threads), 64))
         self.found_permissions = []
         self.lock = threading.Lock()
         self.access_key_id = access_key_id
         self.secret_access_key = secret_access_key
         self.session_token = session_token
+        self.probe_stats = {"timeouts": 0, "os_errors": 0}
 
         self.aws_cli = shutil.which("aws")
 
@@ -147,7 +180,13 @@ class AWSBruteForce():
         return ''.join(word.capitalize() for word in command.split('-'))
 
     def _build_command(self, profile, region, service, command, extra):
-        base = [self.aws_cli or "aws", "--cli-connect-timeout", "19"]
+        base = [
+            self.aws_cli or "aws",
+            "--cli-connect-timeout",
+            "5",
+            "--cli-read-timeout",
+            "10",
+        ]
         if profile:
             base.extend(["--profile", profile])
         if region:
@@ -161,6 +200,7 @@ class AWSBruteForce():
         env = os.environ.copy()
         env["AWS_PAGER"] = ""
         env["AWS_CLI_AUTO_PROMPT"] = "off"
+        env["AWS_MAX_ATTEMPTS"] = "2"
         if profile:
             return env
         for var_name in (
@@ -213,9 +253,9 @@ class AWSBruteForce():
                 timeout=30,
                 env=env,
             )
-        except subprocess.TimeoutExpired:
+        except (subprocess.TimeoutExpired, OSError) as exc:
             if self.debug:
-                print(f"[DEBUG] Timed out while running: {' '.join(command)}")
+                print(f"[DEBUG] Could not read AWS CLI help for {' '.join(command)}: {exc}")
             return []
 
         if result.returncode != 0:
@@ -226,13 +266,16 @@ class AWSBruteForce():
 
         output = result.stdout
         if shutil.which("col"):
-            col_result = subprocess.run(
-                ["col", "-b"],
-                input=output,
-                capture_output=True,
-            )
-            if col_result.returncode == 0:
-                output = col_result.stdout
+            try:
+                col_result = subprocess.run(
+                    ["col", "-b"],
+                    input=output,
+                    capture_output=True,
+                )
+                if col_result.returncode == 0:
+                    output = col_result.stdout
+            except OSError:
+                pass
 
         return output.decode(errors="replace").splitlines()
 
@@ -318,7 +361,13 @@ class AWSBruteForce():
         except subprocess.TimeoutExpired:
             if self.debug:
                 print(f"[DEBUG] Command timed out: {display_command}")
-            print(f"[-] Timeout: {display_command}")
+            with self.lock:
+                self.probe_stats["timeouts"] += 1
+        except OSError as exc:
+            if self.debug:
+                print(f"[DEBUG] Could not run {display_command}: {exc}")
+            with self.lock:
+                self.probe_stats["os_errors"] += 1
 
     @staticmethod
     def _help_entries(output, heading):
@@ -375,6 +424,7 @@ class AWSBruteForce():
 
     def brute_force_permissions(self):
         self.found_permissions = []
+        self.probe_stats = {"timeouts": 0, "os_errors": 0}
         commands_to_run = []
         print(f"{Fore.GREEN}Starting permission enumeration...")
 
@@ -427,7 +477,7 @@ class AWSBruteForce():
             )
             return []
 
-        with ThreadPoolExecutor(max_workers=self.num_threads*4) as executor:
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             futures = [executor.submit(self.run_command, *args) for args in commands_to_run]
             pbar = tqdm(total=len(futures), desc="Running commands")
             for future in as_completed(futures):
@@ -435,4 +485,14 @@ class AWSBruteForce():
             pbar.close()
 
         print("\n[+] Permission enumeration completed.")
+        if self.probe_stats["timeouts"]:
+            print(
+                f"{Fore.YELLOW}{self.probe_stats['timeouts']} read-only probe(s) timed out; "
+                "rerun with fewer --threads or --debug to diagnose them."
+            )
+        if self.probe_stats["os_errors"]:
+            print(
+                f"{Fore.YELLOW}{self.probe_stats['os_errors']} probe(s) could not start; "
+                "rerun with --debug to see the local OS errors."
+            )
         return self.found_permissions

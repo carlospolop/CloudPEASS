@@ -1,6 +1,9 @@
 import json
 from urllib.parse import quote
 
+import AWSPEAS as awspeas_module
+from botocore.exceptions import ClientError
+
 from AWSPEAS import AWSPEASS, build_parser
 from src.CloudPEASS.cloudpeass import CloudPEASS, CloudResource
 from src.aws.awsbruteforce import AWSBruteForce
@@ -116,6 +119,7 @@ def test_token_minting_get_commands_are_never_probed(monkeypatch):
     instance._get_aws_help = lambda service: [
         "AVAILABLE COMMANDS",
         "o get-caller-identity",
+        "o get-delegated-access-token",
         "o get-federation-token",
         "o get-session-token",
         "SEE ALSO",
@@ -130,7 +134,9 @@ def test_cli_command_is_an_argv_list_not_a_shell_string():
     assert command == [
         "/usr/bin/aws",
         "--cli-connect-timeout",
-        "19",
+        "5",
+        "--cli-read-timeout",
+        "10",
         "--profile",
         "profile; touch /tmp/pwned",
         "--region",
@@ -210,3 +216,245 @@ def test_managed_policy_inference_is_case_insensitive_and_combines_policies():
     ]
     result = guesser.guess_permissions()
     assert result[0]["policies"] == ["ComputeRead", "StorageRead"]
+
+
+def test_evidence_sources_are_not_union_merged_for_the_same_resource():
+    resources = [
+        CloudResource("account", "account", "account", ["iam:GetUser"], evidence="static"),
+        CloudResource("account", "account", "account", ["s3:GetObject"], evidence="live"),
+    ]
+
+    grouped = CloudPEASS.group_resources_by_permissions(resources)
+
+    assert set(grouped) == {frozenset({"iam:GetUser"}), frozenset({"s3:GetObject"})}
+
+
+def test_denies_are_reported_separately_and_not_risk_classified(monkeypatch):
+    instance = CloudPEASS([], [], "AWS", 1)
+    seen = []
+    monkeypatch.setattr(instance, "analyze_sensitive_combinations", lambda perms: {
+        "very_sensitive_perms": set(), "sensitive_perms": set()
+    })
+
+    def classify(perms):
+        seen.append(set(perms))
+        return {"critical": set(), "high": set(), "medium": set(), "low": set(perms)}
+
+    monkeypatch.setattr(instance, "categorize_permissions_from_catalog", classify)
+    result = instance.analyze_group(
+        frozenset({"s3:GetObject", "-s3:DeleteObject"}),
+        [CloudResource("account", "account", "account", ["s3:GetObject"], ["s3:DeleteObject"])],
+    )
+
+    assert seen == [{"s3:GetObject"}]
+    assert result["deny_permissions"] == ["s3:DeleteObject"]
+    assert "-s3:DeleteObject" not in result["permissions_cat"]["low"]
+
+
+def test_account_snapshot_is_partial_when_attached_policy_document_is_missing():
+    class Paginator:
+        def paginate(self, **kwargs):
+            assert "Role" in kwargs["Filter"]
+            yield {
+                "RoleDetailList": [{
+                    "RoleName": "app",
+                    "Arn": "arn:aws:iam::123456789012:role/team/app",
+                    "AttachedManagedPolicies": [{
+                        "PolicyArn": "arn:aws:iam::123456789012:policy/missing"
+                    }],
+                }],
+                "Policies": [],
+            }
+
+    class IAM:
+        def get_paginator(self, operation):
+            assert operation == "get_account_authorization_details"
+            return Paginator()
+
+    instance = bare_awspeass()
+    instance.iam_client = IAM()
+    instance.principal_type = "role"
+    instance.principal_name = "app"
+    instance.entity_arn = None
+    instance.iam_errors = []
+
+    documents, complete = instance._collect_account_authorization_fallback()
+
+    assert documents == []
+    assert not complete
+    assert instance.entity_arn.endswith("role/team/app")
+
+
+def test_simulator_retries_throttling_and_follows_markers(monkeypatch):
+    throttled = ClientError(
+        {"Error": {"Code": "ThrottlingException", "Message": "slow down"}},
+        "SimulatePrincipalPolicy",
+    )
+
+    class IAM:
+        def __init__(self):
+            self.calls = []
+
+        def simulate_principal_policy(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                raise throttled
+            if "Marker" not in kwargs:
+                return {
+                    "EvaluationResults": [{"EvalActionName": "s3:GetObject", "EvalDecision": "allowed"}],
+                    "IsTruncated": True,
+                    "Marker": "next",
+                }
+            return {
+                "EvaluationResults": [{"EvalActionName": "iam:GetUser", "EvalDecision": "allowed"}],
+                "IsTruncated": False,
+            }
+
+    instance = bare_awspeass()
+    instance.iam_client = IAM()
+    instance.entity_arn = "arn:aws:iam::123456789012:user/alice"
+    instance.debug = False
+    sleeps = []
+    monkeypatch.setattr(awspeas_module.time, "sleep", sleeps.append)
+
+    allowed, complete = instance.simulate_batch(["s3:GetObject", "iam:GetUser"])
+
+    assert complete
+    assert allowed == {"s3:GetObject", "iam:GetUser"}
+    assert sleeps == [1]
+    assert instance.iam_client.calls[-1]["Marker"] == "next"
+
+
+def test_static_admin_is_validated_by_simulator_instead_of_ending_early():
+    instance = bare_awspeass()
+    instance.identity = {"Account": "123456789012"}
+    instance.principal_arn = "arn:aws:iam::123456789012:user/alice"
+    instance.principal_type = "user"
+    instance.principal_name = "alice"
+    instance.is_session_principal = False
+    instance.get_caller_identity = lambda: instance.principal_arn
+    instance.get_principal_permissions = lambda: {
+        "allow": ["*"], "deny": [], "scopes": {}, "unrestricted_admin": True,
+        "complete": True, "documents_found": 1,
+    }
+    calls = []
+
+    def simulate():
+        calls.append("simulate")
+        instance.simulation_is_admin = True
+        return ["*"], True
+
+    instance.simulate_permissions = simulate
+    instance.AWSBruteForce = type("BF", (), {
+        "brute_force_permissions": lambda self: (_ for _ in ()).throw(AssertionError("unexpected probe"))
+    })()
+    instance.skip_iam_policies = False
+    instance.skip_simulation = False
+    instance.skip_bruteforce = False
+    instance.bruteforce_always = False
+    instance.skip_managed_policies_guess = True
+    instance.iam_visibility = "complete"
+    instance.iam_errors = []
+    instance.principal_info = {}
+
+    resources = instance.get_resources_and_permissions()
+
+    assert calls == ["simulate"]
+    assert any(resource.is_admin and resource.extra_fields["evidence"] == "IAM policy simulator" for resource in resources)
+
+
+def test_assumed_role_session_uses_live_probe_even_after_base_role_simulation():
+    instance = bare_awspeass()
+    instance.identity = {"Account": "123456789012"}
+    instance.principal_arn = "arn:aws:sts::123456789012:assumed-role/app/session"
+    instance.principal_type = "role"
+    instance.principal_name = "app"
+    instance.is_session_principal = True
+    instance.get_caller_identity = lambda: instance.principal_arn
+    instance.get_principal_permissions = lambda: {
+        "allow": ["s3:GetObject"], "deny": [], "scopes": {}, "unrestricted_admin": False,
+        "complete": True, "documents_found": 1,
+    }
+    instance.simulate_permissions = lambda: (["s3:GetObject"], True)
+    instance.simulation_is_admin = False
+    instance.AWSBruteForce = type("BF", (), {
+        "brute_force_permissions": lambda self: ["sts:GetCallerIdentity"]
+    })()
+    instance.skip_iam_policies = False
+    instance.skip_simulation = False
+    instance.skip_bruteforce = False
+    instance.bruteforce_always = False
+    instance.skip_managed_policies_guess = True
+    instance.iam_visibility = "complete"
+    instance.iam_errors = []
+    instance.principal_info = {}
+
+    resources = instance.get_resources_and_permissions()
+
+    assert any(resource.extra_fields["evidence"] == "live read-only probes" for resource in resources)
+    assert not any(resource.is_admin for resource in resources)
+
+
+def test_root_metadata_is_complete_and_explicit_live_validation_is_honored():
+    instance = bare_awspeass()
+    instance.identity = {"Account": "123456789012"}
+    instance.principal_arn = "arn:aws:iam::123456789012:root"
+    instance.principal_type = "root"
+    instance.principal_name = "root"
+    instance.get_caller_identity = lambda: instance.principal_arn
+    instance.AWSBruteForce = type("BF", (), {
+        "brute_force_permissions": lambda self: ["sts:GetCallerIdentity"]
+    })()
+    instance.bruteforce_always = True
+    instance.skip_bruteforce = False
+    instance.principal_info = {}
+
+    resources = instance.get_resources_and_permissions()
+
+    assert [resource.extra_fields["evidence"] for resource in resources] == [
+        "root principal", "live read-only probes"
+    ]
+    assert instance.principal_info["iam_visibility"] == "not applicable (root principal)"
+
+
+def test_malformed_policy_and_condition_are_ignored_without_crashing():
+    instance = bare_awspeass()
+    scopes, _, _, _ = instance._parse_policy_documents([
+        ("broken document", None, False),
+        ("broken condition", {
+            "Statement": {"Effect": "Allow", "Action": "s3:GetObject", "Condition": "bad"}
+        }, False),
+    ])
+
+    assert scopes["*"]["allow"] == {"s3:GetObject"}
+    assert any("malformed policy document" in note for note in instance.policy_notes)
+    assert any("malformed Condition" in note for note in instance.policy_notes)
+
+
+def test_partition_is_preserved_for_account_and_assumed_role_fallback_arns():
+    instance = bare_awspeass()
+    instance.identity = {"Account": "123456789012"}
+    instance.principal_arn = "arn:aws-us-gov:sts::123456789012:assumed-role/app/session"
+    instance.principal_type = "role"
+    instance.principal_name = "app"
+    instance.entity_arn = None
+    instance.num_threads = 1
+    instance.debug = False
+    instance._call_iam = lambda *args, **kwargs: ({}, False)
+    instance._paginate_iam = lambda *args, **kwargs: ([], False)
+    instance._all_actions = lambda: set()
+
+    assert instance._account_resource(["s3:GetObject"]).id.startswith("arn:aws-us-gov:")
+    assert instance.simulate_permissions() == ([], False)
+    assert instance.entity_arn == "arn:aws-us-gov:iam::123456789012:role/app"
+
+
+def test_missing_cli_and_os_errors_are_nonfatal():
+    instance = object.__new__(AWSBruteForce)
+    instance.aws_cli = None
+    instance.debug = False
+    instance.found_permissions = []
+    assert instance.brute_force_permissions() == []
+
+    instance.aws_cli = "/missing/aws"
+    assert instance._get_aws_help() == []

@@ -120,21 +120,31 @@ class CloudPEASS:
             resource_type = resource["type"]
             resource_name = resource["name"]
             is_admin = resource.get("is_admin", False)
-            if resource_id not in final_resources:
-                final_resources[resource_id] = {
+            evidence = resource.get("evidence")
+            evidence_key = evidence
+            try:
+                hash(evidence_key)
+            except TypeError:
+                evidence_key = json.dumps(evidence, sort_keys=True, default=str)
+            # Keep independently derived permissions separate so inferred/static
+            # evidence cannot silently turn a live result into a stronger claim.
+            resource_key = (resource_id, evidence_key)
+            if resource_key not in final_resources:
+                final_resources[resource_key] = {
                     "id": resource_id,
                     "type": resource_type,
                     "name": resource_name,
                     "permissions": set(),
                     "deny_perms": set(),
-                    "is_admin": is_admin
+                    "is_admin": is_admin,
+                    "evidence": evidence,
                 }
             else:
                 # If resource already exists and either the existing or new one is admin, mark as admin
                 if is_admin:
-                    final_resources[resource_id]["is_admin"] = True
-            final_resources[resource_id]["permissions"].update(resource["permissions"])
-            final_resources[resource_id]["deny_perms"].update(resource.get("deny_perms", []))
+                    final_resources[resource_key]["is_admin"] = True
+            final_resources[resource_key]["permissions"].update(resource["permissions"])
+            final_resources[resource_key]["deny_perms"].update(resource.get("deny_perms", []))
 
 
         grouped = defaultdict(list)
@@ -258,12 +268,14 @@ class CloudPEASS:
 
 
     def analyze_group(self, perms_set, resources_group):
-        sensitive_perms = self.analyze_sensitive_combinations(perms_set)
+        allow_perms = {perm for perm in perms_set if not str(perm).startswith("-")}
+        deny_perms = {str(perm)[1:] for perm in perms_set if str(perm).startswith("-")}
+        sensitive_perms = self.analyze_sensitive_combinations(allow_perms)
         sensitive_perms_serializable = {
             "very_sensitive_perms": sorted(sensitive_perms["very_sensitive_perms"]),
             "sensitive_perms": sorted(sensitive_perms["sensitive_perms"]),
         }
-        perms_catalog = self.categorize_permissions_from_catalog(perms_set)
+        perms_catalog = self.categorize_permissions_from_catalog(allow_perms)
         perms_catalog["critical"].update(sensitive_perms["very_sensitive_perms"])
         perms_catalog["high"].update(sensitive_perms["sensitive_perms"])
         perms_catalog["high"] -= perms_catalog["critical"]
@@ -274,12 +286,13 @@ class CloudPEASS:
         categorized = set()
         for v in perms_catalog.values():
             categorized |= set(v)
-        uncategorized = set(perms_set) - categorized
+        uncategorized = allow_perms - categorized
         if uncategorized:
             perms_catalog["low"].update(uncategorized)
 
         # Convert CloudResource objects to dicts for resource IDs
         resource_ids = []
+        resource_details = []
         is_admin = False
         for r in resources_group:
             r_dict = r.to_dict() if isinstance(r, CloudResource) else r
@@ -287,14 +300,23 @@ class CloudPEASS:
             if r_dict.get("is_admin", False):
                 is_admin = True
             if r_dict["id"]:
-                resource_ids.append(r_dict["id"])
+                if r_dict["id"] not in resource_ids:
+                    resource_ids.append(r_dict["id"])
             else:
                 resource_ids.append(r_dict["id"] + ":" + r_dict["type"] + ":" + r_dict["name"])
+            resource_details.append({
+                "id": r_dict["id"],
+                "type": r_dict["type"],
+                "name": r_dict["name"],
+                "evidence": r_dict.get("evidence"),
+            })
 
         return {
             "principal": self.principal_info,
-            "permissions": list(perms_set),
+            "permissions": sorted(perms_set),
+            "deny_permissions": sorted(deny_perms),
             "resources": resource_ids,
+            "resource_details": resource_details,
             "sensitive_perms": sensitive_perms_serializable,
             "permissions_cat": {k: sorted(v) for k, v in perms_catalog.items()},
             "is_admin": is_admin
@@ -380,6 +402,13 @@ class CloudPEASS:
             all_medium_perms.update(medium)
 
             print(f"{Fore.WHITE}Resources: {Fore.CYAN}{f'{Fore.WHITE} , {Fore.CYAN}'.join(result['resources'])}")
+            evidence = sorted({
+                str(detail.get("evidence"))
+                for detail in result.get("resource_details", [])
+                if detail.get("evidence")
+            })
+            if evidence:
+                print(f"{Fore.BLUE}Evidence: {Fore.WHITE}{', '.join(evidence)}")
             
             # Organize permissions by category
             critical_perms = []
@@ -388,6 +417,8 @@ class CloudPEASS:
             low_perms = []
             
             for perm in perms:
+                if str(perm).startswith("-"):
+                    continue
                 if perm in critical:
                     critical_perms.append(perm)
                 elif perm in high:
@@ -416,6 +447,9 @@ class CloudPEASS:
                 print_category("High", high_perms, Fore.RED)
                 print_category("Medium", medium_perms, Fore.YELLOW)
                 print_category("Low/other", low_perms, Fore.WHITE)
+                denied = result.get("deny_permissions", [])
+                if denied:
+                    print(f"{Fore.MAGENTA}Explicit denies ({len(denied)}){Style.RESET_ALL}: {Fore.WHITE}{', '.join(denied)}")
                 print("\n" + Fore.LIGHTWHITE_EX + "-" * 80 + "\n" + Style.RESET_ALL)
                 continue
 
@@ -440,6 +474,9 @@ class CloudPEASS:
             perms_msg += Style.RESET_ALL
             
             print(perms_msg)
+            denied = result.get("deny_permissions", [])
+            if denied:
+                print(f"{Fore.MAGENTA}Explicit denies: {Fore.WHITE}{', '.join(denied)}")
             print("\n" + Fore.LIGHTWHITE_EX + "-" * 80 + "\n" + Style.RESET_ALL)
 
         if not analysis_results:

@@ -63,7 +63,10 @@ class AWSPEASS(CloudPEASS):
         no_ask=False,
         bruteforce_always=False,
     ):
-        super().__init__(very_sensitive_combos, sensitive_combos, "AWS", num_threads, out_path)
+        # A typo such as --threads 10000 should not exhaust file descriptors or
+        # overwhelm either the local host or AWS read-only APIs.
+        safe_threads = max(1, min(int(num_threads), 64))
+        super().__init__(very_sensitive_combos, sensitive_combos, "AWS", safe_threads, out_path)
         self.profile_name = profile_name
         self.debug = debug
         self.skip_iam_policies = skip_iam_policies
@@ -93,7 +96,7 @@ class AWSPEASS(CloudPEASS):
         config = Config(
             connect_timeout=10,
             read_timeout=30,
-            max_pool_connections=max(10, int(num_threads) * 2),
+            max_pool_connections=max(10, safe_threads * 2),
             retries={"mode": "adaptive", "max_attempts": 6},
         )
         self.iam_client = self.session.client("iam", config=config)
@@ -108,6 +111,7 @@ class AWSPEASS(CloudPEASS):
         self.principal_arn = None
         self.principal_type = None
         self.principal_name = None
+        self.is_session_principal = False
         self.entity_arn = None
         self.permissions_boundary_arns = set()
         self.policy_conditions = set()
@@ -120,15 +124,19 @@ class AWSPEASS(CloudPEASS):
         self.simulation_is_admin = False
         self.max_permissions_per_category = 50
 
+        # Temporary credentials may expire during a broad probe, so keep their
+        # profile refresh chain. Long-lived credentials can be passed directly,
+        # avoiding repeated credential_process/profile startup in every child.
+        cli_profile = profile_name if profile_name and self.credentials.token else None
         self.AWSBruteForce = AWSBruteForce(
             debug,
             self.region,
-            profile_name,
+            cli_profile,
             aws_services,
             self.num_threads,
-            access_key_id or (self.credentials.access_key if not profile_name else None),
-            secret_access_key or (self.credentials.secret_key if not profile_name else None),
-            session_token or (self.credentials.token if not profile_name else None),
+            access_key_id or self.credentials.access_key,
+            secret_access_key or self.credentials.secret_key,
+            session_token or self.credentials.token,
         )
 
     # Identity and credential safety
@@ -140,6 +148,7 @@ class AWSPEASS(CloudPEASS):
                 raise RuntimeError(f"AWS credentials could not call STS GetCallerIdentity: {exc}") from exc
             self.principal_arn = self.identity.get("Arn", "")
             self.principal_type, self.principal_name = self.parse_principal(self.principal_arn)
+            self.is_session_principal = ":sts::" in self.principal_arn and ":assumed-role/" in self.principal_arn
             if self.principal_type == "user" or ":iam::" in self.principal_arn:
                 self.entity_arn = self.principal_arn
         return self.principal_arn
@@ -569,14 +578,19 @@ class AWSPEASS(CloudPEASS):
         boundary_arn = entity.get("PermissionsBoundary", {}).get("PermissionsBoundaryArn")
         if boundary_arn:
             self.permissions_boundary_arns.add(boundary_arn)
+        complete = True
         for attached_policy in attached:
             arn = attached_policy.get("PolicyArn")
             if managed_docs.get(arn):
                 documents.append((f"account snapshot managed policy {arn}", managed_docs[arn], False))
+            elif arn:
+                complete = False
         for arn in self.permissions_boundary_arns:
             if managed_docs.get(arn):
                 documents.append((f"account snapshot permissions boundary {arn}", managed_docs[arn], True))
-        return documents, True
+            else:
+                complete = False
+        return documents, complete
 
     # Policy parsing and action catalog fallbacks
     def _botocore_action_catalog(self):
@@ -642,6 +656,9 @@ class AWSPEASS(CloudPEASS):
                 self.policy_conditions.update(conditional)
 
         for source, document in identity_documents:
+            if not isinstance(document, dict):
+                self.policy_notes.append(f"Ignored malformed policy document from {source}.")
+                continue
             statements = self._as_list(document.get("Statement"))
             for statement in statements:
                 if not isinstance(statement, dict) or statement.get("Effect") not in {"Allow", "Deny"}:
@@ -657,6 +674,9 @@ class AWSPEASS(CloudPEASS):
                     resources = [f"* (except {excluded})"]
                     self.policy_notes.append(f"Preserved a NotResource scope from {source} as an exclusion label.")
                 conditions = statement.get("Condition") or {}
+                if not isinstance(conditions, dict):
+                    self.policy_notes.append(f"Ignored a malformed Condition in {source}.")
+                    conditions = {}
                 for resource in resources:
                     add(
                         str(resource),
@@ -676,6 +696,9 @@ class AWSPEASS(CloudPEASS):
         boundary_allow = set()
         boundary_deny = set()
         for source, document in boundary_documents:
+            if not isinstance(document, dict):
+                self.policy_notes.append(f"Ignored malformed permissions boundary from {source}.")
+                continue
             for statement in self._as_list(document.get("Statement")):
                 if not isinstance(statement, dict) or statement.get("Effect") not in {"Allow", "Deny"}:
                     continue
@@ -775,6 +798,7 @@ class AWSPEASS(CloudPEASS):
         return set(), False
 
     def simulate_permissions(self, batch_size=100):
+        batch_size = max(1, min(int(batch_size), 100))
         if self.principal_type == "role" and not self.entity_arn:
             role_response, _ = self._call_iam("get_role", RoleName=self.principal_name)
             self.entity_arn = role_response.get("Role", {}).get("Arn")
@@ -875,7 +899,7 @@ class AWSPEASS(CloudPEASS):
             answer = "y"
         else:
             answer = input(
-                f"{Fore.YELLOW}Try offline managed-policy inference from the read permissions found? (Y/n): {Fore.RESET}"
+                f"{Fore.YELLOW}Try public managed-policy inference from the read permissions found? (Y/n): {Fore.RESET}"
             ).strip().lower()
         if answer == "n":
             return
@@ -933,6 +957,23 @@ class AWSPEASS(CloudPEASS):
                 f"Organizations policies may still restrict them. {Style.RESET_ALL}"
             )
             resources.append(self._account_resource(["*"], is_admin=True, method="root principal"))
+            if self.bruteforce_always and not self.skip_bruteforce:
+                print(
+                    f"{Fore.CYAN}[3/3] Validating root read access with explicitly requested "
+                    "live read-only probes (Organizations policies may restrict the root)."
+                )
+                live_permissions = sorted(set(self.AWSBruteForce.brute_force_permissions()))
+                if live_permissions:
+                    resources.append(
+                        self._account_resource(live_permissions, method="live read-only probes")
+                    )
+            self.iam_visibility = "not applicable (root principal)"
+            self.principal_info.update({
+                "iam_visibility": self.iam_visibility,
+                "permissions_boundaries": [],
+                "policy_condition_operators": [],
+                "assumed_role_session": False,
+            })
             return resources
 
         if not self.skip_iam_policies:
@@ -955,20 +996,19 @@ class AWSPEASS(CloudPEASS):
             unrestricted=policy_result.get("unrestricted_admin", False),
         )
         if is_admin:
-            for resource in resources:
-                if resource.id.endswith(":root"):
-                    resource.is_admin = True
             print(
-                f"{Fore.RED}{Back.YELLOW} UNCONDITIONAL IDENTITY-POLICY ADMIN DETECTED. "
-                f"SCPs, RCPs, endpoint policies, or session policies can still restrict live access. {Style.RESET_ALL}"
+                f"{Fore.RED}{Back.YELLOW} UNCONDITIONAL IDENTITY-POLICY ADMIN CANDIDATE DETECTED. "
+                f"Validating policy layers with the next available read-only method. {Style.RESET_ALL}"
             )
-            return resources
 
         needs_fallback = (
             not policy_result["complete"]
             or not policy_result["allow"]
+            or bool(policy_result["deny"])
             or bool(self.permissions_boundary_arns)
             or bool(self.policy_conditions)
+            or self.is_session_principal
+            or is_admin
         )
         simulation_permissions = []
         simulation_complete = False
@@ -981,7 +1021,7 @@ class AWSPEASS(CloudPEASS):
                 resources.append(
                     self._account_resource(
                         simulation_permissions,
-                        is_admin=self.simulation_is_admin,
+                        is_admin=self.simulation_is_admin and not self.is_session_principal,
                         method="IAM policy simulator",
                     )
                 )
@@ -989,7 +1029,8 @@ class AWSPEASS(CloudPEASS):
             print(f"{Fore.GREEN}[2/3] Full IAM policy documents were read; simulation is not needed.")
 
         run_bruteforce = self.bruteforce_always or (
-            needs_fallback and (not simulation_complete or not simulation_permissions)
+            needs_fallback
+            and (not simulation_complete or not simulation_permissions or self.is_session_principal)
         )
         bf_permissions = []
         if self.skip_bruteforce:
@@ -1018,6 +1059,12 @@ class AWSPEASS(CloudPEASS):
                 f"{Fore.BLUE}IAM fallback summary: {len(self.iam_errors)} read call(s) failed "
                 f"({denied} authorization failure(s)); other methods continued where possible."
             )
+        self.principal_info.update({
+            "iam_visibility": self.iam_visibility,
+            "permissions_boundaries": sorted(self.permissions_boundary_arns),
+            "policy_condition_operators": sorted(self.policy_conditions),
+            "assumed_role_session": self.is_session_principal,
+        })
         return resources
 
     @staticmethod
