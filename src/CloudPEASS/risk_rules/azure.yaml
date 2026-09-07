@@ -1,0 +1,92 @@
+version: 1
+provider: azure
+
+# Keep the permissionless classifier useful without network access. Exact
+# privilege-escalation operations and Graph scopes live in Python beside the
+# matching logic; this file contains the tunable operational heuristics.
+credential_action_regex: "/(listsecrets|listkeys|listcredentials|listcredential|listadminkeys|listadminkey|getsecret|getsecrets|getkeys|getkey|getadminkeys|getadminkey|getauthtoken|getaccesstoken|regeneratekey|regeneratekeys|regeneratepassword|generatecredentials|generatecredential|generatekey|generatetoken|listpasswords|listpassword)/action$"
+storage_insights_child_regex: "^microsoft\\.storage/storageaccounts/(blobservices|fileservices|queueservices|tableservices)/providers/microsoft\\.insights/(diagnosticsettings|logdefinitions|metricdefinitions)/read$"
+register_like_action_regex: "/(register|unregister|checknameavailability)/action$"
+provider_diagnostic_settings_write_regex: "/providers/microsoft\\.insights/diagnosticsettings/write$"
+
+boundary_keywords:
+  - networksecurityperimeter
+  - privatelink
+  - privateendpoint
+  - scopedprivatelink
+  - privateendpointconnection
+
+# Retained for schema compatibility. Azure's current classifier no longer
+# promotes all of these broad configuration families to high automatically;
+# high/critical now requires a concrete access or escalation path.
+dangerous_write_keywords:
+  - microsoft.authorization/
+  - roleassignments
+  - roledefinitions
+  - elevateaccess
+  - authorization
+  - managedidentity
+  - microsoft.keyvault/
+  - /secrets/
+  - /keys/
+  - /certificates/
+  - policy
+  - privatelink
+  - privateendpoint
+
+cost_mgmt_exact_medium:
+  - microsoft.costmanagement/query/action
+  - microsoft.costmanagement/forecast/action
+  - microsoft.costmanagement/calculatecost/action
+  - microsoft.costmanagement/fetchprices/action
+  - microsoft.advisor/generaterecommendations/action
+  - microsoft.consumption/budgets/write
+
+insights_exclude_keywords:
+  - /apikeys/
+  - apikey
+  - secret
+  - token
+  - credential
+  - key
+
+insights_medium_prefixes_write:
+  - microsoft.insights/diagnosticsettings/
+  - microsoft.insights/extendeddiagnosticsettings/
+  - microsoft.insights/actiongroups/
+  - microsoft.insights/metricalerts/
+  - microsoft.insights/logprofiles/
+  - microsoft.insights/workbooks/
+  - microsoft.insights/workbooktemplates/
+  - microsoft.insights/webtests/
+
+insights_medium_prefixes_write_or_action:
+  - microsoft.insights/autoscalesettings/
+  - microsoft.insights/metrics/
+  - microsoft.insights/scheduledqueryrules/
+
+insights_activitylogalerts_prefix: microsoft.insights/activitylogalerts/
+insights_alertrules_prefix: microsoft.insights/alertrules/
+
+medium_write_action_provider_prefixes:
+  - microsoft.support/
+  - microsoft.advisor/
+  - microsoft.costmanagement/
+
+resourcehealth_events_action_prefix: microsoft.resourcehealth/events/
+billing_provider_prefix: microsoft.billing/
+billing_exclude_keywords:
+  - billingroleassignments
+  - createbillingroleassignment
+  - resolvebillingroleassignments
+  - /elevate/action
+  - roleassignments
+  - roledefinitions
+  - authorization
+
+appinsights_component_prefix: microsoft.insights/components/
+appinsights_exclude_keywords:
+  - /apikeys/
+  - apikey
+  - exportconfiguration
+  - linkedstorageaccounts

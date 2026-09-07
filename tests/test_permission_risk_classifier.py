@@ -113,22 +113,226 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         self.assertEqual(self.classify("Microsoft.Authorization/*"), "critical")
         self.assertEqual(self.classify("Microsoft.KeyVault/*"), "critical")
         self.assertEqual(self.classify("Microsoft.Storage/*"), "critical")
+        self.assertEqual(self.classify("Microsoft.Support/*"), "medium")
+        self.assertEqual(self.classify("Microsoft.CostManagement/*"), "medium")
+        self.assertEqual(self.classify("Microsoft.Maintenance/*"), "medium")
+        self.assertEqual(self.classify("Microsoft.Kubernetes/*"), "high")
 
     def test_resource_type_wildcards_are_not_automatically_critical(self) -> None:
         self.assertEqual(self.classify("Microsoft.HybridCompute/licenses/*"), "medium")
         self.assertEqual(self.classify("Microsoft.Insights/actionGroups/*"), "medium")
-        self.assertEqual(self.classify("Microsoft.Compute/virtualMachines/*"), "medium")
+        self.assertEqual(self.classify("Microsoft.Compute/virtualMachines/*"), "critical")
 
     def test_wildcards_keep_maximum_risk_from_likely_child_verbs(self) -> None:
-        self.assertEqual(self.classify("Microsoft.KeyVault/vaults/secrets/read"), "critical")
+        self.assertEqual(self.classify("Microsoft.KeyVault/vaults/secrets/read"), "low")
         self.assertEqual(self.classify("Microsoft.KeyVault/vaults/secrets/write"), "high")
         self.assertEqual(self.classify("Microsoft.KeyVault/vaults/secrets/*"), "critical")
+        self.assertEqual(self.classify("Microsoft.KeyVault/vaults/certificates/*"), "high")
+        self.assertEqual(
+            self.classify(
+                "Microsoft.ManagedIdentity/userAssignedIdentities/associatedResources/*"
+            ),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Storage/storageAccounts/blobServices/*"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.ContainerService/managedClusters/rbac.authorization.k8s.io/*"
+            ),
+            "high",
+        )
 
     def test_known_privilege_escalation_wildcards_stay_critical(self) -> None:
         self.assertEqual(self.classify("Microsoft.Authorization/roleAssignments/*"), "critical")
-        self.assertEqual(self.classify("Microsoft.Authorization/roleDefinitions/*"), "critical")
+        self.assertEqual(self.classify("Microsoft.Authorization/roleDefinitions/*"), "high")
         self.assertEqual(self.classify("Microsoft.ManagedIdentity/userAssignedIdentities/*"), "critical")
         self.assertEqual(self.classify("Microsoft.Storage/storageAccounts/*"), "critical")
+        self.assertEqual(self.classify("Microsoft.Resources/deploymentScripts/*"), "high")
+
+    def test_cross_provider_wildcard_verbs_are_not_treated_as_literal_operations(self) -> None:
+        self.assertEqual(self.classify("*/read"), "medium")
+        self.assertEqual(self.classify("*/delete"), "medium")
+        self.assertEqual(self.classify("*/write"), "critical")
+        self.assertEqual(self.classify("*/action"), "critical")
+        self.assertEqual(self.classify("Microsoft.Network/*/read"), "medium")
+        self.assertEqual(self.classify("Microsoft.Network/*/write"), "high")
+        self.assertEqual(self.classify("Microsoft.Network/*/delete"), "medium")
+        self.assertEqual(self.classify("Microsoft.Storage/*/read"), "high")
+
+    def test_arm_metadata_operational_and_sensitive_actions_use_distinct_tiers(self) -> None:
+        self.assertEqual(self.classify("Microsoft.Network/virtualNetworks/read"), "low")
+        self.assertEqual(self.classify("Microsoft.Network/virtualNetworks/write"), "medium")
+        self.assertEqual(self.classify("Microsoft.Network/virtualNetworks/delete"), "medium")
+        self.assertEqual(
+            self.classify("Microsoft.KeyVault/vaults/secrets/readMetadata/action"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.KeyVault/vaults/secrets/getSecret/action"),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Search/searchServices/listQueryKeys/action"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Compute/virtualMachines/runCommands/write"),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.MachineLearningServices/workspaces/data/write"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.MachineLearningServices/workspaces/data/delete"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.ManagedIdentity/userAssignedIdentities/write"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.ManagedIdentity/userAssignedIdentities/assign/action"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Authorization/roleDefinitions/write"), "high"
+        )
+        self.assertEqual(
+            self.classify("Microsoft.App/containerApps/getAuthToken/action"), "high"
+        )
+        self.assertEqual(
+            self.classify("Microsoft.KeyVault/vaults/certificates/purge/action"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.ServiceBus/namespaces/authorizationRules/write"
+            ),
+            "medium",
+        )
+
+    def test_graph_scopes_and_unresolved_entra_evidence_are_classified(self) -> None:
+        self.assertEqual(self.classify("openid"), "low")
+        self.assertEqual(self.classify("User.Read"), "low")
+        self.assertEqual(self.classify("User.ReadBasic.All"), "medium")
+        self.assertEqual(self.classify("Directory.Read.All"), "high")
+        self.assertEqual(self.classify("Directory.ReadWrite.All"), "high")
+        self.assertEqual(self.classify("Mail.Read"), "high")
+        self.assertEqual(self.classify("Application.ReadWrite.All"), "critical")
+        self.assertEqual(self.classify("RoleManagement.ReadWrite.Directory"), "critical")
+        self.assertEqual(self.classify("Application.Read.All"), "medium")
+        self.assertEqual(self.classify("Policy.ReadWrite.ConditionalAccess"), "medium")
+        self.assertEqual(self.classify("Printer.ReadWrite.All"), "medium")
+        self.assertEqual(self.classify("Sites.FullControl.All"), "high")
+        self.assertEqual(self.classify("Microsoft.Teams/settings/update"), "medium")
+        self.assertEqual(self.classify("entra.directoryRole/unknown-guid"), "medium")
+        self.assertEqual(self.classify("Owner of #microsoft.graph.group"), "high")
+        self.assertEqual(
+            self.classify("Owner of #microsoft.graph.application"), "critical"
+        )
+
+    def test_entra_granular_role_actions_are_not_left_unknown(self) -> None:
+        self.assertEqual(
+            self.classify("microsoft.directory/domains/allProperties/read"), "low"
+        )
+        self.assertEqual(
+            self.classify("microsoft.directory/domains/allProperties/update"), "medium"
+        )
+        self.assertEqual(
+            self.classify(
+                "microsoft.directory/domains/federationConfiguration/basic/update"
+            ),
+            "high",
+        )
+        self.assertEqual(
+            self.classify("microsoft.directory/applications/credentials/update"),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify("microsoft.directory/bitlockerKeys/key/read"), "critical"
+        )
+        self.assertEqual(
+            self.classify(
+                "microsoft.directory/users/authenticationMethods/standard/read"
+            ),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify(
+                "microsoft.directory/users/authenticationMethods/basic/update"
+            ),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify(
+                "microsoft.directory/groupsAssignableToRoles/allProperties/update"
+            ),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("microsoft.directory/groups/allProperties/update"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("microsoft.directory/users/basic/update"), "medium"
+        )
+        self.assertEqual(
+            self.classify(
+                "microsoft.directory/groupsAssignableToRoles/assignLicense"
+            ),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify(
+                "microsoft.directory/agentIdentityBlueprints/credentials/update"
+            ),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify(
+                "microsoft.directory/servicePrincipals/managePermissionGrantsForAll.microsoft-company-admin"
+            ),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify("microsoft.directory/auditLogs/allProperties/read"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify("microsoft.agentRegistry/allEntities/allProperties/allTasks"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify("microsoft.networkAccess/trafficLogs/standard/read"),
+            "high",
+        )
+
+    def test_cli_capability_evidence_has_explicit_risk(self) -> None:
+        self.assertEqual(self.classify("az-cli/read/vm/list"), "low")
+        self.assertEqual(
+            self.classify("az-cli/read/storage/account/list-keys"), "critical"
+        )
+
+    def test_catalog_keywords_do_not_promote_metadata_or_lifecycle_operations(self) -> None:
+        expected = {
+            "Microsoft.Storage/storageAccounts/blobServices/read": "low",
+            "Microsoft.Storage/storageAccounts/blobServices/write": "medium",
+            "Microsoft.Storage/storageAccounts/blobServices/containers/read": "low",
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read": "high",
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/permanentDelete/action": "medium",
+            "Microsoft.KeyVault/vaults/secrets/recover/action": "medium",
+            "Microsoft.KeyVault/vaults/secrets/setSecret/action": "high",
+            "Microsoft.Automation/automationAccounts/certificates/getCount/action": "medium",
+            "Microsoft.Devices/iotHubs/certificates/generateVerificationCode/action": "medium",
+            "Microsoft.ManagedIdentity/userAssignedIdentities/listAssociatedResources/action": "medium",
+        }
+        for permission, level in expected.items():
+            with self.subTest(permission=permission):
+                self.assertEqual(self.classify(permission), level)
 
 
 class AwsRiskClassificationTest(unittest.TestCase):
@@ -275,6 +479,31 @@ def test_unwritable_cache_still_uses_bundled_aws_rules(monkeypatch, tmp_path):
     data = risk_classifier._load_yaml("aws")
 
     assert "iam:PassRole" in data["critical_exact"]
+
+
+def test_azure_rules_have_a_bundled_permissionless_fallback(monkeypatch, tmp_path):
+    monkeypatch.setattr(risk_classifier, "_cache_dir", lambda: tmp_path / "empty-cache")
+    monkeypatch.setattr(risk_classifier, "_download_risk_rules", lambda provider: None)
+
+    data = risk_classifier._load_yaml("azure")
+
+    assert data["provider"] == "azure"
+    assert "listsecrets" in data["credential_action_regex"]
+
+
+def test_azure_bundled_rules_are_not_relabelled_by_remote_cache(monkeypatch, tmp_path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "azure.yaml").write_text(
+        "provider: azure\ncredential_action_regex: '$^'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(risk_classifier, "_cache_dir", lambda: cache)
+    monkeypatch.setattr(risk_classifier, "_download_risk_rules", lambda provider: None)
+
+    data = risk_classifier._load_yaml("azure")
+
+    assert "listsecrets" in data["credential_action_regex"]
 
 
 def test_invalid_downloaded_aws_regex_cannot_replace_bundled_baseline(

@@ -121,10 +121,10 @@ def _load_yaml(provider: str) -> dict:
     external_data = downloaded_data or _parse_rules_yaml(
         yaml_text, provider, "cached"
     )
-    # GCP ships a catalog-audited rule set with CloudPEASS. Keep its severity
-    # decisions deterministic: a stale user cache or a temporarily different
-    # upstream revision must not silently relabel the same scan.
-    if provider == "gcp" and bundled_data:
+    # Azure and GCP ship catalog-audited rule sets with CloudPEASS. Keep their
+    # severity decisions deterministic: a stale user cache or a temporarily
+    # different upstream revision must not silently relabel the same scan.
+    if provider in {"azure", "gcp"} and bundled_data:
         return bundled_data
     if not bundled_data:
         return external_data
@@ -234,6 +234,263 @@ class AzureRules:
     appinsights_exclude_keywords: tuple[str, ...]
     dangerous_write_keywords: tuple[str, ...]
     dangerous_write_keywords_lower: tuple[str, ...]
+
+
+# AzurePEASS also emits Microsoft Graph scopes, Entra role actions, ownership
+# evidence, and CLI capability labels.  Keep core safety rules in code so an
+# offline scan does not depend on the optional Blue-CloudPEASS YAML download.
+_AZURE_CRITICAL_EXACT = frozenset(
+    {
+        "microsoft.authorization/elevateaccess/action",
+        "microsoft.authorization/roleassignments/write",
+        "microsoft.authorization/roleassignmentschedules/write",
+        "microsoft.authorization/roleassignmentschedulerequests/write",
+        "microsoft.authorization/roleeligibilityschedulerequests/write",
+        "microsoft.keyvault/vaults/accesspolicies/write",
+        "microsoft.keyvault/vaults/secrets/getsecret/action",
+        "microsoft.keyvault/vaults/keys/decrypt/action",
+        "microsoft.keyvault/vaults/keys/unwrap/action",
+        "microsoft.keyvault/vaults/keys/unwrapkey/action",
+        "microsoft.keyvault/vaults/keys/sign/action",
+        "microsoft.compute/virtualmachines/extensions/write",
+        "microsoft.compute/virtualmachines/runcommand/action",
+        "microsoft.compute/virtualmachines/runcommands/write",
+        "microsoft.compute/virtualmachines/loginasadmin/action",
+        "microsoft.compute/virtualmachinescalesets/virtualmachines/runcommands/write",
+        "microsoft.hybridcompute/machines/runcommands/write",
+        "microsoft.containerinstance/containergroups/containers/exec/action",
+        "microsoft.managedidentity/userassignedidentities/federatedidentitycredentials/write",
+        "microsoft.web/sites/config/list/action",
+        "microsoft.web/sites/publishxml/action",
+    }
+)
+
+_AZURE_HIGH_EXACT = frozenset(
+    {
+        "microsoft.authorization/roledefinitions/write",
+        "microsoft.compute/virtualmachines/login/action",
+        "microsoft.containerservice/managedclusters/listclusterusercredential/action",
+        "microsoft.hybridcontainerservice/provisionedclusters/listclusterusercredential/action",
+        "microsoft.kubernetes/connectedclusters/listclusterusercredential/action",
+        "microsoft.kubernetes/connectedclusters/listclusterusercredentials/action",
+        "microsoft.search/searchservices/createquerykey/action",
+        "microsoft.search/searchservices/listquerykeys/action",
+        "microsoft.managedidentity/userassignedidentities/assign/action",
+        "microsoft.app/containerapps/getauthtoken/action",
+        "microsoft.resources/deploymentscripts/write",
+        "microsoft.web/staticsites/createinvitation/action",
+    }
+)
+
+_AZURE_MEDIUM_EXACT = frozenset(
+    {
+        # Creating or updating the identity object does not attach it to a
+        # workload and does not grant control of an existing identity.
+        "microsoft.managedidentity/userassignedidentities/write",
+        "microsoft.keyvault/vaults/certificates/purge/action",
+        "microsoft.storage/storageaccounts/blobservices/containers/blobs/move/action",
+        "microsoft.storage/storageaccounts/blobservices/containers/blobs/permanentdelete/action",
+        "microsoft.storage/storageaccounts/blobservices/containers/blobs/tags/read",
+        "microsoft.storage/storageaccounts/blobservices/containers/blobs/tags/write",
+    }
+)
+
+_ENTRA_MEDIUM_EXACT = frozenset(
+    {
+        # These change ordinary directory object properties, not membership,
+        # ownership, credentials, authentication methods, or role assignment.
+        "microsoft.directory/groups/allproperties/update",
+        "microsoft.directory/users/basic/update",
+        "microsoft.directory/groupsassignabletoroles/allproperties/update",
+    }
+)
+
+_GRAPH_CRITICAL_EXACT = frozenset(
+    {
+        "approleassignment.readwrite.all",
+        "application.readwrite.all",
+        "delegatedpermissiongrant.readwrite.all",
+        "privilegedaccess.readwrite.azuread",
+        "privilegedaccess.readwrite.azureresources",
+        "rolemanagement.readwrite.directory",
+        "userauthenticationmethod.readwrite.all",
+        "devicelocalcredential.read.all",
+        "bitlockerkey.read.all",
+    }
+)
+
+_GRAPH_HIGH_EXACT = frozenset(
+    {
+        "auditlog.read.all",
+        "directory.accessasuser.all",
+        "directory.read.all",
+        "directory.readwrite.all",
+        "group.readwrite.all",
+        "mail.read",
+        "mail.readwrite",
+        "mail.send",
+        "rolemanagement.read.directory",
+        "user.read.all",
+        "user.readwrite.all",
+    }
+)
+
+_GRAPH_MEDIUM_EXACT = frozenset(
+    {
+        # These become critical only as the documented two-permission
+        # Conditional Access combination. Neither can change a policy alone.
+        "application.read.all",
+        "policy.readwrite.conditionalaccess",
+    }
+)
+
+_GRAPH_LOW_EXACT = frozenset(
+    {
+        "email",
+        "offline_access",
+        "openid",
+        "profile",
+        "user.read",
+    }
+)
+
+_GRAPH_SENSITIVE_DATA_PREFIXES = (
+    "calendars.",
+    "channelmessage.",
+    "chat.",
+    "contacts.",
+    "files.",
+    "mail.",
+    "notes.",
+    "sites.",
+    "tasks.",
+    "teamwork.",
+)
+
+_AZURE_CRITICAL_WILDCARD_BASES = frozenset(
+    {
+        "microsoft.authorization/roleassignments",
+        "microsoft.app/containerapps",
+        "microsoft.app/jobs",
+        "microsoft.compute/virtualmachines",
+        "microsoft.compute/virtualmachines/extensions",
+        "microsoft.compute/virtualmachines/runcommands",
+        "microsoft.compute/virtualmachinescalesets/virtualmachines",
+        "microsoft.compute/virtualmachinescalesets/virtualmachines/runcommands",
+        "microsoft.containerservice/managedclusters",
+        "microsoft.containerservice/managedclusters/accessprofiles",
+        "microsoft.hybridcompute/machines",
+        "microsoft.hybridcompute/machines/runcommands",
+        "microsoft.keyvault/vaults",
+        "microsoft.keyvault/vaults/keys",
+        "microsoft.keyvault/vaults/secrets",
+        "microsoft.managedidentity/userassignedidentities",
+        "microsoft.managedidentity/userassignedidentities/federatedidentitycredentials",
+        "microsoft.search/searchservices",
+        "microsoft.storage/storageaccounts",
+        "microsoft.storage/storageaccounts/localusers",
+        "microsoft.web/sites",
+        "microsoft.web/sites/config",
+        "microsoft.web/sites/functions",
+        "microsoft.web/sites/host",
+        "microsoft.web/sites/slots",
+        "microsoft.web/sites/slots/config",
+        "microsoft.web/sites/slots/functions",
+        "microsoft.web/sites/slots/host",
+    }
+)
+
+# Provider-root wildcards are severe only when the current ARM operation
+# catalog contains a concrete credential, execution, authorization, or
+# sensitive-data primitive for that provider. Unknown/operational namespaces
+# stay medium until there is evidence for promoting them.
+_AZURE_CRITICAL_PROVIDER_ROOTS = frozenset(
+    {
+        "microsoft.apimanagement",
+        "microsoft.app",
+        "microsoft.appconfiguration",
+        "microsoft.appplatform",
+        "microsoft.authorization",
+        "microsoft.automation",
+        "microsoft.azuredatatransfer",
+        "microsoft.azurestack",
+        "microsoft.azurestackhci",
+        "microsoft.batch",
+        "microsoft.billingtrust",
+        "microsoft.bing",
+        "microsoft.botservice",
+        "microsoft.cache",
+        "microsoft.cognitiveservices",
+        "microsoft.communication",
+        "microsoft.compute",
+        "microsoft.containerinstance",
+        "microsoft.containerregistry",
+        "microsoft.containerservice",
+        "microsoft.databox",
+        "microsoft.databoxedge",
+        "microsoft.datafactory",
+        "microsoft.datadog",
+        "microsoft.datamigration",
+        "microsoft.dbformysql",
+        "microsoft.dbforpostgresql",
+        "microsoft.desktopvirtualization",
+        "microsoft.devices",
+        "microsoft.documentdb",
+        "microsoft.edgemarketplace",
+        "microsoft.edgeorder",
+        "microsoft.elastic",
+        "microsoft.eventgrid",
+        "microsoft.eventhub",
+        "microsoft.fluidrelay",
+        "microsoft.healthbot",
+        "microsoft.hybridcompute",
+        "microsoft.hybridconnectivity",
+        "microsoft.hybridcontainerservice",
+        "microsoft.hybridnetwork",
+        "microsoft.impact",
+        "microsoft.inferenceservice",
+        "microsoft.keyvault",
+        "microsoft.kubernetesconfiguration",
+        "microsoft.logic",
+        "microsoft.machinelearningservices",
+        "microsoft.managedidentity",
+        "microsoft.maps",
+        "microsoft.netapp",
+        "microsoft.network",
+        "microsoft.notificationhubs",
+        "microsoft.operationalinsights",
+        "microsoft.purview",
+        "microsoft.quantum",
+        "microsoft.redhatopenshift",
+        "microsoft.relay",
+        "microsoft.resourceconnector",
+        "microsoft.saas",
+        "microsoft.search",
+        "microsoft.securitydetonation",
+        "microsoft.servicebus",
+        "microsoft.signalrservice",
+        "microsoft.softwareplan",
+        "microsoft.sql",
+        "microsoft.storage",
+        "microsoft.synapse",
+        "microsoft.videoindexer",
+        "microsoft.web",
+    }
+)
+
+_AZURE_HIGH_PROVIDER_ROOTS = frozenset(
+    {
+        "microsoft.cdn",
+        "microsoft.certificateregistration",
+        "microsoft.dbformariadb",
+        "microsoft.devtestlab",
+        "microsoft.kubernetes",
+        "microsoft.recoveryservices",
+        "microsoft.resources",
+        "nginx.nginxplus",
+        "paloaltonetworks.cloudngfw",
+    }
+)
 
 
 _AWS_RULES: Optional[AwsRules] = None
@@ -769,6 +1026,217 @@ def azure_override_level(permission: str, rules: AzureRules) -> Optional[str]:
     return None
 
 
+def _azure_graph_or_synthetic_level(permission: str) -> Optional[str]:
+    """Classify non-ARM evidence produced by AzurePEASS."""
+
+    lower = permission.strip().lower()
+    if not lower:
+        return None
+
+    if lower.startswith("az-cli/read/"):
+        # The probe suppresses command output and only records that an
+        # argument-free read command succeeded. Credential-returning command
+        # names remain critical even though current az help normally requires
+        # a resource argument and skips them.
+        if re.search(
+            r"/(?:list|get|show|generate|retrieve|regenerate)[^/]*"
+            r"(?:secret|credential|password|token|keys?)(?:/|$)",
+            lower,
+        ):
+            return "critical"
+        return "low"
+
+    if lower.startswith("owner of "):
+        if any(
+            marker in lower
+            for marker in ("application", "serviceprincipal", "managedidentity")
+        ):
+            return "critical"
+        if "group" in lower:
+            return "high"
+        return "medium"
+
+    if lower.startswith("entra.directoryrole/"):
+        # The role definition could not be resolved. Do not pretend an unknown
+        # Entra directory role is ordinary metadata access.
+        return "medium"
+
+    if lower.startswith("microsoft.directory/"):
+        if lower in _ENTRA_MEDIUM_EXACT:
+            return "medium"
+        last = lower.rsplit("/", 1)[-1]
+        if any(
+            marker in lower
+            for marker in (
+                "/applications/credentials/",
+                "/applications/owners/update",
+                "/applications/allproperties/alltasks",
+                "/serviceprincipals/credentials/",
+                "/serviceprincipals/owners/update",
+                "/serviceprincipals/allproperties/alltasks",
+                "/groups/members/update",
+                "/groups/owners/update",
+                "/groups/allproperties/alltasks",
+                "/oauth2permissiongrants/",
+                "/roleassignments/",
+                "/roledefinitions/",
+                "/directoryroles/allproperties/alltasks",
+                "/users/password/update",
+                "/users/allproperties/alltasks",
+                "/conditionalaccesspolicies/allproperties/alltasks",
+                "/managepermissiongrantsforall",
+            )
+        ):
+            return "critical"
+        if "/credentials/" in lower and last in {"create", "manage", "update"}:
+            return "critical"
+        if "/users/authenticationmethods/" in lower:
+            return "medium" if last == "read" else "critical"
+        if "/groupsassignabletoroles/" in lower:
+            if any(marker in lower for marker in ("/members/update", "/owners/update")):
+                return "critical"
+            if last == "read":
+                return "low"
+            if last in {
+                "assignlicense",
+                "create",
+                "delete",
+                "reprocesslicenseassignment",
+                "restore",
+                "update",
+            }:
+                return "medium"
+            return "high"
+        if any(
+            marker in lower
+            for marker in (
+                "/bitlockerkeys/key/read",
+                "/devicelocalcredentials/password/read",
+                "getpasswordsinglesignoncredentials",
+                "managepasswordsinglesignoncredentials",
+            )
+        ):
+            return "critical"
+        if last == "read" and any(
+            marker in lower
+            for marker in (
+                "/auditlogs/",
+                "/groups/allproperties/",
+                "/privilegedidentitymanagement/",
+                "/provisioninglogs/",
+                "/signinreports/",
+                "/users/allproperties/",
+            )
+        ):
+            return "high"
+        if last == "alltasks":
+            return "high"
+        if any(
+            marker in lower
+            for marker in (
+                "/approleassignedto/",
+                "/authentication/",
+                "/authorizationpolicy/",
+                "/crosstenantaccesspolicy/",
+                "/deviceregistrationpolicy/",
+                "/domains/federationconfiguration/",
+                "/hybridauthenticationpolicy/",
+                "/namedlocations/",
+                "/owners/",
+                "/passwordhashsync/",
+                "/permissiongrantpolicies/",
+                "/permissions/",
+                "/serviceprincipalcreationpolicies/",
+            )
+        ) and last in {
+            "create",
+            "delete",
+            "disable",
+            "enable",
+            "manage",
+            "restore",
+            "update",
+        }:
+            return "high"
+        if last == "read":
+            return "low"
+        return "medium"
+
+    if lower.startswith("microsoft.") and lower.endswith("/alltasks"):
+        return "high"
+
+    if lower.startswith("microsoft.networkaccess/trafficlogs/") and lower.endswith(
+        "/read"
+    ):
+        return "high"
+
+    if lower.startswith(
+        (
+            "microsoft.azure.",
+            "microsoft.office365.",
+            "microsoft.teams/",
+        )
+    ):
+        last = lower.rsplit("/", 1)[-1]
+        if last == "alltasks":
+            return "high"
+        if last == "read":
+            return "low"
+        return "medium"
+
+    # OAuth scopes/app roles use dotted names and no ARM-style slash.
+    if "/" not in lower and ("." in lower or lower in _GRAPH_LOW_EXACT):
+        if lower in _GRAPH_CRITICAL_EXACT:
+            return "critical"
+        if lower in _GRAPH_HIGH_EXACT:
+            return "high"
+        if lower in _GRAPH_MEDIUM_EXACT:
+            return "medium"
+        if lower in _GRAPH_LOW_EXACT:
+            return "low"
+        credential_markers = (
+            "authenticationmethod",
+            "bitlockerkey",
+            "credential",
+            "devicelocalcredential",
+            "password",
+        )
+        if any(marker in lower for marker in credential_markers):
+            if any(
+                operation in lower
+                for operation in ("readwrite", "write", "manage")
+            ):
+                return "critical"
+            if ".read" in lower:
+                return "high"
+        # Unknown Graph writes are operationally interesting, but are not
+        # promoted without a concrete escalation or sensitive-data path.
+        # Known high-impact scopes and sensitive workload families are handled
+        # above and below respectively.
+        if lower.endswith(".read.all"):
+            return "medium"
+        if lower.endswith(".readbasic.all"):
+            return "medium"
+        if any(lower.startswith(prefix) for prefix in _GRAPH_SENSITIVE_DATA_PREFIXES):
+            if any(
+                operation in lower
+                for operation in (
+                    ".read",
+                    ".write",
+                    ".manage",
+                    ".fullcontrol",
+                    ".send",
+                    ".create",
+                )
+            ):
+                return "high"
+        if lower.endswith(".read"):
+            return "low"
+        return "medium"
+
+    return None
+
+
 def _azure_wildcard_level(permission: str, rules: AzureRules) -> Optional[str]:
     permission = permission.strip()
     if not permission:
@@ -778,39 +1246,87 @@ def _azure_wildcard_level(permission: str, rules: AzureRules) -> Optional[str]:
     if permission == "*" or permission == "*/*":
         return "critical"
 
+    lower = permission.lower()
+    if lower == "*/read":
+        return "medium"
+    if lower in {"*/write", "*/action"}:
+        return "critical"
+    if lower == "*/delete":
+        return "medium"
+
+    if "*" in lower and lower.endswith("/read"):
+        if lower.startswith("microsoft.storage/") and (
+            lower.startswith("microsoft.storage/*/")
+            or any(
+                marker in lower
+                for marker in (
+                    "/blobservices/",
+                    "/fileservices/",
+                    "/queueservices/",
+                    "/tableservices/",
+                )
+            )
+        ):
+            return "high"
+        if lower.startswith("microsoft.machinelearningservices/") and any(
+            marker in lower for marker in ("/data/", "/datasets/")
+        ):
+            return "high"
+        return "medium"
+    if "*" in lower and lower.endswith("/delete"):
+        return "medium"
+    if "*" in lower and lower.endswith(("/write", "/action")):
+        static_base = lower.split("*", 1)[0].rstrip("/")
+        if static_base in _AZURE_CRITICAL_WILDCARD_BASES:
+            return "critical"
+        return "high"
+
     if not permission.endswith("/*"):
         return None
 
     base = permission[:-2].strip("/")
     lower_base = base.lower()
 
-    # Provider-root wildcards grant every operation under that provider namespace.
-    # That is broad enough to include unknown privileged child actions, so keep it
-    # critical instead of pretending it is only a provider-level write.
     if lower_base.count("/") == 0:
+        if lower_base in _AZURE_CRITICAL_PROVIDER_ROOTS:
+            return "critical"
+        if lower_base in _AZURE_HIGH_PROVIDER_ROOTS:
+            return "high"
+        return "medium"
+
+    if lower_base in _AZURE_CRITICAL_WILDCARD_BASES:
         return "critical"
 
-    if lower_base.startswith("microsoft.authorization/"):
-        if any(k in lower_base for k in ("roleassignments", "roledefinitions", "elevateaccess")):
-            return "critical"
+    if lower_base.startswith("microsoft.storage/storageaccounts/") and any(
+        marker in lower_base
+        for marker in ("/blobservices", "/fileservices", "/queueservices", "/tableservices")
+    ):
+        return "high"
 
-    if lower_base.startswith("microsoft.managedidentity/"):
-        if any(k in lower_base for k in ("userassignedidentities", "federatedidentitycredentials")):
-            return "critical"
-
-    if lower_base == "microsoft.storage/storageaccounts":
-        return "critical"
+    if lower_base.startswith("microsoft.machinelearningservices/") and any(
+        marker in lower_base for marker in ("/data", "/datasets")
+    ):
+        return "high"
 
     likely_child_permissions = [f"{base}/{verb}" for verb in ("read", "write", "delete", "action")]
     return _highest_risk(_azure_classify_non_wildcard(child, rules) for child in likely_child_permissions)
 
 
 def _azure_classify_non_wildcard(permission: str, rules: AzureRules) -> Optional[str]:
+    lower = permission.lower()
+
+    if lower in _AZURE_CRITICAL_EXACT:
+        return "critical"
+    if lower in _AZURE_HIGH_EXACT:
+        return "high"
+    if lower in _AZURE_MEDIUM_EXACT:
+        return "medium"
+    if lower.endswith("/readmetadata/action"):
+        return "medium"
+
     forced = azure_override_level(permission, rules)
     if forced is not None:
         return forced
-
-    lower = permission.lower()
 
     last = _azure_last_segment(permission)
     is_read = last == "read"
@@ -818,13 +1334,23 @@ def _azure_classify_non_wildcard(permission: str, rules: AzureRules) -> Optional
     is_delete = last == "delete"
     is_action = last == "action"
 
+    credential_like_action = re.search(
+        r"/(?:list|get|generate|retrieve|regenerate)[^/]*"
+        r"(?:secret|credential|password|token|connectionstrings?|sas|adminkeys?|authkeys?|accesskeys?|keys?)"
+        r"/action$",
+        lower,
+    )
+    if rules.credential_action_re.search(lower) or credential_like_action:
+        return "medium" if is_delete else "critical"
+
     if lower.startswith("microsoft.authorization/"):
-        if lower.endswith("/roleassignments/write") or lower.endswith("/roledefinitions/write"):
+        if lower.endswith("/roleassignments/write"):
             return "critical"
         if lower.endswith("/elevateaccess/action"):
             return "critical"
 
-    # Storage data-plane: blob/file/queue/table reads/writes -> high; deletes -> medium.
+    # Only actual Storage objects and access-control/superuser operations expose
+    # data. Service/container/share metadata remains ordinary control-plane IO.
     if lower.startswith("microsoft.storage/") and any(
         x in lower for x in ("/blobservices/", "/fileservices/", "/queueservices/", "/tableservices/")
     ):
@@ -835,6 +1361,33 @@ def _azure_classify_non_wildcard(permission: str, rules: AzureRules) -> Optional
                 return "medium"
         if lower.endswith("/usages/read"):
             return "low"
+        data_markers = (
+            "/containers/blobs/",
+            "/fileshares/files/",
+            "/queues/messages/",
+            "/tables/entities/",
+        )
+        access_markers = (
+            "/getacl/action",
+            "/setacl/action",
+            "/takeownership/action",
+            "/actassuperuser/action",
+            "/runassuperuser/action",
+            "/modifypermissions/action",
+            "/bypasspermissions/action",
+            "/runasbuiltinfileadministrator/action",
+        )
+        if any(marker in lower for marker in data_markers + access_markers):
+            if is_delete or "/delete" in lower:
+                return "medium"
+            if is_read or is_write or is_action:
+                return "high"
+
+    # Machine Learning data and dataset operations can expose or poison model
+    # inputs even though they use ARM-shaped operation names.
+    if lower.startswith("microsoft.machinelearningservices/") and any(
+        marker in lower for marker in ("/data/", "/datasets/")
+    ):
         if is_delete or "/delete" in lower:
             return "medium"
         if is_read or is_write or is_action:
@@ -843,22 +1396,30 @@ def _azure_classify_non_wildcard(permission: str, rules: AzureRules) -> Optional
     if is_delete or "/delete" in lower:
         return "medium"
 
-    if rules.credential_action_re.search(lower):
-        return "medium" if is_delete else "critical"
-
-    if lower.startswith("microsoft.keyvault/") and any(x in lower for x in ("/secrets/", "/keys/", "/certificates/")):
-        if is_read:
-            return "critical"
-
     if is_read:
         return "low"
 
     if is_write or is_action:
-        if "/roleassignments/" in lower or "/roledefinitions/" in lower:
+        if "/roleassignments/" in lower:
             return "critical"
-        if "managedidentity" in lower and ("assign" in lower or "federatedidentitycredentials" in lower):
+        if "managedidentity" in lower and (
+            lower.endswith("/assign/action")
+            or "/federatedidentitycredentials/" in lower
+        ):
             return "critical"
-        if any(k in lower for k in rules.dangerous_write_keywords_lower):
+        if "/rbac.authorization.k8s.io/" in lower:
+            return "high"
+        if is_write and any(
+            marker in lower for marker in ("/secrets/", "/keys/", "/certificates/")
+        ):
+            return "high"
+        if is_action and (
+            ("/secrets/" in lower and any(word in lower for word in ("/peek/", "/setsecret/")))
+            or (
+                any(marker in lower for marker in ("/keys/", "/certificates/"))
+                and any(word in lower for word in ("/create/", "/import/", "/release/"))
+            )
+        ):
             return "high"
         return "medium"
 
@@ -869,6 +1430,10 @@ def azure_regex_classify(permission: str, rules: AzureRules) -> Optional[str]:
     permission = permission.strip()
     if not permission:
         return None
+
+    non_arm_level = _azure_graph_or_synthetic_level(permission)
+    if non_arm_level is not None:
+        return non_arm_level
 
     wildcard_level = _azure_wildcard_level(permission, rules)
     if wildcard_level is not None:

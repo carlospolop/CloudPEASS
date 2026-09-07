@@ -10,6 +10,7 @@ from azure.arm import AzureARMEnumerator, scope_kind
 from azure.azcli import is_safe_read_command, parse_help_entries, required_options
 from azure.entraid import EntraIDPEASS
 from AzurePEAS import AzurePEASS
+from sensitive_permissions.azure import sensitive_combinations, very_sensitive_combinations
 
 
 class FakeResponse:
@@ -275,3 +276,65 @@ def test_azure_sensitive_permission_matching_is_case_insensitive():
     assert result["very_sensitive_perms"] == {
         "microsoft.authorization/roledefinitions/write"
     }
+
+
+def test_azure_final_risk_precedence_keeps_all_four_tiers_distinct():
+    peas = CloudPEASS(
+        very_sensitive_combinations,
+        sensitive_combinations,
+        "Azure",
+        1,
+    )
+    result = peas.analyze_group(
+        {
+            "*",
+            "*/read",
+            "Microsoft.Network/virtualNetworks/read",
+            "Microsoft.Network/virtualNetworks/write",
+            "Microsoft.Search/searchServices/listQueryKeys/action",
+        },
+        [],
+    )["permissions_cat"]
+
+    assert "*" in result["critical"]
+    assert "Microsoft.Search/searchServices/listQueryKeys/action" in result["high"]
+    assert "*/read" in result["medium"]
+    assert "Microsoft.Network/virtualNetworks/write" in result["medium"]
+    assert "Microsoft.Network/virtualNetworks/read" in result["low"]
+
+
+def test_every_configured_azure_attack_combination_reaches_its_declared_tier():
+    peas = CloudPEASS(
+        very_sensitive_combinations,
+        sensitive_combinations,
+        "Azure",
+        1,
+    )
+
+    for expected, combinations in (
+        ("critical", very_sensitive_combinations),
+        ("high", sensitive_combinations),
+    ):
+        for combination in combinations:
+            categories = peas.analyze_group(set(combination), [])["permissions_cat"]
+            for permission in combination:
+                assert permission in categories[expected], (expected, combination)
+
+
+def test_azure_multi_permission_attacks_are_not_critical_when_incomplete():
+    peas = CloudPEASS(
+        very_sensitive_combinations,
+        sensitive_combinations,
+        "Azure",
+        1,
+    )
+    incomplete = {
+        "Microsoft.KeyVault/vaults/deploy/action",
+        "Microsoft.Automation/automationAccounts/runbooks/draft/write",
+        "Microsoft.App/containerApps/getAuthToken/action",
+        "Policy.ReadWrite.ConditionalAccess",
+    }
+
+    categories = peas.analyze_group(incomplete, [])["permissions_cat"]
+
+    assert not categories["critical"]

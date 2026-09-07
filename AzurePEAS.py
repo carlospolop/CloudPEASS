@@ -54,6 +54,9 @@ class AzurePEASS(CloudPEASS):
         self.initial_subscriptions = []
         self.check_only_subs = list(check_only_subs or [])
         super().__init__(very_sensitive_combos, sensitive_combos, "Azure", num_threads, out_path)
+        # Keep terminal reports approachable and consistent with AWSPEASS and
+        # GCPPEASS when a principal has thousands of effective permissions.
+        self.max_permissions_per_category = 50
 
         if not self.arm_token and not self.graph_token:
             if self.foci_refresh_token:

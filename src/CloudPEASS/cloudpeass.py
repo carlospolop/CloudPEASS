@@ -172,9 +172,43 @@ class CloudPEASS:
             if self.cloud_provider.lower().strip() in {"aws", "azure"}:
                 permission = str(permission).casefold()
                 pattern = str(pattern).casefold()
-            return fnmatch.fnmatchcase(permission, pattern) or fnmatch.fnmatchcase(
-                pattern, permission
-            )
+            if fnmatch.fnmatchcase(permission, pattern):
+                return True
+            if self.cloud_provider.lower().strip() == "azure":
+                # Returned ARM permissions can themselves contain wildcards.
+                # Reverse matching is useful for Microsoft.Authorization/*,
+                # but ARM */read does not cover Graph/Entra role actions merely
+                # because both identifiers end in /read.
+                graph_prefixes = (
+                    "entra.",
+                    "microsoft.azure.",
+                    "microsoft.directory/",
+                    "microsoft.office365.",
+                    "microsoft.teams/",
+                    "owner of ",
+                )
+                pattern_is_arm = "/" in pattern and not pattern.startswith(
+                    graph_prefixes
+                )
+                return (
+                    "*" in permission
+                    and pattern_is_arm
+                    and fnmatch.fnmatchcase(pattern, permission)
+                )
+            return fnmatch.fnmatchcase(pattern, permission)
+
+        def permission_is_direct_match(permission, pattern):
+            """Match a returned permission to a configured rule pattern.
+
+            Reverse wildcard matching is useful to decide that a combination
+            is possible, but must not recolor a separate broad permission such
+            as ARM */read merely because another permission satisfies the rest
+            of the combination.
+            """
+            if self.cloud_provider.lower().strip() in {"aws", "azure"}:
+                permission = str(permission).casefold()
+                pattern = str(pattern).casefold()
+            return fnmatch.fnmatchcase(permission, pattern)
 
         # Check very sensitive combinations (with wildcard support)
         ## Wildcards can be used in the our ahrdcoded patterns or also in AWS permissions, so both are checked
@@ -182,7 +216,7 @@ class CloudPEASS:
             if all(any(permission_matches(perm, pattern) for perm in permissions) for pattern in combo):
                 for pattern in combo:
                     for perm in permissions:
-                        if permission_matches(perm, pattern):
+                        if permission_is_direct_match(perm, pattern):
                             found_very_sensitive.add(perm)
 
         # Check sensitive combinations (with wildcard support)
@@ -190,7 +224,7 @@ class CloudPEASS:
             if all(any(permission_matches(perm, pattern) for perm in permissions) for pattern in combo):
                 for pattern in combo:
                     for perm in permissions:
-                        if permission_matches(perm, pattern):
+                        if permission_is_direct_match(perm, pattern):
                             found_sensitive.add(perm)
 
         # Also use the new risk classifier from Blue-PEASS
@@ -404,6 +438,13 @@ class CloudPEASS:
         print(f"{Fore.RED}  High Permissions{Style.RESET_ALL} - Sensitive permissions that can enable attacks depending on context.")
         print(f"{Fore.YELLOW}  Medium Permissions{Style.RESET_ALL} - Interesting permissions that can support attacks in some scenarios.")
         print(f"{Fore.WHITE}  Low/Other Permissions{Style.RESET_ALL} - Less interesting permissions.")
+        if self.cloud_provider.lower().strip() == "azure":
+            print(
+                f"{Fore.CYAN}  Azure attack details and required permission combinations: "
+                "https://cloud.hacktricks.wiki/en/pentesting-cloud/azure-security/"
+                "az-privilege-escalation/az-high-impact-permissions"
+                f"{Style.RESET_ALL}"
+            )
         print()
         print()
         for result in analysis_results:
