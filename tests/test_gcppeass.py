@@ -7,7 +7,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from GCPPEAS import GCPPEASS, _build_parser, _validate_args
+from GCPPEAS import (
+    BUILTIN_FALLBACK_PERMISSIONS,
+    TYPE_PREFIXES,
+    GCPPEASS,
+    _build_parser,
+    _validate_args,
+)
 from src.CloudPEASS.cloudpeass import CloudResource
 from src.gcp.client import GCPApiError, GCPReadOnlyClient
 
@@ -280,6 +286,83 @@ def test_invalid_cli_values_fail_before_authentication(arguments):
     assert error.value.code == 2
 
 
+def test_invalid_output_paths_fail_before_authentication(tmp_path):
+    parser = _build_parser()
+    for invalid in (tmp_path, tmp_path / "missing" / "results.json"):
+        args = parser.parse_args(["--out-json-path", str(invalid)])
+        with pytest.raises(SystemExit) as error:
+            _validate_args(args, parser)
+        assert error.value.code == 2
+
+
+def test_valid_output_path_passes_pre_authentication_validation(tmp_path):
+    parser = _build_parser()
+    args = parser.parse_args(["--out-json-path", str(tmp_path / "results.json")])
+    _validate_args(args, parser)
+
+
+def test_builtin_fallback_covers_every_modern_resource_type():
+    legacy_types = {"vm", "function", "storage"}
+    for resource_type, prefixes in TYPE_PREFIXES.items():
+        if resource_type in legacy_types:
+            continue
+        assert any(
+            permission.startswith(prefixes)
+            for permission in BUILTIN_FALLBACK_PERMISSIONS
+        ), resource_type
+
+
+def test_workflow_fallback_uses_current_permission_namespace():
+    assert "workflows.executions.create" in BUILTIN_FALLBACK_PERMISSIONS
+    assert TYPE_PREFIXES["workflow"] == (
+        "workflows.workflows.",
+        "workflows.executions.",
+    )
+
+
+def test_testable_catalog_drops_cross_service_permissions():
+    peass = bare_peass()
+    peass._testable_cache = {}
+    peass.client = SimpleNamespace(
+        iter_pages=lambda *args, **kwargs: iter(
+            [
+                {
+                    "permissions": [
+                        {"name": "storage.buckets.get"},
+                        {"name": "storage.objects.list"},
+                        {"name": "resourcemanager.hierarchyNodes.createTagBinding"},
+                    ]
+                }
+            ]
+        )
+    )
+    target = peass.normalize_resource("gs://bucket", project_hint="demo-project")
+    assert peass._query_testable_permissions(target) == [
+        "storage.buckets.get",
+        "storage.objects.list",
+    ]
+
+
+def test_catalog_loader_uses_modern_builtin_fallback(monkeypatch):
+    peass = bare_peass()
+
+    def unavailable(*args, **kwargs):
+        raise GCPApiError(503, "unavailable", "https://iam.googleapis.com/v1/roles")
+
+    def public_unavailable(*args, **kwargs):
+        raise __import__("requests").ConnectionError("offline")
+
+    peass.client = SimpleNamespace(
+        iter_pages=unavailable,
+        proxy="",
+        timeout=1,
+        verify_tls=True,
+    )
+    monkeypatch.setattr("GCPPEAS.requests.get", public_unavailable)
+    catalog = set(peass._load_permission_catalog())
+    assert BUILTIN_FALLBACK_PERMISSIONS <= catalog
+
+
 def test_iter_pages_keeps_body_and_follows_tokens():
     client = object.__new__(GCPReadOnlyClient)
     calls = []
@@ -347,7 +430,11 @@ def test_invalid_permission_bisection_preserves_valid_results():
     def request(method, url, params=None, json=None):
         permissions = json["permissions"]
         if "invalid.permission" in permissions:
-            raise GCPApiError(400, "Permission is not valid", url)
+            raise GCPApiError(
+                400,
+                "invalid.permission is not a valid Google Cloud Storage permission.",
+                url,
+            )
         return {"permissions": [p for p in permissions if p == "resourcemanager.projects.get"]}
 
     peass.client = SimpleNamespace(request=request)

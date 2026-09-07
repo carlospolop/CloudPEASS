@@ -9,6 +9,7 @@ import re
 import threading
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import google.auth
@@ -43,6 +44,179 @@ CATALOG_URL = (
 )
 TEST_CHUNK_SIZE = 100
 
+# The normal paths below obtain a current catalog from Google or the public
+# iam-dataset. This deliberately compact set keeps every supported modern
+# resource useful when both network catalog sources are blocked. Names are
+# checked against Google's predefined-role catalog; the legacy core services
+# remain covered by src.gcp.definitions and the sensitive-combination lists.
+BUILTIN_FALLBACK_PERMISSIONS = frozenset(
+    {
+        "artifactregistry.repositories.deleteArtifacts",
+        "artifactregistry.repositories.downloadArtifacts",
+        "artifactregistry.repositories.get",
+        "artifactregistry.repositories.getIamPolicy",
+        "artifactregistry.repositories.list",
+        "artifactregistry.repositories.listEffectiveTags",
+        "artifactregistry.repositories.listTagBindings",
+        "artifactregistry.repositories.readViaVirtualRepository",
+        "artifactregistry.repositories.setIamPolicy",
+        "artifactregistry.repositories.uploadArtifacts",
+        "bigquery.datasets.create",
+        "bigquery.datasets.delete",
+        "bigquery.datasets.get",
+        "bigquery.datasets.getIamPolicy",
+        "bigquery.datasets.link",
+        "bigquery.datasets.listTagBindings",
+        "bigquery.datasets.setIamPolicy",
+        "bigquery.datasets.update",
+        "bigquery.routines.create",
+        "bigquery.routines.delete",
+        "bigquery.routines.get",
+        "bigquery.routines.list",
+        "bigquery.routines.update",
+        "bigquery.rowAccessPolicies.create",
+        "bigquery.rowAccessPolicies.delete",
+        "bigquery.rowAccessPolicies.get",
+        "bigquery.rowAccessPolicies.getFilteredData",
+        "bigquery.rowAccessPolicies.getIamPolicy",
+        "bigquery.rowAccessPolicies.list",
+        "bigquery.rowAccessPolicies.overrideTimeTravelRestrictions",
+        "bigquery.rowAccessPolicies.setIamPolicy",
+        "bigquery.rowAccessPolicies.update",
+        "bigquery.tables.create",
+        "bigquery.tables.createIndex",
+        "bigquery.tables.createSnapshot",
+        "bigquery.tables.delete",
+        "bigquery.tables.export",
+        "bigquery.tables.get",
+        "bigquery.tables.getData",
+        "bigquery.tables.getIamPolicy",
+        "bigquery.tables.list",
+        "bigquery.tables.listEffectiveTags",
+        "bigquery.tables.listTagBindings",
+        "bigquery.tables.replicateData",
+        "bigquery.tables.restoreSnapshot",
+        "bigquery.tables.setIamPolicy",
+        "bigquery.tables.update",
+        "bigquery.tables.updateData",
+        "cloudkms.cryptoKeyVersions.create",
+        "cloudkms.cryptoKeyVersions.destroy",
+        "cloudkms.cryptoKeyVersions.get",
+        "cloudkms.cryptoKeyVersions.list",
+        "cloudkms.cryptoKeyVersions.useToDecrypt",
+        "cloudkms.cryptoKeyVersions.useToEncrypt",
+        "cloudkms.cryptoKeyVersions.useToSign",
+        "cloudkms.cryptoKeyVersions.useToVerify",
+        "cloudkms.cryptoKeys.create",
+        "cloudkms.cryptoKeys.delete",
+        "cloudkms.cryptoKeys.get",
+        "cloudkms.cryptoKeys.getIamPolicy",
+        "cloudkms.cryptoKeys.list",
+        "cloudkms.cryptoKeys.setIamPolicy",
+        "cloudkms.cryptoKeys.update",
+        "cloudkms.keyRings.create",
+        "cloudkms.keyRings.get",
+        "cloudkms.keyRings.getIamPolicy",
+        "cloudkms.keyRings.list",
+        "cloudkms.keyRings.setIamPolicy",
+        "iam.serviceAccountKeys.create",
+        "iam.serviceAccountKeys.delete",
+        "iam.serviceAccountKeys.disable",
+        "iam.serviceAccountKeys.enable",
+        "iam.serviceAccountKeys.get",
+        "iam.serviceAccountKeys.list",
+        "iam.serviceAccounts.actAs",
+        "iam.serviceAccounts.get",
+        "iam.serviceAccounts.getAccessToken",
+        "iam.serviceAccounts.getIamPolicy",
+        "iam.serviceAccounts.list",
+        "iam.serviceAccounts.setIamPolicy",
+        "iam.serviceAccounts.signBlob",
+        "iam.serviceAccounts.signJwt",
+        "pubsub.snapshots.create",
+        "pubsub.snapshots.delete",
+        "pubsub.snapshots.get",
+        "pubsub.snapshots.getIamPolicy",
+        "pubsub.snapshots.list",
+        "pubsub.snapshots.listEffectiveTags",
+        "pubsub.snapshots.listTagBindings",
+        "pubsub.snapshots.seek",
+        "pubsub.snapshots.setIamPolicy",
+        "pubsub.snapshots.update",
+        "pubsub.subscriptions.consume",
+        "pubsub.subscriptions.create",
+        "pubsub.subscriptions.delete",
+        "pubsub.subscriptions.get",
+        "pubsub.subscriptions.getIamPolicy",
+        "pubsub.subscriptions.list",
+        "pubsub.subscriptions.listEffectiveTags",
+        "pubsub.subscriptions.listTagBindings",
+        "pubsub.subscriptions.setIamPolicy",
+        "pubsub.subscriptions.update",
+        "pubsub.topics.attachSubscription",
+        "pubsub.topics.create",
+        "pubsub.topics.delete",
+        "pubsub.topics.detachSubscription",
+        "pubsub.topics.get",
+        "pubsub.topics.getIamPolicy",
+        "pubsub.topics.list",
+        "pubsub.topics.listEffectiveTags",
+        "pubsub.topics.listTagBindings",
+        "pubsub.topics.publish",
+        "pubsub.topics.setIamPolicy",
+        "pubsub.topics.update",
+        "run.executions.cancel",
+        "run.executions.delete",
+        "run.executions.get",
+        "run.executions.list",
+        "run.jobs.create",
+        "run.jobs.delete",
+        "run.jobs.get",
+        "run.jobs.getIamPolicy",
+        "run.jobs.list",
+        "run.jobs.run",
+        "run.jobs.runWithOverrides",
+        "run.jobs.setIamPolicy",
+        "run.jobs.update",
+        "run.revisions.delete",
+        "run.revisions.get",
+        "run.revisions.list",
+        "run.routes.invoke",
+        "run.services.create",
+        "run.services.delete",
+        "run.services.get",
+        "run.services.getIamPolicy",
+        "run.services.list",
+        "run.services.setIamPolicy",
+        "run.services.update",
+        "run.tasks.get",
+        "run.tasks.list",
+        "secretmanager.secrets.create",
+        "secretmanager.secrets.delete",
+        "secretmanager.secrets.get",
+        "secretmanager.secrets.getIamPolicy",
+        "secretmanager.secrets.list",
+        "secretmanager.secrets.setIamPolicy",
+        "secretmanager.secrets.update",
+        "secretmanager.versions.access",
+        "secretmanager.versions.add",
+        "secretmanager.versions.destroy",
+        "secretmanager.versions.disable",
+        "secretmanager.versions.enable",
+        "secretmanager.versions.get",
+        "secretmanager.versions.list",
+        "workflows.executions.cancel",
+        "workflows.executions.create",
+        "workflows.executions.get",
+        "workflows.executions.list",
+        "workflows.workflows.create",
+        "workflows.workflows.delete",
+        "workflows.workflows.get",
+        "workflows.workflows.list",
+        "workflows.workflows.update",
+    }
+)
+
 TYPE_PREFIXES = {
     "vm": ("compute.instances.",),
     "function": ("cloudfunctions.functions.",),
@@ -58,7 +232,7 @@ TYPE_PREFIXES = {
     "bigquery_dataset": ("bigquery.datasets.", "bigquery.tables."),
     "bigquery_table": ("bigquery.tables.", "bigquery.rowAccessPolicies."),
     "bigquery_routine": ("bigquery.routines.",),
-    "workflow": ("workflows.workflows.", "workflowexecutions.executions."),
+    "workflow": ("workflows.workflows.", "workflows.executions."),
     "kms_keyring": ("cloudkms.keyRings.",),
     "kms_key": ("cloudkms.cryptoKeys.", "cloudkms.cryptoKeyVersions."),
 }
@@ -253,6 +427,7 @@ class GCPPEASS(CloudPEASS):
             permissions.update(values)
         for combo in list(very_sensitive_combinations) + list(sensitive_combinations):
             permissions.update(combo)
+        permissions.update(BUILTIN_FALLBACK_PERMISSIONS)
         print(f"{Fore.YELLOW}Using {len(permissions)} built-in core permissions; results may be incomplete.")
         return sorted(permissions)
 
@@ -285,6 +460,18 @@ class GCPPEASS(CloudPEASS):
                     target.get("project", "global"),
                     exc,
                 )
+
+        # queryTestablePermissions can return cross-service tag permissions
+        # that the resource service's own testIamPermissions endpoint rejects
+        # (Cloud Storage currently does this). Retain the whole service
+        # namespace rather than just TYPE_PREFIXES so child-resource actions
+        # such as Artifact Registry package/file access remain testable.
+        prefixes = TYPE_PREFIXES.get(target["type"], ())
+        service_roots = tuple(
+            sorted({f"{prefix.split('.', 1)[0]}." for prefix in prefixes})
+        )
+        if found and service_roots:
+            found = {permission for permission in found if permission.startswith(service_roots)}
 
         result = sorted(found) if found else self.get_relevant_permissions(target["type"])
         with self._cache_lock:
@@ -1266,7 +1453,13 @@ class GCPPEASS(CloudPEASS):
         message = (error.message or "").lower()
         return "permission" in message and any(
             marker in message
-            for marker in ("invalid", "not valid", "not applicable", "not supported")
+            for marker in (
+                "invalid",
+                "not valid",
+                "not a valid",
+                "not applicable",
+                "not supported",
+            )
         )
 
     def _record_permission_test_failure(self, target: dict, error: GCPApiError) -> None:
@@ -1925,6 +2118,21 @@ def _validate_args(args, parser) -> None:
         parser.error("--timeout must be between 1 and 300 seconds")
     if not 0 <= args.retries <= 10:
         parser.error("--retries must be between 0 and 10")
+    if args.out_json_path:
+        if "\x00" in args.out_json_path:
+            parser.error("--out-json-path contains an invalid null byte")
+        output = Path(args.out_json_path)
+        parent = output.parent
+        if output.exists() and output.is_dir():
+            parser.error("--out-json-path must name a file, not a directory")
+        if not parent.exists():
+            parser.error(f"Output directory does not exist: {parent}")
+        if not parent.is_dir():
+            parser.error(f"Output parent is not a directory: {parent}")
+        if not os.access(parent, os.W_OK):
+            parser.error(f"Output directory is not writable: {parent}")
+        if output.exists() and not os.access(output, os.W_OK):
+            parser.error(f"Output file is not writable: {output}")
 
 
 def main(argv=None) -> int:
