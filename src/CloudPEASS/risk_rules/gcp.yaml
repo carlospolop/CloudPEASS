@@ -64,6 +64,7 @@ high_exact:
   - cloudsql.instances.connect
   - cloudsql.instances.export
   - cloudsql.instances.login
+  - compute.instances.getSerialPortOutput
   - compute.instances.setServiceAccount
   - container.clusters.getCredentials
   - container.pods.portForward
@@ -74,6 +75,12 @@ high_exact:
   - logging.logMetrics.delete
   - logging.logs.delete
   - logging.sinks.delete
+  - healthcare.fhirResources.create
+  - healthcare.fhirResources.delete
+  - healthcare.fhirResources.get
+  - healthcare.fhirResources.patch
+  - healthcare.fhirResources.update
+  - healthcare.fhirStores.searchResources
   - iam.serviceAccounts.getOpenIdToken
   - monitoring.alertPolicies.delete
   - monitoring.notificationChannels.delete
@@ -162,7 +169,9 @@ medium_exact:
   - run.workerpools.sshRead
   - run.workerpools.sshRoot
   - secretmanager.secrets.update
+  - spanner.databases.read
   - spanner.databases.select
+  - spanner.databases.write
   - storage.objects.update
   - transferappliance.credentials.get
   - vmwareengine.privateClouds.resetNsxCredentials

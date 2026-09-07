@@ -38,6 +38,13 @@ def test_direct_compromise_permissions_are_critical(permission):
         "secretmanager.versions.add",
         "container.clusters.getCredentials",
         "bigtable.tables.mutateRows",
+        "compute.instances.getSerialPortOutput",
+        "healthcare.fhirResources.create",
+        "healthcare.fhirResources.delete",
+        "healthcare.fhirResources.get",
+        "healthcare.fhirResources.patch",
+        "healthcare.fhirResources.update",
+        "healthcare.fhirStores.searchResources",
         "iam.serviceAccounts.getOpenIdToken",
         "cloudkms.cryptoKeyVersions.destroy",
         "artifactregistry.repositories.uploadArtifacts",
@@ -76,6 +83,10 @@ def test_data_plane_and_context_dependent_permissions_are_high(permission):
         "storage.objects.update",
         "iam.roles.create",
         "logging.views.access",
+        "spanner.databases.read",
+        "spanner.databases.select",
+        "spanner.databases.write",
+        "spanner.sessions.create",
         "future.widgets.frobnicate",
     ],
 )
@@ -219,6 +230,33 @@ def test_logging_data_access_is_high_only_with_list_and_view_permissions():
         assert result["sensitive_perms"] == set()
 
     complete = {"logging.logEntries.list", "logging.views.access"}
+    result = peass.analyze_sensitive_combinations(complete)
+    assert result["sensitive_perms"] == complete
+
+
+@pytest.mark.parametrize(
+    "data_permission",
+    [
+        "spanner.databases.read",
+        "spanner.databases.select",
+        "spanner.databases.write",
+    ],
+)
+def test_spanner_data_access_is_high_only_with_session_creation(data_permission):
+    peass = CloudPEASS(
+        very_sensitive_combinations,
+        sensitive_combinations,
+        "GCP",
+        1,
+    )
+    for incomplete in (
+        {data_permission},
+        {"spanner.sessions.create"},
+    ):
+        result = peass.analyze_sensitive_combinations(incomplete)
+        assert result["sensitive_perms"] == set()
+
+    complete = {data_permission, "spanner.sessions.create"}
     result = peass.analyze_sensitive_combinations(complete)
     assert result["sensitive_perms"] == complete
 
