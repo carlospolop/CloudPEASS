@@ -142,6 +142,13 @@ very_sensitive_combinations = [
 ]
 
 sensitive_combinations = [
+    ["codebuild:BatchGetBuilds"],
+    ["codebuild:BatchGetProjects"],
+    ["codecommit:GitPull"],
+    ["lambda:GetFunctionConfiguration"],
+    ["lambda:GetLayerVersion"],
+    ["logs:FilterLogEvents"],
+    ["logs:GetLogEvents"],
     ["lambda:GetFunction"],
     ["route53domains:GetDomainDetail"],
     ["sts:GetFederationToken"],
@@ -302,4 +309,15 @@ tested_risk_documentation = {
     "lambda:GetFunction": "aws-privilege-escalation/aws-lambda-privesc/README.md",
     "route53domains:GetDomainDetail": "aws-privilege-escalation/aws-route53-domains-privesc/README.md",
     "sts:GetFederationToken": "aws-privilege-escalation/aws-sts-privesc/README.md",
+}
+
+
+live_validated_disclosure_documentation = {
+    "codebuild:BatchGetBuilds": "aws-privilege-escalation/aws-codebuild-privesc/README.md",
+    "codebuild:BatchGetProjects": "aws-privilege-escalation/aws-codebuild-privesc/README.md",
+    "codecommit:GitPull": "aws-services/aws-datapipeline-codepipeline-codebuild-and-codecommit.md",
+    "lambda:GetFunctionConfiguration": "aws-privilege-escalation/aws-lambda-privesc/README.md",
+    "lambda:GetLayerVersion": "aws-privilege-escalation/aws-lambda-privesc/README.md",
+    "logs:FilterLogEvents": "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md",
+    "logs:GetLogEvents": "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md",
 }

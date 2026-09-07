@@ -730,14 +730,14 @@ def aws_override_level(action: str, rules: AwsRules) -> Optional[str]:
 
     action_lower = action.lower()
 
+    # Explicit evidence-backed high corrections must beat both stale upstream
+    # critical entries and stale cached low entries.
+    if action_lower in rules.high_override_exact_lower:
+        return "high"
     if action_lower in rules.low_exact_lower:
         return "low"
     if action_lower in rules.medium_override_exact_lower:
         return "medium"
-    # Local evidence-backed corrections can deliberately lower an overly broad
-    # upstream critical entry to context-dependent high.
-    if action_lower in rules.high_override_exact_lower:
-        return "high"
     if action_lower in rules.critical_exact_lower:
         return "critical"
     if action_lower in rules.high_exact_lower:

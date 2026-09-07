@@ -60,7 +60,14 @@ medium_override_exact:
 
 ## Exact action names that must always be classified as `high`.
 high_exact:
+  - codebuild:BatchGetBuilds
+  - codebuild:BatchGetProjects
+  - codecommit:GitPull
   - lambda:GetFunction
+  - lambda:GetFunctionConfiguration
+  - lambda:GetLayerVersion
+  - logs:FilterLogEvents
+  - logs:GetLogEvents
   - route53domains:GetDomainDetail
   - secretsmanager:PutSecretValue
   - secretsmanager:UpdateSecret
@@ -73,6 +80,7 @@ high_override_exact:
   - codeartifact:GetAuthorizationToken
   - ec2:GetPasswordData
   - sts:GetDelegatedAccessToken
+  - logs:FilterLogEvents
   - sts:GetFederationToken
   - sts:GetServiceBearerToken
 
@@ -155,7 +163,6 @@ low_exact:
   - logs:CreateLogGroup
   - logs:CreateLogStream
   - logs:PutLogEvents
-  - logs:FilterLogEvents
   - route53:GetGeoLocation
   - route53:ListGeoLocations
   - sts:GetCallerIdentity
