@@ -12,6 +12,8 @@ import random
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, Iterator, Optional
 from urllib.parse import urlparse
 
@@ -41,8 +43,16 @@ class GCPApiError(Exception):
     url: str
     reason: str = ""
 
+    @property
+    def category(self) -> str:
+        if self.status is not None:
+            return f"HTTP {self.status}"
+        if self.reason.startswith("auth:"):
+            return "authentication"
+        return "network"
+
     def __str__(self) -> str:
-        prefix = f"HTTP {self.status}" if self.status is not None else "network error"
+        prefix = f"{self.category} error" if self.status is None else self.category
         message = " ".join(self.message.split())
         if len(message) > 300:
             message = message[:297] + "..."
@@ -60,6 +70,7 @@ class GCPReadOnlyClient:
         timeout: float = 20.0,
         retries: int = 3,
         verify_tls: bool = True,
+        max_concurrency: int = 5,
     ) -> None:
         self.credentials = credentials
         self.billing_project = (billing_project or "").strip()
@@ -68,6 +79,7 @@ class GCPReadOnlyClient:
         self.retries = max(0, int(retries))
         self.verify_tls = verify_tls
         self._local = threading.local()
+        self._request_slots = threading.BoundedSemaphore(max(1, int(max_concurrency)))
 
     @staticmethod
     def _normalize_proxy(proxy: str) -> str:
@@ -76,7 +88,13 @@ class GCPReadOnlyClient:
             return ""
         candidate = proxy if "://" in proxy else f"http://{proxy}"
         parsed = urlparse(candidate)
-        if not parsed.hostname or not parsed.port:
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError(
+                "Proxy must include a valid numeric port, for example 127.0.0.1:8080"
+            ) from exc
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or not port:
             raise ValueError("Proxy must include a host and port, for example 127.0.0.1:8080")
         return candidate
 
@@ -93,12 +111,34 @@ class GCPReadOnlyClient:
     @staticmethod
     def _assert_read_only(method: str, url: str) -> None:
         method = method.upper()
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme != "https" or not (
+            host == "googleapis.com" or host.endswith(".googleapis.com")
+        ):
+            raise ValueError(f"Blocked non-Google or non-HTTPS GCP request: {method} {url}")
         if method == "GET":
             return
-        path = urlparse(url).path
+        path = parsed.path
         if method == "POST" and any(path.endswith(suffix) for suffix in READ_ONLY_POST_SUFFIXES):
             return
         raise ValueError(f"Blocked non-read-only GCP request: {method} {url}")
+
+    @staticmethod
+    def _retry_delay(value: str, attempt: int) -> float:
+        try:
+            return min(max(float(value), 0.0), 30.0)
+        except (TypeError, ValueError):
+            pass
+        if value:
+            try:
+                retry_at = parsedate_to_datetime(value)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                return min(max((retry_at - datetime.now(timezone.utc)).total_seconds(), 0.0), 30.0)
+            except (TypeError, ValueError, OverflowError):
+                pass
+        return min((2**attempt) + random.random(), 15.0)
 
     @staticmethod
     def _error_from_response(response: requests.Response) -> GCPApiError:
@@ -139,17 +179,22 @@ class GCPReadOnlyClient:
         last_error: Optional[GCPApiError] = None
         for attempt in range(self.retries + 1):
             try:
-                response = self._session().request(
-                    method,
-                    url,
-                    params=params,
-                    json=json,
-                    headers=request_headers,
-                    timeout=timeout or self.timeout,
-                    verify=self.verify_tls,
-                )
-            except (requests.RequestException, GoogleAuthError) as exc:
+                with self._request_slots:
+                    response = self._session().request(
+                        method,
+                        url,
+                        params=params,
+                        json=json,
+                        headers=request_headers,
+                        timeout=timeout or self.timeout,
+                        verify=self.verify_tls,
+                    )
+            except requests.RequestException as exc:
                 last_error = GCPApiError(None, str(exc), url, type(exc).__name__)
+                if attempt >= self.retries:
+                    raise last_error from exc
+            except GoogleAuthError as exc:
+                last_error = GCPApiError(None, str(exc), url, f"auth:{type(exc).__name__}")
                 if attempt >= self.retries:
                     raise last_error from exc
             else:
@@ -178,12 +223,7 @@ class GCPReadOnlyClient:
                 if response.status_code not in RETRYABLE_STATUS_CODES or attempt >= self.retries:
                     raise last_error
 
-                retry_after = response.headers.get("Retry-After", "")
-                try:
-                    delay = min(float(retry_after), 30.0)
-                except (TypeError, ValueError):
-                    delay = min((2**attempt) + random.random(), 15.0)
-                time.sleep(delay)
+                time.sleep(self._retry_delay(response.headers.get("Retry-After", ""), attempt))
 
         # The loop always returns or raises. This keeps type checkers honest.
         raise last_error or GCPApiError(None, "request failed", url)

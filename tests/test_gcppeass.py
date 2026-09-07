@@ -1,10 +1,13 @@
 import threading
+import ast
+from collections import defaultdict
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from GCPPEAS import GCPPEASS
+from GCPPEAS import GCPPEASS, _build_parser, _validate_args
 from src.CloudPEASS.cloudpeass import CloudResource
 from src.gcp.client import GCPApiError, GCPReadOnlyClient
 
@@ -20,12 +23,14 @@ def bare_peass():
         "roles/bigquery.dataViewer": ["bigquery.tables.getData"],
     }
     peass._cache_lock = threading.Lock()
-    peass._failures = {}
+    peass._failures = defaultdict(list)
+    peass._permission_test_failure_keys = set()
     peass._conditional_bindings_skipped = 0
     peass._invalid_permissions = {}
     peass.print_invalid_perms = False
     peass.skip_bruteforce = False
     peass.dont_get_iam_policies = False
+    peass.num_threads = 2
     return peass
 
 
@@ -70,6 +75,21 @@ def bare_peass():
             "bigquery_dataset",
             "projects/demo-project/datasets/warehouse",
         ),
+        (
+            "projects/demo-project/datasets/warehouse/tables/customers",
+            "bigquery_table",
+            "projects/demo-project/datasets/warehouse/tables/customers",
+        ),
+        (
+            "projects/demo-project/datasets/warehouse/routines/transform",
+            "bigquery_routine",
+            "projects/demo-project/datasets/warehouse/routines/transform",
+        ),
+        (
+            "projects/demo-project/snapshots/recovery",
+            "pubsub_snapshot",
+            "projects/demo-project/snapshots/recovery",
+        ),
     ],
 )
 def test_normalize_resource_formats(value, expected_type, expected_id):
@@ -85,6 +105,17 @@ def test_function_generation_can_be_explicit():
         "function-v2:projects/demo-project/locations/us-central1/functions/fn"
     )
     assert target["api_version"] == "v2"
+    assert bare_peass().normalize_resource(
+        "function-v1:projects/demo-project/locations/us-central1/functions/fn"
+    )["api_version"] == "v1"
+
+
+def test_full_resource_name_rejects_mismatched_service_host():
+    peass = bare_peass()
+    assert peass.normalize_resource("//evil.example/projects/demo-project") is None
+    assert peass.normalize_resource(
+        "//storage.googleapis.com/projects/demo-project"
+    ) is None
 
 
 @pytest.mark.parametrize(
@@ -161,6 +192,92 @@ def test_read_only_transport_blocks_mutating_endpoints():
         GCPReadOnlyClient._assert_read_only(
             "DELETE", "https://compute.googleapis.com/compute/v1/projects/p/zones/z/instances/i"
         )
+    with pytest.raises(ValueError, match="non-Google or non-HTTPS"):
+        GCPReadOnlyClient._assert_read_only("GET", "http://iam.googleapis.com/v1/roles")
+    with pytest.raises(ValueError, match="non-Google or non-HTTPS"):
+        GCPReadOnlyClient._assert_read_only("GET", "https://example.com/v1/roles")
+
+
+@pytest.mark.parametrize(
+    "resource",
+    [
+        "projects/demo-project",
+        "folders/123",
+        "organizations/456",
+        "projects/demo-project/zones/us-central1-a/instances/vm",
+        "function-v1:projects/demo-project/locations/us-central1/functions/fn1",
+        "function-v2:projects/demo-project/locations/us-central1/functions/fn2",
+        "gs://bucket-name",
+        "service-account:sa@demo-project.iam.gserviceaccount.com",
+        "projects/demo-project/secrets/global-secret",
+        "projects/demo-project/locations/europe-west1/secrets/regional-secret",
+        "projects/demo-project/locations/us-central1/services/service",
+        "projects/demo-project/locations/us-central1/jobs/job",
+        "projects/demo-project/locations/us/repositories/repository",
+        "projects/demo-project/topics/topic",
+        "projects/demo-project/subscriptions/subscription",
+        "projects/demo-project/snapshots/snapshot",
+        "projects/demo-project/datasets/dataset/tables/table",
+        "projects/demo-project/datasets/dataset/routines/routine",
+        "projects/demo-project/locations/us-central1/workflows/workflow",
+        "projects/demo-project/locations/global/keyRings/ring",
+        "projects/demo-project/locations/global/keyRings/ring/cryptoKeys/key",
+    ],
+)
+def test_every_resource_request_builder_passes_the_transport_guard(resource):
+    peass = bare_peass()
+    target = peass.normalize_resource(resource)
+    for builder_args in ((peass._policy_request, (target,)), (peass._test_request, (target, ["x.y"]))):
+        builder, arguments = builder_args
+        method, url, _, _ = builder(*arguments)
+        GCPReadOnlyClient._assert_read_only(method, url)
+
+
+def test_gcppeass_has_no_raw_mutating_http_or_process_execution_calls():
+    source = Path(__file__).resolve().parents[1] / "GCPPEAS.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    forbidden = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        owner = node.func.value
+        if isinstance(owner, ast.Name) and owner.id == "requests":
+            if node.func.attr not in {"get", "Session"}:
+                forbidden.append(f"requests.{node.func.attr}")
+        if isinstance(owner, ast.Name) and owner.id in {"os", "subprocess"}:
+            if node.func.attr in {"system", "popen", "run", "call", "check_call", "check_output"}:
+                forbidden.append(f"{owner.id}.{node.func.attr}")
+    assert forbidden == []
+
+
+def test_proxy_validation_and_retry_after_are_bounded():
+    assert GCPReadOnlyClient._normalize_proxy("127.0.0.1:8080") == "http://127.0.0.1:8080"
+    with pytest.raises(ValueError, match="numeric port"):
+        GCPReadOnlyClient._normalize_proxy("127.0.0.1:not-a-port")
+    assert GCPReadOnlyClient._retry_delay("-20", 0) == 0
+    assert GCPReadOnlyClient._retry_delay("999", 0) == 30
+    assert GCPApiError(None, "expired", "https://iam.googleapis.com", "auth:RefreshError").category == "authentication"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--folder", "not-numeric"],
+        ["--organization", "123/child"],
+        ["--project", "projects/bad"],
+        ["--service-account", "user@example.com"],
+        ["--threads", "0"],
+        ["--threads", "257"],
+        ["--timeout", "nan"],
+        ["--retries", "11"],
+    ],
+)
+def test_invalid_cli_values_fail_before_authentication(arguments):
+    parser = _build_parser()
+    args = parser.parse_args(arguments)
+    with pytest.raises(SystemExit) as error:
+        _validate_args(args, parser)
+    assert error.value.code == 2
 
 
 def test_iter_pages_keeps_body_and_follows_tokens():
@@ -242,6 +359,94 @@ def test_invalid_permission_bisection_preserves_valid_results():
     assert peass._invalid_permissions[target["id"]] == {"invalid.permission"}
 
 
+def test_invalid_resource_400_is_not_recursively_bisected():
+    peass = bare_peass()
+    target = peass.normalize_resource("projects/demo-project")
+    calls = []
+
+    def request(method, url, params=None, json=None):
+        calls.append(list(json["permissions"]))
+        raise GCPApiError(400, "Invalid resource name", url, "INVALID_ARGUMENT")
+
+    peass.client = SimpleNamespace(request=request)
+    found, complete = peass._check_permissions_with_status(
+        target, ["one.permission", "two.permission"]
+    )
+    assert found == []
+    assert complete is False
+    assert calls == [["one.permission", "two.permission"]]
+    assert len(peass._failures["demo-project"]) == 1
+
+
+def test_effective_test_does_not_union_denied_static_policy_grant():
+    peass = bare_peass()
+    peass.num_threads = 1
+    peass.get_iam_policy = Mock(
+        return_value={
+            "bindings": [{"role": "roles/viewer", "members": ["user:alice@example.com"]}]
+        }
+    )
+    peass._query_testable_permissions = Mock(return_value=["resourcemanager.projects.get"])
+    peass.client = SimpleNamespace(request=lambda *args, **kwargs: {"permissions": []})
+    resource = peass._enumerate_target(peass.normalize_resource("projects/demo-project"))
+    assert resource.permissions == []
+    assert resource.extra_fields["evidence"] == "testIamPermissions"
+
+
+def test_policy_is_clearly_labeled_when_effective_test_is_unavailable():
+    peass = bare_peass()
+    peass.num_threads = 1
+    peass.get_iam_policy = Mock(
+        return_value={
+            "bindings": [{"role": "roles/viewer", "members": ["user:alice@example.com"]}]
+        }
+    )
+    peass._query_testable_permissions = Mock(return_value=["resourcemanager.projects.get"])
+
+    def denied(*args, **kwargs):
+        raise GCPApiError(403, "Permission denied", "https://example.googleapis.com")
+
+    peass.client = SimpleNamespace(request=denied)
+    resource = peass._enumerate_target(peass.normalize_resource("projects/demo-project"))
+    assert resource.permissions == ["resourcemanager.projects.get"]
+    assert resource.extra_fields["evidence"] == "IAM policy fallback (unverified)"
+    assert "IAM Deny" in resource.extra_fields["enumeration_note"]
+
+
+def test_shared_analysis_preserves_gcp_evidence_and_caveats():
+    peass = bare_peass()
+    peass.very_sensitive_combos = []
+    peass.sensitive_combos = []
+    peass.cloud_provider = "GCP"
+    peass.principal_info = {}
+    resource = CloudResource(
+        "projects/demo-project",
+        "demo-project",
+        "project",
+        ["resourcemanager.projects.get"],
+        evidence="IAM policy fallback (unverified)",
+        discovery_source="explicit",
+        enumeration_note="Effective permission testing was unavailable.",
+    )
+    grouped = peass.group_resources_by_permissions([resource])
+    permissions, resources = next(iter(grouped.items()))
+    result = peass.analyze_group(permissions, resources)
+    details = result["resource_details"][0]
+    assert details["evidence"] == "IAM policy fallback (unverified)"
+    assert details["discovery_source"] == "explicit"
+    assert details["enumeration_note"] == "Effective permission testing was unavailable."
+
+
+def test_function_deduplication_prefers_explicit_then_v2():
+    peass = bare_peass()
+    base = "projects/demo-project/locations/us-central1/functions/fn"
+    v1 = peass.normalize_resource(f"function-v1:{base}", source="Functions v1 list")
+    v2 = peass.normalize_resource(f"function-v2:{base}", source="Functions v2 list")
+    assert peass._deduplicate_targets([v1, v2])[0]["api_version"] == "v2"
+    explicit_v1 = peass.normalize_resource(f"function-v1:{base}", source="explicit")
+    assert peass._deduplicate_targets([v2, explicit_v1])[0]["api_version"] == "v1"
+
+
 def test_only_specified_project_survives_denied_discovery():
     peass = bare_peass()
     peass.projects = ["known-project"]
@@ -289,3 +494,82 @@ def test_bigquery_dataset_uses_read_only_capability_probes():
     assert "bigquery.tables.getData" in resource.permissions
     assert "bigquery.tables.list" in resource.permissions
     assert all(method == "GET" for method, _ in seen)
+
+
+def test_bigquery_child_lists_are_independent_and_normalized():
+    peass = bare_peass()
+
+    def paged(url, key, params=None):
+        if url.endswith("/tables"):
+            return [
+                {
+                    "tableReference": {
+                        "projectId": "demo-project",
+                        "datasetId": "data",
+                        "tableId": "customers",
+                    }
+                }
+            ]
+        raise GCPApiError(403, "Routines denied", url)
+
+    peass._paged_items = paged
+    targets = peass._discover_bigquery_children("demo-project", "data")
+    assert [target["type"] for target in targets] == ["bigquery_table"]
+    assert targets[0]["id"].endswith("/tables/customers")
+    assert peass._failures["demo-project"][0][0] == "BigQuery routines list"
+
+
+def test_kms_fallback_keeps_accessible_locations_after_a_denial():
+    peass = bare_peass()
+
+    def paged(url, key, params=None):
+        if url.endswith("/locations"):
+            return [{"name": "projects/demo-project/locations/denied"}, {"name": "projects/demo-project/locations/global"}]
+        if "/locations/denied/keyRings" in url:
+            raise GCPApiError(403, "Denied", url)
+        if url.endswith("/locations/global/keyRings"):
+            return [{"name": "projects/demo-project/locations/global/keyRings/main"}]
+        if url.endswith("/keyRings/main/cryptoKeys"):
+            return [{"name": "projects/demo-project/locations/global/keyRings/main/cryptoKeys/key"}]
+        return []
+
+    peass._paged_items = paged
+    targets = peass._discover_kms("demo-project")
+    assert [target["type"] for target in targets] == ["kms_keyring", "kms_key"]
+
+
+def test_secret_discovery_keeps_regional_results_when_global_is_denied():
+    peass = bare_peass()
+
+    def paged(url, key, params=None):
+        if url.endswith("/projects/demo-project/secrets"):
+            raise GCPApiError(403, "Global list denied", url)
+        if url.endswith("/projects/demo-project/locations"):
+            return [
+                {"name": "projects/demo-project/locations/global"},
+                {"name": "projects/demo-project/locations/europe-west1"},
+            ]
+        if url.endswith("/locations/europe-west1/secrets"):
+            return [
+                {"name": "projects/demo-project/locations/europe-west1/secrets/regional"}
+            ]
+        return []
+
+    peass._paged_items = paged
+    targets = peass._discover_secrets("demo-project")
+    assert [target["id"] for target in targets] == [
+        "projects/demo-project/locations/europe-west1/secrets/regional"
+    ]
+    assert peass._failures["demo-project"][0][0] == "Secret Manager in some locations"
+
+
+def test_regional_secret_iam_calls_use_the_regional_endpoint():
+    peass = bare_peass()
+    target = peass.normalize_resource(
+        "projects/demo-project/locations/europe-west1/secrets/regional"
+    )
+    _, policy_url, _, _ = peass._policy_request(target)
+    _, test_url, _, _ = peass._test_request(target, ["secretmanager.versions.access"])
+    expected_host = "https://secretmanager.europe-west1.rep.googleapis.com/v1/"
+    assert policy_url.startswith(expected_host)
+    assert test_url.startswith(expected_host)

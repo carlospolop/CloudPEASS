@@ -54,7 +54,10 @@ TYPE_PREFIXES = {
     "artifact_repository": ("artifactregistry.repositories.",),
     "pubsub_topic": ("pubsub.topics.",),
     "pubsub_subscription": ("pubsub.subscriptions.",),
+    "pubsub_snapshot": ("pubsub.snapshots.",),
     "bigquery_dataset": ("bigquery.datasets.", "bigquery.tables."),
+    "bigquery_table": ("bigquery.tables.", "bigquery.rowAccessPolicies."),
+    "bigquery_routine": ("bigquery.routines.",),
     "workflow": ("workflows.workflows.", "workflowexecutions.executions."),
     "kms_keyring": ("cloudkms.keyRings.",),
     "kms_key": ("cloudkms.cryptoKeys.", "cloudkms.cryptoKeyVersions."),
@@ -72,10 +75,36 @@ ASSET_TYPE_HINTS = {
     "artifactregistry.googleapis.com/Repository": "artifact_repository",
     "pubsub.googleapis.com/Topic": "pubsub_topic",
     "pubsub.googleapis.com/Subscription": "pubsub_subscription",
+    "pubsub.googleapis.com/Snapshot": "pubsub_snapshot",
     "bigquery.googleapis.com/Dataset": "bigquery_dataset",
+    "bigquery.googleapis.com/Table": "bigquery_table",
+    "bigquery.googleapis.com/Routine": "bigquery_routine",
     "workflows.googleapis.com/Workflow": "workflow",
     "cloudkms.googleapis.com/KeyRing": "kms_keyring",
     "cloudkms.googleapis.com/CryptoKey": "kms_key",
+}
+
+RESOURCE_HOSTS = {
+    "project": "cloudresourcemanager.googleapis.com",
+    "folder": "cloudresourcemanager.googleapis.com",
+    "organization": "cloudresourcemanager.googleapis.com",
+    "vm": "compute.googleapis.com",
+    "function": "cloudfunctions.googleapis.com",
+    "storage": "storage.googleapis.com",
+    "service_account": "iam.googleapis.com",
+    "secret": "secretmanager.googleapis.com",
+    "run_service": "run.googleapis.com",
+    "run_job": "run.googleapis.com",
+    "artifact_repository": "artifactregistry.googleapis.com",
+    "pubsub_topic": "pubsub.googleapis.com",
+    "pubsub_subscription": "pubsub.googleapis.com",
+    "pubsub_snapshot": "pubsub.googleapis.com",
+    "bigquery_dataset": "bigquery.googleapis.com",
+    "bigquery_table": "bigquery.googleapis.com",
+    "bigquery_routine": "bigquery.googleapis.com",
+    "workflow": "workflows.googleapis.com",
+    "kms_keyring": "cloudkms.googleapis.com",
+    "kms_key": "cloudkms.googleapis.com",
 }
 
 
@@ -143,14 +172,15 @@ class GCPPEASS(CloudPEASS):
             timeout=timeout,
             retries=retries,
             verify_tls=not insecure,
+            max_concurrency=num_threads,
         )
         self._role_permissions: Dict[str, List[str]] = {}
         self._testable_cache: Dict[Tuple[str, str], List[str]] = {}
         self._cache_lock = threading.Lock()
         self._invalid_permissions: Dict[str, Set[str]] = defaultdict(set)
         self._failures: Dict[str, List[Tuple[str, GCPApiError]]] = defaultdict(list)
+        self._permission_test_failure_keys: Set[Tuple[str, Optional[int], str]] = set()
         self._conditional_bindings_skipped = 0
-        self._asset_inventory_success: Set[str] = set()
         self.all_gcp_perms = self._load_permission_catalog()
 
         super().__init__(very_sensitive_combos, sensitive_combos, "GCP", num_threads, out_path)
@@ -329,6 +359,9 @@ class GCPPEASS(CloudPEASS):
         elif raw.startswith("function-v2:"):
             raw = raw.split(":", 1)[1]
             asset_type = "cloudfunctions.googleapis.com/Function"
+        elif raw.startswith("function-v1:"):
+            raw = raw.split(":", 1)[1]
+            asset_type = "cloudfunctions.googleapis.com/CloudFunction"
         elif raw.startswith("gs://"):
             raw = f"buckets/{raw[5:].split('/', 1)[0]}"
 
@@ -383,6 +416,12 @@ class GCPPEASS(CloudPEASS):
             resource_type, host = "pubsub_topic", host or "pubsub.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/subscriptions/[^/]+", path):
             resource_type, host = "pubsub_subscription", host or "pubsub.googleapis.com"
+        elif re.fullmatch(r"projects/[^/]+/snapshots/[^/]+", path):
+            resource_type, host = "pubsub_snapshot", host or "pubsub.googleapis.com"
+        elif re.fullmatch(r"projects/[^/]+/datasets/[^/]+/tables/[^/]+", path):
+            resource_type, host = "bigquery_table", host or "bigquery.googleapis.com"
+        elif re.fullmatch(r"projects/[^/]+/datasets/[^/]+/routines/[^/]+", path):
+            resource_type, host = "bigquery_routine", host or "bigquery.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/datasets/[^/]+", path):
             resource_type, host = "bigquery_dataset", host or "bigquery.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/locations/[^/]+/workflows/[^/]+", path):
@@ -396,6 +435,8 @@ class GCPPEASS(CloudPEASS):
 
         # A recognized Cloud Asset type must also have the expected name shape.
         if hinted_type and resource_type != hinted_type:
+            resource_type = ""
+        if full_name and resource_type and host != RESOURCE_HOSTS.get(resource_type):
             resource_type = ""
 
         if not resource_type:
@@ -519,8 +560,6 @@ class GCPPEASS(CloudPEASS):
                     )
                     if target:
                         targets.append(target)
-            with self._cache_lock:
-                self._asset_inventory_success.add(project)
         except GCPApiError as exc:
             self._record_failure("Cloud Asset Inventory", project, exc)
         return targets
@@ -591,15 +630,69 @@ class GCPPEASS(CloudPEASS):
         ]
 
     def _discover_secrets(self, project: str) -> List[dict]:
-        return [
-            self.normalize_resource(item.get("name", ""), source="Secret Manager list")
-            for item in self._paged_items(
+        targets = []
+        first_error = None
+        successful_collections = 0
+        try:
+            global_secrets = self._paged_items(
                 f"https://secretmanager.googleapis.com/v1/projects/{project}/secrets",
                 "secrets",
                 params={"pageSize": 1000},
             )
-            if item.get("name")
+            successful_collections += 1
+            targets.extend(
+                target
+                for item in global_secrets
+                if (target := self.normalize_resource(
+                    item.get("name", ""), source="Secret Manager global list"
+                ))
+            )
+        except GCPApiError as exc:
+            first_error = exc
+
+        try:
+            locations = self._paged_items(
+                f"https://secretmanager.googleapis.com/v1/projects/{project}/locations",
+                "locations",
+                params={"pageSize": 1000},
+            )
+        except GCPApiError as exc:
+            locations = []
+            first_error = first_error or exc
+
+        location_ids = [
+            (item.get("name") or "").rsplit("/", 1)[-1] for item in locations
         ]
+        location_ids = [location for location in location_ids if location != "global"]
+        with ThreadPoolExecutor(max_workers=min(self.num_threads, len(location_ids) or 1)) as executor:
+            futures = [
+                executor.submit(
+                    self._paged_items,
+                    f"https://secretmanager.{location}.rep.googleapis.com/v1/"
+                    f"projects/{project}/locations/{location}/secrets",
+                    "secrets",
+                    params={"pageSize": 1000},
+                )
+                for location in location_ids
+            ]
+            for future in as_completed(futures):
+                try:
+                    regional_secrets = future.result()
+                    successful_collections += 1
+                except GCPApiError as exc:
+                    first_error = first_error or exc
+                    continue
+                for item in regional_secrets:
+                    target = self.normalize_resource(
+                        item.get("name", ""), source="Secret Manager regional list"
+                    )
+                    if target:
+                        targets.append(target)
+        if not successful_collections and first_error:
+            raise first_error
+        if first_error:
+            self._record_failure("Secret Manager in some locations", project, first_error)
+        return targets
 
     def _discover_run(self, project: str, collection: str) -> List[dict]:
         targets = []
@@ -643,25 +736,40 @@ class GCPPEASS(CloudPEASS):
             "locations",
             params={"pageSize": 1000},
         )
-        for location_info in locations:
-            location = (location_info.get("name") or "").rsplit("/", 1)[-1]
-            if not location:
-                continue
-            try:
-                items = self._paged_items(
+        first_error = None
+        successful_locations = 0
+        location_ids = [
+            (item.get("name") or "").rsplit("/", 1)[-1] for item in locations
+        ]
+        location_ids = [location for location in location_ids if location]
+        with ThreadPoolExecutor(max_workers=min(self.num_threads, len(location_ids) or 1)) as executor:
+            futures = {
+                executor.submit(
+                    self._paged_items,
                     f"https://run.googleapis.com/v2/projects/{project}/locations/{location}/jobs",
                     "jobs",
                     params={"pageSize": 1000},
-                )
-            except GCPApiError as exc:
-                if exc.status in {401, 403}:
-                    raise
-                continue
-            for item in items:
-                if item.get("name"):
-                    targets.append(
-                        self.normalize_resource(item["name"], source="Cloud Run jobs list")
-                    )
+                ): location
+                for location in location_ids
+            }
+            for future in as_completed(futures):
+                try:
+                    items = future.result()
+                    successful_locations += 1
+                except GCPApiError as exc:
+                    first_error = first_error or exc
+                    continue
+                for item in items:
+                    if item.get("name"):
+                        targets.append(
+                            self.normalize_resource(
+                                item["name"], source="Cloud Run jobs list"
+                            )
+                        )
+        if locations and not successful_locations and first_error:
+            raise first_error
+        if first_error:
+            self._record_failure("Cloud Run jobs in some locations", project, first_error)
         return targets
 
     def _discover_artifacts(self, project: str) -> List[dict]:
@@ -671,20 +779,42 @@ class GCPPEASS(CloudPEASS):
             "locations",
             params={"pageSize": 1000},
         )
-        for location_info in locations:
-            location = (location_info.get("name") or "").rsplit("/", 1)[-1]
-            if not location:
-                continue
-            items = self._paged_items(
-                f"https://artifactregistry.googleapis.com/v1/projects/{project}/locations/{location}/repositories",
-                "repositories",
-                params={"pageSize": 1000},
+        first_error = None
+        successful_locations = 0
+        location_ids = [
+            (item.get("name") or "").rsplit("/", 1)[-1] for item in locations
+        ]
+        location_ids = [location for location in location_ids if location]
+        with ThreadPoolExecutor(max_workers=min(self.num_threads, len(location_ids) or 1)) as executor:
+            futures = [
+                executor.submit(
+                    self._paged_items,
+                    f"https://artifactregistry.googleapis.com/v1/projects/{project}/locations/{location}/repositories",
+                    "repositories",
+                    params={"pageSize": 1000},
+                )
+                for location in location_ids
+            ]
+            for future in as_completed(futures):
+                try:
+                    items = future.result()
+                    successful_locations += 1
+                except GCPApiError as exc:
+                    first_error = first_error or exc
+                    continue
+                for item in items:
+                    if item.get("name"):
+                        targets.append(
+                            self.normalize_resource(
+                                item["name"], source="Artifact Registry list"
+                            )
+                        )
+        if locations and not successful_locations and first_error:
+            raise first_error
+        if first_error:
+            self._record_failure(
+                "Artifact Registry in some locations", project, first_error
             )
-            for item in items:
-                if item.get("name"):
-                    targets.append(
-                        self.normalize_resource(item["name"], source="Artifact Registry list")
-                    )
         return targets
 
     def _discover_pubsub(self, project: str, collection: str) -> List[dict]:
@@ -700,6 +830,7 @@ class GCPPEASS(CloudPEASS):
 
     def _discover_bigquery(self, project: str) -> List[dict]:
         targets = []
+        datasets = []
         for item in self._paged_items(
             f"https://bigquery.googleapis.com/bigquery/v2/projects/{project}/datasets",
             "datasets",
@@ -709,12 +840,129 @@ class GCPPEASS(CloudPEASS):
             dataset_id = reference.get("datasetId")
             dataset_project = reference.get("projectId") or project
             if dataset_id:
-                targets.append(
-                    self.normalize_resource(
-                        f"//bigquery.googleapis.com/projects/{dataset_project}/datasets/{dataset_id}",
-                        source="BigQuery list",
-                    )
+                dataset = self.normalize_resource(
+                    f"//bigquery.googleapis.com/projects/{dataset_project}/datasets/{dataset_id}",
+                    source="BigQuery list",
                 )
+                targets.append(dataset)
+                datasets.append((dataset_project, dataset_id))
+        if datasets:
+            with ThreadPoolExecutor(max_workers=min(self.num_threads, len(datasets))) as executor:
+                futures = [
+                    executor.submit(self._discover_bigquery_children, child_project, dataset_id)
+                    for child_project, dataset_id in datasets
+                ]
+                for future in as_completed(futures):
+                    targets.extend(future.result())
+        return targets
+
+    def _discover_bigquery_children(self, project: str, dataset: str) -> List[dict]:
+        """List table-like resources independently; either list can be denied."""
+        targets = []
+        parent = f"projects/{project}/datasets/{dataset}"
+        try:
+            tables = self._paged_items(
+                f"https://bigquery.googleapis.com/bigquery/v2/{parent}/tables",
+                "tables",
+                params={"maxResults": 1000},
+            )
+            for item in tables:
+                reference = item.get("tableReference") or {}
+                table_id = reference.get("tableId")
+                table_project = reference.get("projectId") or project
+                table_dataset = reference.get("datasetId") or dataset
+                if table_id:
+                    targets.append(
+                        self.normalize_resource(
+                            f"projects/{table_project}/datasets/{table_dataset}/tables/{table_id}",
+                            source="BigQuery tables list",
+                        )
+                    )
+        except GCPApiError as exc:
+            self._record_failure("BigQuery tables list", project, exc)
+
+        try:
+            routines = self._paged_items(
+                f"https://bigquery.googleapis.com/bigquery/v2/{parent}/routines",
+                "routines",
+                params={"maxResults": 1000},
+            )
+            for item in routines:
+                reference = item.get("routineReference") or {}
+                routine_id = reference.get("routineId")
+                routine_project = reference.get("projectId") or project
+                routine_dataset = reference.get("datasetId") or dataset
+                if routine_id:
+                    targets.append(
+                        self.normalize_resource(
+                            f"projects/{routine_project}/datasets/{routine_dataset}/routines/{routine_id}",
+                            source="BigQuery routines list",
+                        )
+                    )
+        except GCPApiError as exc:
+            self._record_failure("BigQuery routines list", project, exc)
+        return [target for target in targets if target]
+
+    def _discover_kms(self, project: str) -> List[dict]:
+        """Enumerate key rings and keys when Cloud Asset Inventory is unavailable."""
+        locations = self._paged_items(
+            f"https://cloudkms.googleapis.com/v1/projects/{project}/locations",
+            "locations",
+            params={"pageSize": 1000},
+        )
+        targets = []
+        first_error = None
+        successful_locations = 0
+        location_ids = [
+            (item.get("name") or "").rsplit("/", 1)[-1] for item in locations
+        ]
+        location_ids = [location for location in location_ids if location]
+        with ThreadPoolExecutor(max_workers=min(self.num_threads, len(location_ids) or 1)) as executor:
+            futures = {
+                executor.submit(self._discover_kms_location, project, location): location
+                for location in location_ids
+            }
+            for future in as_completed(futures):
+                try:
+                    targets.extend(future.result())
+                    successful_locations += 1
+                except GCPApiError as exc:
+                    first_error = first_error or exc
+        if locations and not successful_locations and first_error:
+            raise first_error
+        if first_error:
+            self._record_failure("Cloud KMS in some locations", project, first_error)
+        return targets
+
+    def _discover_kms_location(self, project: str, location: str) -> List[dict]:
+        targets = []
+        key_rings = self._paged_items(
+            f"https://cloudkms.googleapis.com/v1/projects/{project}/locations/{location}/keyRings",
+            "keyRings",
+            params={"pageSize": 1000},
+        )
+        for key_ring in key_rings:
+            name = key_ring.get("name")
+            target = self.normalize_resource(name or "", source="Cloud KMS key rings list")
+            if target:
+                targets.append(target)
+            if not name:
+                continue
+            try:
+                keys = self._paged_items(
+                    f"https://cloudkms.googleapis.com/v1/{name}/cryptoKeys",
+                    "cryptoKeys",
+                    params={"pageSize": 1000},
+                )
+            except GCPApiError as exc:
+                self._record_failure("Cloud KMS keys list", project, exc)
+                continue
+            for item in keys:
+                target = self.normalize_resource(
+                    item.get("name", ""), source="Cloud KMS keys list"
+                )
+                if target:
+                    targets.append(target)
         return targets
 
     def _discover_workflows(self, project: str) -> List[dict]:
@@ -740,19 +988,16 @@ class GCPPEASS(CloudPEASS):
             ("Cloud Run services", self._discover_run, (project, "services")),
             ("Pub/Sub topics", self._discover_pubsub, (project, "topics")),
             ("Pub/Sub subscriptions", self._discover_pubsub, (project, "subscriptions")),
+            ("Pub/Sub snapshots", self._discover_pubsub, (project, "snapshots")),
             ("BigQuery", self._discover_bigquery, (project,)),
             ("Workflows", self._discover_workflows, (project,)),
+            ("Cloud Run jobs", self._discover_run, (project, "jobs")),
+            ("Artifact Registry", self._discover_artifacts, (project,)),
+            ("Cloud KMS", self._discover_kms, (project,)),
         ]
-        # Location-bound APIs are expensive to sweep. A successful Cloud Asset
-        # search already covers them; otherwise enumerate every advertised
-        # location as the permissionless fallback.
-        if project not in self._asset_inventory_success:
-            discoverers.extend(
-                [
-                    ("Cloud Run jobs", self._discover_run, (project, "jobs")),
-                    ("Artifact Registry", self._discover_artifacts, (project,)),
-                ]
-            )
+        # Location-bound services are always checked independently. Cloud Asset
+        # support and visibility can vary by resource type, so a successful
+        # asset search is useful evidence but not a reason to suppress fallbacks.
         with ThreadPoolExecutor(max_workers=min(self.num_threads, len(discoverers))) as executor:
             futures = {
                 executor.submit(function, *arguments): label
@@ -775,12 +1020,19 @@ class GCPPEASS(CloudPEASS):
     @staticmethod
     def _deduplicate_targets(targets: Iterable[Optional[dict]]) -> List[dict]:
         result: Dict[Tuple[str, str], dict] = {}
+
+        def priority(target: dict) -> Tuple[int, int]:
+            return (
+                int(target.get("source") == "explicit"),
+                int(target.get("type") == "function" and target.get("api_version") == "v2"),
+            )
+
         for target in targets:
             if not target:
                 continue
             key = (target["type"], target["id"])
             existing = result.get(key)
-            if existing is None or existing.get("source") != "explicit":
+            if existing is None or priority(target) > priority(existing):
                 result[key] = target
         order = {"organization": 0, "folder": 1, "project": 2}
         return sorted(
@@ -788,6 +1040,15 @@ class GCPPEASS(CloudPEASS):
         )
 
     # IAM policies and effective permissions ----------------------------
+
+    @staticmethod
+    def _secret_manager_api(target: dict) -> str:
+        match = re.fullmatch(
+            r"projects/[^/]+/locations/([^/]+)/secrets/[^/]+", target["id"]
+        )
+        if match:
+            return f"secretmanager.{match.group(1)}.rep.googleapis.com/v1"
+        return "secretmanager.googleapis.com/v1"
 
     def _policy_request(self, target: dict) -> Tuple[str, str, Optional[dict], Optional[dict]]:
         resource = target["id"]
@@ -829,13 +1090,27 @@ class GCPPEASS(CloudPEASS):
                 None,
                 {"options": {"requestedPolicyVersion": 3}},
             )
+        if resource_type in {"bigquery_table", "bigquery_routine"}:
+            return (
+                "POST",
+                f"https://bigquery.googleapis.com/bigquery/v2/{resource}:getIamPolicy",
+                None,
+                {"options": {"requestedPolicyVersion": 3}},
+            )
+        if resource_type == "secret":
+            return (
+                "GET",
+                f"https://{self._secret_manager_api(target)}/{resource}:getIamPolicy",
+                {"options.requestedPolicyVersion": 3},
+                None,
+            )
         hosts = {
-            "secret": "secretmanager.googleapis.com/v1",
             "run_service": "run.googleapis.com/v2",
             "run_job": "run.googleapis.com/v2",
             "artifact_repository": "artifactregistry.googleapis.com/v1",
             "pubsub_topic": "pubsub.googleapis.com/v1",
             "pubsub_subscription": "pubsub.googleapis.com/v1",
+            "pubsub_snapshot": "pubsub.googleapis.com/v1",
             "workflow": "workflows.googleapis.com/v1",
             "kms_keyring": "cloudkms.googleapis.com/v1",
             "kms_key": "cloudkms.googleapis.com/v1",
@@ -955,15 +1230,24 @@ class GCPPEASS(CloudPEASS):
                 {"permissions": list(permissions)},
                 None,
             )
+        if resource_type == "secret":
+            return (
+                "POST",
+                f"https://{self._secret_manager_api(target)}/{resource}:testIamPermissions",
+                {},
+                body,
+            )
         hosts = {
             "service_account": "iam.googleapis.com/v1",
-            "secret": "secretmanager.googleapis.com/v1",
             "run_service": "run.googleapis.com/v2",
             "run_job": "run.googleapis.com/v2",
             "artifact_repository": "artifactregistry.googleapis.com/v1",
             "pubsub_topic": "pubsub.googleapis.com/v1",
             "pubsub_subscription": "pubsub.googleapis.com/v1",
+            "pubsub_snapshot": "pubsub.googleapis.com/v1",
             "bigquery_dataset": "bigquery.googleapis.com/bigquery/v2",
+            "bigquery_table": "bigquery.googleapis.com/bigquery/v2",
+            "bigquery_routine": "bigquery.googleapis.com/bigquery/v2",
             "workflow": "workflows.googleapis.com/v1",
             "kms_keyring": "cloudkms.googleapis.com/v1",
             "kms_key": "cloudkms.googleapis.com/v1",
@@ -974,35 +1258,76 @@ class GCPPEASS(CloudPEASS):
         return "POST", f"https://{host}/{resource}:testIamPermissions", {}, body
 
     def check_permissions(self, target, permissions, verbose=False) -> List[str]:
+        found, _ = self._check_permissions_with_status(target, permissions, verbose)
+        return found
+
+    @staticmethod
+    def _is_invalid_permission_error(error: GCPApiError) -> bool:
+        message = (error.message or "").lower()
+        return "permission" in message and any(
+            marker in message
+            for marker in ("invalid", "not valid", "not applicable", "not supported")
+        )
+
+    def _record_permission_test_failure(self, target: dict, error: GCPApiError) -> None:
+        key = (target["id"], error.status, error.reason or error.message)
+        project = target.get("project") or "global"
+        with self._cache_lock:
+            if key in self._permission_test_failure_keys:
+                return
+            self._permission_test_failure_keys.add(key)
+            self._failures[project].append(
+                (f"testIamPermissions on {target['type']}", error)
+            )
+
+    def _check_permissions_with_status(
+        self, target, permissions, verbose=False
+    ) -> Tuple[List[str], bool]:
+        """Return permissions plus whether every requested check was conclusive."""
         if isinstance(target, str):
             target = self.normalize_resource(target)
         if not target or not permissions:
-            return []
+            return [], False
         try:
             method, url, params, body = self._test_request(target, permissions)
             response = self.client.request(method, url, params=params, json=body)
-            return sorted(set(response.get("permissions") or []))
+            return sorted(set(response.get("permissions") or [])), True
         except GCPApiError as exc:
             if (
                 target["type"] == "function"
                 and not target.get("api_version")
                 and exc.status in {400, 404}
             ):
-                return self.check_permissions(dict(target, api_version="v1"), permissions, verbose)
+                return self._check_permissions_with_status(
+                    dict(target, api_version="v1"), permissions, verbose
+                )
             # A single inapplicable permission makes many endpoints reject the
             # whole batch. Bisect so valid permissions are still recovered.
-            if exc.status == 400 and len(permissions) > 1:
+            if (
+                exc.status == 400
+                and len(permissions) > 1
+                and self._is_invalid_permission_error(exc)
+            ):
                 midpoint = len(permissions) // 2
-                return sorted(
-                    set(self.check_permissions(target, permissions[:midpoint], verbose))
-                    | set(self.check_permissions(target, permissions[midpoint:], verbose))
+                left, left_complete = self._check_permissions_with_status(
+                    target, permissions[:midpoint], verbose
                 )
-            if exc.status == 400 and len(permissions) == 1:
+                right, right_complete = self._check_permissions_with_status(
+                    target, permissions[midpoint:], verbose
+                )
+                return sorted(set(left) | set(right)), left_complete and right_complete
+            if (
+                exc.status == 400
+                and len(permissions) == 1
+                and self._is_invalid_permission_error(exc)
+            ):
                 with self._cache_lock:
                     self._invalid_permissions.setdefault(target["id"], set()).add(permissions[0])
-            elif verbose:
+                return [], True
+            self._record_permission_test_failure(target, exc)
+            if verbose:
                 print(f"{Fore.YELLOW}{target['id']}: {exc}")
-            return []
+            return [], False
 
     def can_check_permissions(self, resource_id, permissions) -> bool:
         """Compatibility helper; an empty success still means the API works."""
@@ -1025,19 +1350,57 @@ class GCPPEASS(CloudPEASS):
             policy_permissions, owner_role = self._permissions_from_policy(self.get_iam_policy(target))
 
         tested: Set[str] = set()
+        completed_chunks = 0
+        total_chunks = 0
         if not self.skip_bruteforce:
             catalog = self._query_testable_permissions(target)
             chunks = list(_chunks(catalog))
+            total_chunks = len(chunks)
             if chunks:
                 workers = min(max(1, self.num_threads), 5, len(chunks))
                 with ThreadPoolExecutor(max_workers=workers) as executor:
                     futures = [
-                        executor.submit(self.check_permissions, target, chunk) for chunk in chunks
+                        executor.submit(self._check_permissions_with_status, target, chunk)
+                        for chunk in chunks
                     ]
                     for future in as_completed(futures):
-                        tested.update(future.result())
+                        found, complete = future.result()
+                        tested.update(found)
+                        completed_chunks += int(complete)
 
-        permissions = sorted(set(policy_permissions) | tested)
+        tests_complete = bool(total_chunks) and completed_chunks == total_chunks
+        tests_partial = bool(completed_chunks) and not tests_complete
+        if tests_complete or tests_partial:
+            # testIamPermissions reflects IAM Deny, principal access boundaries,
+            # inherited grants, and the current request context. Do not union in
+            # static policy grants that the effective test did not return.
+            permissions = sorted(tested)
+            evidence = "testIamPermissions" + (" (partial)" if tests_partial else "")
+            owner_role = False
+        else:
+            permissions = sorted(set(policy_permissions))
+            evidence = "IAM policy fallback (unverified)"
+
+        notes = []
+        if tests_partial:
+            notes.append(
+                f"Only {completed_chunks}/{total_chunks} permission batches completed; "
+                "IAM policy grants were not merged because Deny/PAB rules could block them."
+            )
+        elif not self.skip_bruteforce and not tests_complete:
+            notes.append(
+                "testIamPermissions was unavailable; policy-derived permissions are incomplete "
+                "and can be reduced by inherited IAM Deny, PAB, or request conditions."
+            )
+        elif self.skip_bruteforce:
+            notes.append(
+                "Policy-only mode is not an effective-permission result and omits inherited grants."
+            )
+        if target["type"] in {"bigquery_table", "bigquery_routine"}:
+            notes.append(
+                "BigQuery documents that testIamPermissions can fail open; do not use this result "
+                "as an authorization decision."
+            )
         return CloudResource(
             resource_id=target["id"],
             name=target["id"].rsplit("/", 1)[-1],
@@ -1046,6 +1409,8 @@ class GCPPEASS(CloudPEASS):
             deny_perms=[],
             is_admin=owner_role or self._is_admin_gcp(permissions, target["type"]),
             discovery_source=target.get("source", ""),
+            evidence=evidence,
+            enumeration_note=" ".join(notes),
         )
 
     def _enumerate_bigquery_dataset(self, target: dict) -> CloudResource:
@@ -1104,7 +1469,12 @@ class GCPPEASS(CloudPEASS):
             deny_perms=[],
             is_admin=False,
             discovery_source=target.get("source", ""),
-            enumeration_note="BigQuery datasets use read-only capability probes; the API has no dataset testIamPermissions method.",
+            evidence="BigQuery read-only probes and ACL fallback (partly inferred)",
+            enumeration_note=(
+                "BigQuery datasets have no dataset testIamPermissions method. Successful GET/list "
+                "calls are confirmed capabilities; ACL-derived role permissions can be reduced by "
+                "IAM Deny, PAB, or request conditions. Pass known table/routine names for direct tests."
+            ),
         )
 
     def _print_failure_summary(self) -> None:
@@ -1115,7 +1485,7 @@ class GCPPEASS(CloudPEASS):
             grouped = Counter(
                 f"{operation} (HTTP {error.status})"
                 if error.status
-                else f"{operation} (network)"
+                else f"{operation} ({error.category})"
                 for operation, error in entries
             )
             labels = [
@@ -1480,7 +1850,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Compatibility flag; GCPPEASS is now non-interactive",
     )
     parser.add_argument("--out-json-path", default=None, help="Write analysis JSON here")
-    parser.add_argument("--threads", default=5, type=int, help="Maximum worker count (default: 5)")
+    parser.add_argument(
+        "--threads",
+        default=5,
+        type=int,
+        help="Maximum simultaneous API requests (default: 5)",
+    )
     parser.add_argument(
         "--billing-project", default="", help="Quota project for API calls (does not modify billing)"
     )
@@ -1530,15 +1905,32 @@ def _load_credentials(args, parser):
         )
 
 
+def _validate_args(args, parser) -> None:
+    simple_project = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
+    for project in _csv(args.projects):
+        if not simple_project.fullmatch(project):
+            parser.error(f"Invalid project ID or number: {project}")
+    for label, raw in (("folder", args.folders), ("organization", args.organizations)):
+        for value in _csv(raw):
+            if not value.isdigit():
+                parser.error(f"{label.capitalize()} ID must be numeric: {value}")
+    for email in _csv(args.service_accounts):
+        if not re.fullmatch(r"[^@\s/]+@[^@\s/]+\.iam\.gserviceaccount\.com", email):
+            parser.error(f"Invalid service account email: {email}")
+    if args.billing_project and not simple_project.fullmatch(args.billing_project):
+        parser.error(f"Invalid billing/quota project ID: {args.billing_project}")
+    if args.threads < 1 or args.threads > 256:
+        parser.error("--threads must be between 1 and 256")
+    if not 1 <= args.timeout <= 300:
+        parser.error("--timeout must be between 1 and 300 seconds")
+    if not 0 <= args.retries <= 10:
+        parser.error("--retries must be between 0 and 10")
+
+
 def main(argv=None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    if args.threads < 1:
-        parser.error("--threads must be at least 1")
-    if args.timeout < 1:
-        parser.error("--timeout must be at least 1 second")
-    if args.retries < 0:
-        parser.error("--retries cannot be negative")
+    _validate_args(args, parser)
     credentials = _load_credentials(args, parser)
     peass = GCPPEASS(
         credentials,
@@ -1565,7 +1957,10 @@ def main(argv=None) -> int:
         debug=args.debug,
         only_specified=args.only_specified,
     )
-    peass.run_analysis()
+    try:
+        peass.run_analysis()
+    except ValueError as exc:
+        parser.error(str(exc))
     return 0
 
 

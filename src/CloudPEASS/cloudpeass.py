@@ -138,6 +138,8 @@ class CloudPEASS:
                     "deny_perms": set(),
                     "is_admin": is_admin,
                     "evidence": evidence,
+                    "discovery_source": resource.get("discovery_source"),
+                    "enumeration_note": resource.get("enumeration_note"),
                 }
             else:
                 # If resource already exists and either the existing or new one is admin, mark as admin
@@ -309,6 +311,8 @@ class CloudPEASS:
                 "type": r_dict["type"],
                 "name": r_dict["name"],
                 "evidence": r_dict.get("evidence"),
+                "discovery_source": r_dict.get("discovery_source"),
+                "enumeration_note": r_dict.get("enumeration_note"),
             })
 
         return {
@@ -409,6 +413,23 @@ class CloudPEASS:
             })
             if evidence:
                 print(f"{Fore.BLUE}Evidence: {Fore.WHITE}{', '.join(evidence)}")
+            discovery_sources = sorted({
+                str(detail.get("discovery_source"))
+                for detail in result.get("resource_details", [])
+                if detail.get("discovery_source")
+            })
+            if discovery_sources:
+                print(
+                    f"{Fore.BLUE}Discovered via: {Fore.WHITE}"
+                    f"{', '.join(discovery_sources)}"
+                )
+            enumeration_notes = sorted({
+                str(detail.get("enumeration_note"))
+                for detail in result.get("resource_details", [])
+                if detail.get("enumeration_note")
+            })
+            for note in enumeration_notes:
+                print(f"{Fore.YELLOW}Note: {Fore.WHITE}{note}")
             
             # Organize permissions by category
             critical_perms = []
