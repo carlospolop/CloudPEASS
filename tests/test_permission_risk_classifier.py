@@ -200,6 +200,16 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Compute/disks/beginGetAccess/action": "high",
             "Microsoft.Compute/snapshots/beginGetAccess/action": "high",
             "Microsoft.Compute/restorePointCollections/restorePoints/diskRestorePoints/beginGetAccess/action": "high",
+            "Microsoft.Web/sites/functions/masterkey/read": "critical",
+            "Microsoft.Web/sites/functions/token/read": "critical",
+            "Microsoft.Web/sites/slots/publishxml/action": "critical",
+            "Microsoft.Web/sites/slots/config/list/action": "critical",
+            "Microsoft.EventGrid/eventSubscriptions/getFullUrl/action": "high",
+            "Microsoft.EventGrid/topics/eventSubscriptions/getFullUrl/action": "high",
+            "Microsoft.EventGrid/systemTopics/eventSubscriptions/getFullUrl/action": "high",
+            "Microsoft.EventGrid/domains/eventSubscriptions/getFullUrl/action": "high",
+            "Microsoft.EventGrid/domains/topics/eventSubscriptions/getFullUrl/action": "high",
+            "Microsoft.ContainerRegistry/registries/runs/listLogSasUrl/action": "high",
         }
         for permission, expected in tested_sensitive_data_credentials.items():
             with self.subTest(permission=permission):

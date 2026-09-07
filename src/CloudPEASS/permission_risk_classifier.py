@@ -259,6 +259,13 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.compute/virtualmachinescalesets/virtualmachines/runcommands/write",
         "microsoft.hybridcompute/machines/runcommands/write",
         "microsoft.containerinstance/containergroups/containers/exec/action",
+        # Live validation recovered Function administration credentials and
+        # used them to invoke a key-protected function or deploy code to a
+        # slot. Slot config/list also exposed a reusable Storage account key.
+        "microsoft.web/sites/functions/masterkey/read",
+        "microsoft.web/sites/functions/token/read",
+        "microsoft.web/sites/slots/publishxml/action",
+        "microsoft.web/sites/slots/config/list/action",
         # Live validation confirmed that start/action accepts a per-execution
         # container image and command override, providing code execution in the
         # target Job's identity and network context without jobs/write.
@@ -337,6 +344,15 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.logic/workflows/triggers/run/action",
         "microsoft.logic/workflows/triggers/histories/resubmit/action",
         "microsoft.datafactory/factories/pipelines/createrun/action",
+        # getFullUrl returned signed Logic App callback URLs that were usable
+        # without the caller's Entra token. ACR run-log SAS URLs similarly
+        # exposed a seeded build-log canary.
+        "microsoft.eventgrid/eventsubscriptions/getfullurl/action",
+        "microsoft.eventgrid/topics/eventsubscriptions/getfullurl/action",
+        "microsoft.eventgrid/systemtopics/eventsubscriptions/getfullurl/action",
+        "microsoft.eventgrid/domains/eventsubscriptions/getfullurl/action",
+        "microsoft.eventgrid/domains/topics/eventsubscriptions/getfullurl/action",
+        "microsoft.containerregistry/registries/runs/listlogsasurl/action",
         # A read SAS from each operation was live-tested by downloading a
         # seeded byte range from the raw managed VHD. This exposes the complete
         # disk/snapshot without requiring attachment to an attacker VM.
