@@ -36,9 +36,19 @@ control-plane modification, or a strong conditional escalation primitive:
 - Secret create/update/patch and ConfigMap create/update/patch. Create-only can
   supply an expected but initially absent object name.
 - ValidatingAdmissionPolicy or binding update/patch/delete; admission webhook
-  update/patch/delete; and MutatingAdmissionPolicy or binding
+  create/update/patch/delete; and MutatingAdmissionPolicy or binding
   create/update/patch. The native mutating-policy paths can inject init or
-  sidecar containers into subsequently admitted Pods.
+  sidecar containers into subsequently admitted Pods. A newly registered
+  reachable mutating webhook can do the same, while a validating webhook can
+  receive full matching objects such as Secrets.
+- Exact custom permissions referenced by a canonical negated admission
+  `authorizer...check(...).allowed()` match condition. K8sPEASS only elevates
+  the exact grant after reading the configuration and confirming it with SSAR.
+- Exact create/patch/update/delete permissions over a named parameter object
+  referenced by an enforced ValidatingAdmissionPolicy binding. Create is high
+  only when the object is observably absent and missing parameters deny;
+  patch/update require an existing object; delete additionally requires
+  `parameterNotFoundAction: Allow`.
 - Namespace create/update/patch when selectors define an admission boundary.
 - NetworkPolicy update/patch/delete; Service or legacy Endpoints
   create/update/patch; EndpointSlice create/update/patch; Pod or Service status
@@ -67,6 +77,7 @@ RBAC, topology, traffic, and storage metadata, review oracles for supplied
 subjects, RBAC object writes without matching bind/escalate, Pod delete/eviction,
 Node status, CSR status, Signer `sign`/`attest`, group/UID/user-extra
 impersonation grants that lack user impersonation,
+controller `status`/`scale` subresource writes,
 SCC/PSP `use`, controller-specific admission resources, Kyverno/Gatekeeper,
 PodTemplate, ServiceAccount, quota, LimitRange, PodDisruptionBudget,
 PriorityClass, PVC, snapshot/CSI, CRD/APIService, PodCertificateRequest, DRA,

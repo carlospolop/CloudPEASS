@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from .client import APIError, K8sClient
-from .models import APIResource
+from .models import APIResource, PermissionKey
 
 
 ADMISSION_LISTS = {
@@ -40,6 +40,17 @@ ADMISSION_LABELS = {
 }
 
 NAMESPACE_NAME_PATTERN = re.compile(r"^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$")
+
+NEGATED_AUTHORIZER_CHECK = re.compile(
+    r"""^\s*!\s*authorizer
+        \.group\(\s*(?P<group_quote>['\"])(?P<group>[^'\"]*)(?P=group_quote)\s*\)
+        \.resource\(\s*(?P<resource_quote>['\"])(?P<resource>[^'\"]+)(?P=resource_quote)\s*\)
+        (?:\.namespace\(\s*(?P<namespace_quote>['\"])(?P<namespace>[^'\"]+)(?P=namespace_quote)\s*\))?
+        \.name\(\s*(?P<name_quote>['\"])(?P<name>[^'\"]+)(?P=name_quote)\s*\)
+        \.check\(\s*(?P<verb_quote>['\"])(?P<verb>[^'\"]+)(?P=verb_quote)\s*\)
+        \.allowed\(\s*\)\s*$""",
+    re.VERBOSE,
+)
 
 
 def is_valid_namespace_name(name: str) -> bool:
@@ -152,12 +163,160 @@ def analyze_admission_read_only(
                     }
                 )
 
+    _enrich_validating_parameter_targets(client, findings, resources, unavailable)
     findings.extend(
         _collect_third_party_policy_objects(
             client, namespaces, resources, readable, unavailable
         )
     )
     return findings, readable, unavailable
+
+
+def admission_sensitive_permissions(
+    admission: list[dict[str, Any]],
+) -> dict[PermissionKey, str]:
+    """Return bounded exact checks derived from readable admission configuration."""
+    result: dict[PermissionKey, str] = {}
+    for item in admission:
+        configuration = item.get("configuration") or {}
+        condition_sets = [configuration.get("matchConditions") or []]
+        for webhook in configuration.get("webhooks") or []:
+            if isinstance(webhook, dict):
+                condition_sets.append(webhook.get("matchConditions") or [])
+        for conditions in condition_sets:
+            for condition in conditions if isinstance(conditions, list) else []:
+                if not isinstance(condition, dict):
+                    continue
+                expression = str(condition.get("expression") or "")
+                # A false term skips a match condition only when it is the whole
+                # expression or part of a plain conjunction. Do not infer through
+                # OR/ternary CEL expressions.
+                if "||" in expression or "?" in expression or ":" in expression:
+                    continue
+                for term in expression.split("&&"):
+                    match = NEGATED_AUTHORIZER_CHECK.fullmatch(term.strip())
+                    if not match:
+                        continue
+                    key = PermissionKey(
+                        verb=match.group("verb"),
+                        group=match.group("group"),
+                        resource=match.group("resource"),
+                        namespace=match.group("namespace") or "",
+                        name=match.group("name"),
+                    )
+                    result[key] = (
+                        f"Readable admission configuration {item.get('name')!r} contains "
+                        f"a canonical negated authorizer check for {key.human()}; holding "
+                        "this custom grant makes the conjunct false and skips that "
+                        "policy or webhook."
+                    )
+
+        target = configuration.get("parameterTarget") or {}
+        if not isinstance(target, dict) or target.get("exists") not in {True, False}:
+            continue
+        if not target.get("usedByDenyValidation"):
+            continue
+        base = {
+            "group": str(target.get("group") or ""),
+            "resource": str(target.get("resource") or ""),
+            "namespace": str(target.get("namespace") or ""),
+            "name": str(target.get("name") or ""),
+        }
+        verbs: list[str] = []
+        if target["exists"] is True:
+            verbs.extend(("update", "patch"))
+            if target.get("parameterNotFoundAction") == "Allow":
+                verbs.append("delete")
+        elif target.get("parameterNotFoundAction") == "Deny":
+            verbs.append("create")
+        for verb in verbs:
+            key = PermissionKey(verb=verb, **base)
+            result[key] = (
+                f"This exact object is a parameter for enforced ValidatingAdmissionPolicy "
+                f"binding {item.get('name')!r}; {verb} can change or remove the parameter "
+                "and alter whether matching requests are admitted."
+            )
+    return result
+
+
+def _enrich_validating_parameter_targets(
+    client: K8sClient,
+    findings: list[dict[str, Any]],
+    resources: list[APIResource],
+    unavailable: list[str],
+) -> None:
+    policies = {
+        str(item.get("name") or ""): item.get("configuration") or {}
+        for item in findings
+        if item.get("type") == "validating admission policies"
+    }
+    for binding in findings:
+        if binding.get("type") != "validating admission policy bindings":
+            continue
+        configuration = binding.get("configuration") or {}
+        actions = configuration.get("validationActions") or []
+        if "Deny" not in actions:
+            continue
+        policy = policies.get(str(configuration.get("policyName") or "")) or {}
+        param_kind = policy.get("paramKind") or {}
+        param_ref = configuration.get("paramRef") or {}
+        if not isinstance(param_kind, dict) or not isinstance(param_ref, dict):
+            continue
+        if not param_ref.get("name") or param_ref.get("selector"):
+            continue
+        expressions = str(
+            policy.get("validations") or []
+        ) + str(policy.get("matchConditions") or [])
+        if "params" not in expressions:
+            continue
+        api_version = str(param_kind.get("apiVersion") or "")
+        if "/" in api_version:
+            group, version = api_version.rsplit("/", 1)
+        else:
+            group, version = "", api_version
+        kind = str(param_kind.get("kind") or "")
+        resource = next(
+            (
+                item
+                for item in resources
+                if not item.subresource
+                and item.group == group
+                and item.version == version
+                and item.kind.casefold() == kind.casefold()
+            ),
+            None,
+        )
+        if resource is None:
+            continue
+        namespace = str(param_ref.get("namespace") or "")
+        if resource.namespaced and not namespace:
+            continue
+        name = str(param_ref["name"])
+        base = f"/apis/{group}/{version}" if group else f"/api/{version}"
+        if resource.namespaced:
+            path = f"{base}/namespaces/{namespace}/{resource.resource}/{name}"
+        else:
+            path = f"{base}/{resource.resource}/{name}"
+        exists: bool | None
+        try:
+            client.get(path)
+            exists = True
+        except APIError as exc:
+            exists = False if exc.status == 404 else None
+            if exists is None:
+                unavailable.append(
+                    f"parameter target for {binding.get('name')}: {exc}"
+                )
+        configuration["parameterTarget"] = {
+            "group": group,
+            "version": version,
+            "resource": resource.resource,
+            "namespace": namespace,
+            "name": name,
+            "exists": exists,
+            "parameterNotFoundAction": param_ref.get("parameterNotFoundAction"),
+            "usedByDenyValidation": True,
+        }
 
 
 def _served_admission_lists(resources: list[APIResource]) -> dict[str, str]:
@@ -255,6 +414,7 @@ def _summarize_admission_object(item: dict[str, Any]) -> dict[str, Any]:
         "matchConditions",
         "matchResources",
         "paramKind",
+        "paramRef",
         "policyName",
         "validationActions",
         "validations",

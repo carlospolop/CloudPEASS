@@ -281,7 +281,12 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
             "high",
             "Can create a workload or change Pod labels used by Services and policies, subject to admission.",
         )
-    if _is_workload(group, resource) and resource != "pods" and verb in CHANGE_VERBS:
+    if (
+        _is_workload(group, resource)
+        and resource != "pods"
+        and not subresource
+        and verb in CHANGE_VERBS
+    ):
         return (
             "high",
             "Can create or change a workload controller template. Impact depends on ServiceAccounts, "
@@ -322,12 +327,14 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
     if (
         resource in {"mutatingwebhookconfigurations", "validatingwebhookconfigurations"}
         and _group_is(group, "admissionregistration.k8s.io")
-        and verb in {"update", "patch", "delete", "deletecollection", "*"}
+        and verb in CHANGE_VERBS | {"delete", "deletecollection"}
     ):
         return (
             "high",
-            "Can weaken or remove an admission webhook and admit a previously "
-            "rejected request.",
+            "Can register, redirect, weaken, or remove an admission webhook. A "
+            "reachable attacker-controlled mutating webhook can inject code into "
+            "later workloads; a validating webhook receives matching objects, "
+            "including Secret data.",
         )
     if (
         resource in ADMISSION_RESOURCES

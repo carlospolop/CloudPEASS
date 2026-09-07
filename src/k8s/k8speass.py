@@ -18,6 +18,7 @@ from .client import APIError, K8sClient
 from .discovery import discover_api_resources
 from .models import APIResource, Coverage, PermissionFinding, PermissionKey
 from .passive import (
+    admission_sensitive_permissions,
     analyze_admission_read_only,
     discover_namespaces,
     is_valid_namespace_name,
@@ -192,7 +193,13 @@ class K8sPEASS:
         admission, readable, unavailable = analyze_admission_read_only(
             self.client, namespace_objects, namespaces, resources
         )
-        all_findings = self._annotate_admission(all_findings, admission)
+        admission_risks = admission_sensitive_permissions(admission)
+        if admission_risks:
+            admission_confirmed = self._run_access_reviews(list(admission_risks))
+            all_findings = self._merge_findings(all_findings + admission_confirmed)
+        all_findings = self._annotate_admission(
+            all_findings, admission, admission_risks
+        )
         self.coverage.readable_inventories.extend(readable)
         self.coverage.unavailable_inventories.extend(unavailable)
         rbac_explanations, readable, unavailable = collect_rbac_explanations(
@@ -866,7 +873,9 @@ class K8sPEASS:
     def _annotate_admission(
         findings: list[PermissionFinding],
         admission: list[dict[str, Any]],
+        admission_risks: dict[PermissionKey, str] | None = None,
     ) -> list[PermissionFinding]:
+        admission_risks = admission_risks or {}
         psa_namespaces = {
             str(item.get("name") or ""): item.get("configuration") or {}
             for item in admission
@@ -875,6 +884,17 @@ class K8sPEASS:
         write_verbs = {"create", "update", "patch", "delete", "deletecollection", "*"}
         annotated: list[PermissionFinding] = []
         for finding in findings:
+            dynamic_explanation = admission_risks.get(finding.key)
+            if finding.allowed and dynamic_explanation:
+                annotated.append(
+                    replace(
+                        finding,
+                        severity="high",
+                        explanation=dynamic_explanation,
+                        admission="Live admission configuration correlated with an exact allowed permission.",
+                    )
+                )
+                continue
             if not finding.allowed or finding.key.verb.lower() not in write_verbs:
                 annotated.append(finding)
                 continue

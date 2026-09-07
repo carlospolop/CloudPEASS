@@ -12,7 +12,7 @@ from src.k8s.client import APIError, K8sClient
 from src.k8s.discovery import discover_api_resources
 from src.k8s.k8speass import K8sPEASS
 from src.k8s.models import APIResource, Coverage, PermissionFinding, PermissionKey
-from src.k8s.passive import is_valid_namespace_name
+from src.k8s.passive import admission_sensitive_permissions, is_valid_namespace_name
 from src.k8s.reviews import findings_from_rules
 from src.k8s.risks import classify_permission
 
@@ -593,6 +593,16 @@ class PermissionModelTests(unittest.TestCase):
                 resource="validatingwebhookconfigurations",
             ),
             PermissionKey(
+                "create",
+                group="admissionregistration.k8s.io",
+                resource="validatingwebhookconfigurations",
+            ),
+            PermissionKey(
+                "create",
+                group="admissionregistration.k8s.io",
+                resource="mutatingwebhookconfigurations",
+            ),
+            PermissionKey(
                 "delete",
                 group="admissionregistration.k8s.io",
                 resource="mutatingwebhookconfigurations",
@@ -612,6 +622,55 @@ class PermissionModelTests(unittest.TestCase):
             with self.subTest(permission=key.human()):
                 severity, _ = classify_permission(key)
                 self.assertEqual(severity, "high")
+
+    def test_controller_subresources_are_not_controller_template_writes(self):
+        for subresource in ("status", "scale"):
+            severity, _ = classify_permission(
+                PermissionKey(
+                    "patch", group="apps", resource="deployments", subresource=subresource
+                )
+            )
+            self.assertEqual(severity, "medium")
+
+    def test_admission_configuration_derives_only_exact_sensitive_checks(self):
+        admission = [
+            {
+                "type": "validating admission policy bindings",
+                "name": "guard-binding",
+                "configuration": {
+                    "matchConditions": [
+                        {
+                            "expression": "object.metadata.name == 'candidate' && !authorizer.group('example.io').resource('guards').namespace('demo').name('breakglass').check('breakglass').allowed()"
+                        },
+                        {
+                            "expression": "authorizer.group('').resource('pods').name('x').check('delete').allowed()"
+                        },
+                    ],
+                    "parameterTarget": {
+                        "group": "example.io",
+                        "resource": "guards",
+                        "namespace": "demo",
+                        "name": "guard",
+                        "exists": True,
+                        "parameterNotFoundAction": "Allow",
+                        "usedByDenyValidation": True,
+                    },
+                },
+            }
+        ]
+        risks = admission_sensitive_permissions(admission)
+        self.assertIn(
+            PermissionKey("breakglass", "example.io", resource="guards", namespace="demo", name="breakglass"),
+            risks,
+        )
+        for verb in ("patch", "update", "delete"):
+            self.assertIn(
+                PermissionKey(verb, "example.io", resource="guards", namespace="demo", name="guard"),
+                risks,
+            )
+        self.assertNotIn(
+            PermissionKey("delete", resource="pods", name="x"), risks
+        )
 
     def test_constrained_impersonation_is_conditional_and_impact_aware(self):
         cases = (
@@ -798,6 +857,15 @@ class PermissionModelTests(unittest.TestCase):
         result = K8sPEASS._annotate_admission([finding], admission)[0]
         self.assertIn("did not send a write probe", result.admission)
         self.assertIn("restricted", result.admission)
+
+    def test_live_admission_correlation_elevates_exact_allowed_permission(self):
+        key = PermissionKey("breakglass", "example.io", resource="guards", name="x")
+        finding = PermissionFinding(key=key, allowed=True, severity="low")
+        result = K8sPEASS._annotate_admission(
+            [finding], [], {key: "Observed exact admission bypass."}
+        )[0]
+        self.assertEqual(result.severity, "high")
+        self.assertEqual(result.explanation, "Observed exact admission bypass.")
 
     def test_json_report_is_atomic_private_and_cleans_failed_temporary_files(self):
         with tempfile.TemporaryDirectory() as directory:
