@@ -234,6 +234,21 @@ def test_sharepoint_folder_walk_honors_max_depth():
     assert len(seen) == 2
 
 
+def test_graph_pagination_loop_is_bounded():
+    peas = AzurePEASS.__new__(AzurePEASS)
+    calls = []
+
+    def graph_get(url, headers, label):
+        calls.append(url)
+        return {"value": [{"id": "one"}], "@odata.nextLink": url}
+
+    peas._graph_get_json = graph_get
+    assert peas.fetch_paginated_data("https://graph.microsoft.com/v1.0/items", "token") == [
+        {"id": "one"}
+    ]
+    assert len(calls) == 1
+
+
 def test_single_foci_app_id_is_not_iterated_as_characters():
     peas = AzurePEASS.__new__(AzurePEASS)
     seen = []

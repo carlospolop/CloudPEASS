@@ -152,6 +152,21 @@ class AzurePEASS(CloudPEASS):
             print(f"{Fore.YELLOW}[!] {label} returned a non-JSON response.")
             return {}
 
+    @staticmethod
+    def _next_graph_url(data, current_url, seen_urls, label, max_pages=100):
+        """Return a safe next link while bounding malformed Graph pagination."""
+        next_url = data.get('@odata.nextLink') or data.get('nextLink')
+        if not next_url:
+            return None
+        if next_url == current_url or next_url in seen_urls:
+            print(f"{Fore.YELLOW}[!] {label} pagination loop detected; stopping.")
+            return None
+        if len(seen_urls) >= max_pages:
+            print(f"{Fore.YELLOW}[!] {label} exceeded {max_pages} pages; stopping.")
+            return None
+        seen_urls.add(next_url)
+        return next_url
+
 
     def list_subscriptions(self):
         if self.check_only_subs:
@@ -341,6 +356,7 @@ class AzurePEASS(CloudPEASS):
 
         headers = {'Authorization': f'Bearer {graph_token}'}
         url = f'{self.graph_base}/v1.0/identity/conditionalAccess/policies'
+        seen_urls = {url}
         while url:
             data = self._graph_get_json(url, headers, "Conditional Access policies")
             if not data:
@@ -355,12 +371,13 @@ class AzurePEASS(CloudPEASS):
                 print(f"{Fore.CYAN}Grant Controls: {Fore.WHITE}{grant_ctrls}")
                 print("-" * 50)
             # Follow pagination if present
-            url = data.get('@odata.nextLink')
+            url = self._next_graph_url(data, url, seen_urls, "Conditional Access policies")
 
     
     def enumerate_tasks(self, tasks_token):
         headers = {'Authorization': f'Bearer {tasks_token}'}
         lists_url = f'{self.graph_base}/v1.0/me/todo/lists?$top=10'
+        seen_urls = {lists_url}
 
         while lists_url:
             data = self._graph_get_json(lists_url, headers, "To-Do lists")
@@ -368,9 +385,12 @@ class AzurePEASS(CloudPEASS):
                 break
             
             for todo_list in data.get('value', []):
-                print(f"{Fore.BLUE}- List: {Fore.WHITE}{todo_list['displayName']}")
+                list_id = todo_list.get('id')
+                print(f"{Fore.BLUE}- List: {Fore.WHITE}{todo_list.get('displayName', 'Unnamed')}")
+                if not list_id:
+                    continue
                 # Enumerate tasks within the current To-Do list
-                tasks_url = f"{self.graph_base}/v1.0/me/todo/lists/{todo_list['id']}/tasks?$top=10"
+                tasks_url = f"{self.graph_base}/v1.0/me/todo/lists/{list_id}/tasks?$top=10"
                 tasks_data = self._graph_get_json(tasks_url, headers, "To-Do tasks")
                 
                 for task in tasks_data.get('value', []):
@@ -390,13 +410,14 @@ class AzurePEASS(CloudPEASS):
                     cont = input("Show more To-Do lists? (y/n): ")
                 if cont.lower() != 'y':
                     break
-                lists_url = data['@odata.nextLink']
+                lists_url = self._next_graph_url(data, lists_url, seen_urls, "To-Do lists")
             else:
                 break
     
     def enumerate_contacts(self, contacts_token):
         headers = {'Authorization': f'Bearer {contacts_token}'}
         contacts_url = f'{self.graph_base}/v1.0/me/contacts?$top=10'
+        seen_urls = {contacts_url}
         
         while contacts_url:
             data = self._graph_get_json(contacts_url, headers, "Contacts")
@@ -430,13 +451,14 @@ class AzurePEASS(CloudPEASS):
                     cont = input("Show more Contacts? (y/N): ")
                 if cont.lower() != 'y':
                     break
-                contacts_url = data['@odata.nextLink']
+                contacts_url = self._next_graph_url(data, contacts_url, seen_urls, "Contacts")
             else:
                 break
     
     def enumerate_onenote_content(self, onenote_token):
         headers = {'Authorization': f'Bearer {onenote_token}'}
         notebooks_url = f'{self.graph_base}/v1.0/me/onenote/notebooks?$top=10'
+        seen_urls = {notebooks_url}
         
         # Loop through notebooks pages if paginated
         while notebooks_url:
@@ -445,6 +467,7 @@ class AzurePEASS(CloudPEASS):
                 break
             
             for notebook in data.get('value', []):
+                notebook_id = notebook.get('id')
                 print(f"{Fore.BLUE}Notebook: {Fore.WHITE}{notebook.get('displayName', 'Unnamed')}")
                 print(f"{Fore.BLUE}Role: {Fore.WHITE}{notebook.get('userRole', 'Unknown')}")
                 print(f"{Fore.BLUE}Is Shared?: {Fore.WHITE}{notebook.get('isShared', 'Unknown')}")
@@ -458,8 +481,10 @@ class AzurePEASS(CloudPEASS):
                 print("-" * 50)
                 
                 # Enumerate Sections within each Notebook
-                sections_url = f"{self.graph_base}/v1.0/me/onenote/notebooks/{notebook['id']}/sections"
-                sections_data = self._graph_get_json(sections_url, headers, "OneNote sections")
+                sections_data = {}
+                if notebook_id:
+                    sections_url = f"{self.graph_base}/v1.0/me/onenote/notebooks/{notebook_id}/sections"
+                    sections_data = self._graph_get_json(sections_url, headers, "OneNote sections")
                 
                 for section in sections_data.get('value', []):
                     print(
@@ -475,7 +500,9 @@ class AzurePEASS(CloudPEASS):
                     cont = input("Show more OneNote Notebooks? (y/N): ")
                 if cont.lower() != 'y':
                     break
-                notebooks_url = data['@odata.nextLink']
+                notebooks_url = self._next_graph_url(
+                    data, notebooks_url, seen_urls, "OneNote notebooks"
+                )
             else:
                 break
 
@@ -483,12 +510,13 @@ class AzurePEASS(CloudPEASS):
         """Helper to retrieve all paginated data from a Graph API endpoint."""
         headers = {'Authorization': f'Bearer {token}'}
         items = []
+        seen_urls = {url}
         while url:
             data = self._graph_get_json(url, headers, "Paginated Graph data")
             if not data:
                 break
             items.extend(data.get("value", []))
-            url = data.get('@odata.nextLink') or data.get('nextLink')
+            url = self._next_graph_url(data, url, seen_urls, "Paginated Graph data")
         return items
 
 
@@ -498,7 +526,8 @@ class AzurePEASS(CloudPEASS):
         web_url = site.get("webUrl", "No URL provided")
         site_id = site.get("id")
         print(f"{indent}- {Fore.YELLOW}Site:{Fore.RESET} {name} | {Fore.BLUE}{web_url}")
-        self.sharepoint_list_documents(site_id, token, indent + "  ")
+        if site_id:
+            self.sharepoint_list_documents(site_id, token, indent + "  ")
 
     def sharepoint_enumerate_followed_sites(self, token, depth=1, max_depth=3, url=None):
         """Recursively enumerate followed sites."""
@@ -509,24 +538,27 @@ class AzurePEASS(CloudPEASS):
             print(f"\n{Fore.CYAN}Followed Sites:{Fore.RESET}")
         headers = {'Authorization': f'Bearer {token}'}
         indent = "  " * (depth - 1)
+        seen_urls = {url}
         
         while url:
             data = self._graph_get_json(url, headers, "SharePoint followed sites")
             if not data:
                 break
             for site in data.get("value", []):
-                self.sharepoint_followed_sites_ids.append(site.get("id"))
+                if site.get("id"):
+                    self.sharepoint_followed_sites_ids.append(site["id"])
                 self.enumerate_site(site, token, indent)
-                if depth < max_depth:
+                if depth < max_depth and site.get("id"):
                     subsites_url = f"{self.graph_base}/v1.0/sites/{site.get('id')}/sites?$top=10"
                     self.sharepoint_enumerate_followed_sites(token, depth + 1, max_depth, subsites_url)
-            url = data.get('@odata.nextLink') or data.get('nextLink')
+            url = self._next_graph_url(data, url, seen_urls, "SharePoint followed sites")
 
     def sharepoint_list_documents(self, site_id, token, indent="", depth=1, max_depth=3):
         """List documents in the default document library of a site."""
         headers = {'Authorization': f'Bearer {token}'}
         url = f"{self.graph_base}/v1.0/sites/{site_id}/drive/root/children?$top=10"
         print(f"{indent}Documents:")
+        seen_urls = {url}
         while url:
             data = self._graph_get_json(url, headers, "SharePoint documents")
             if not data:
@@ -548,7 +580,7 @@ class AzurePEASS(CloudPEASS):
                     size = item.get("size", "Unknown")
                     last_modified = item.get("lastModifiedDateTime", "Unknown")
                     print(f"{indent}- {Fore.GREEN}File: {Fore.RESET}{item_name} | {Fore.CYAN}Size:{Fore.RESET} {size} bytes | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}")
-            url = data.get('@odata.nextLink') or data.get('nextLink')
+            url = self._next_graph_url(data, url, seen_urls, "SharePoint documents")
 
     def sharepoint_list_folder_contents(
         self, site_id, token, folder_id, indent="", depth=2, max_depth=3
@@ -558,6 +590,7 @@ class AzurePEASS(CloudPEASS):
             return
         headers = {'Authorization': f'Bearer {token}'}
         url = f"{self.graph_base}/v1.0/sites/{site_id}/drive/items/{folder_id}/children?$top=10"
+        seen_urls = {url}
         while url:
             data = self._graph_get_json(url, headers, "SharePoint folder contents")
             if not data:
@@ -579,12 +612,13 @@ class AzurePEASS(CloudPEASS):
                     size = item.get("size", "Unknown")
                     last_modified = item.get("lastModifiedDateTime", "Unknown")
                     print(f"{indent}- {Fore.GREEN}File: {Fore.RESET}{item_name} | {Fore.CYAN}Size:{Fore.RESET} {size} bytes | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}")
-            url = data.get('@odata.nextLink') or data.get('nextLink')
+            url = self._next_graph_url(data, url, seen_urls, "SharePoint folders")
 
     def sharepoint_enumerate_public_sites(self, token):
         """Enumerate public sites not already followed by the current user."""
         url = f"{self.graph_base}/v1.0/sites?search=*"
         print(f"\n{Fore.CYAN}Public Sites:{Fore.RESET}")
+        seen_urls = {url}
         while url:
             data = self._graph_get_json(url, {'Authorization': f'Bearer {token}'}, "SharePoint public sites")
             if not data:
@@ -593,11 +627,12 @@ class AzurePEASS(CloudPEASS):
                 if site.get("id") in self.sharepoint_followed_sites_ids:
                     continue
                 self.enumerate_site(site, token, indent="")  # No extra indentation for public sites
-            url = data.get('@odata.nextLink') or data.get('nextLink')
+            url = self._next_graph_url(data, url, seen_urls, "SharePoint public sites")
 
     def enumerate_emails(self, outlook_token):
         headers = {'Authorization': f'Bearer {outlook_token}'}
         mail_url = f'{self.graph_base}/v1.0/me/messages?$top=10'
+        seen_urls = {mail_url}
 
         while mail_url:
             data = self._graph_get_json(mail_url, headers, "Mail")
@@ -623,7 +658,7 @@ class AzurePEASS(CloudPEASS):
                     cont = input("Show more Emails? (y/N): ")
                 if cont.lower() != 'y':
                     break
-                mail_url = data['@odata.nextLink']
+                mail_url = self._next_graph_url(data, mail_url, seen_urls, "Mail")
             else:
                 break
     
@@ -703,6 +738,7 @@ class AzurePEASS(CloudPEASS):
         else:
             headers = {'Authorization': f'Bearer {teams_token_graph}'}
             teams_url = f'{self.graph_base}/v1.0/me/joinedTeams'
+            seen_urls = {teams_url}
             while teams_url:
                 data = self._graph_get_json(teams_url, headers, "Joined Teams")
                 if not data:
@@ -710,8 +746,8 @@ class AzurePEASS(CloudPEASS):
                 if data.get('value', []):
                     print(f"{Fore.GREEN}Some teams found in Teams:{Fore.WHITE}")
                     for team in data.get('value', []):
-                        print(f"{Fore.BLUE}  Team: {Fore.WHITE}{team['displayName']}")
-                        print(f"{Fore.BLUE}  Description: {Fore.WHITE}{team['description']}")
+                        print(f"{Fore.BLUE}  Team: {Fore.WHITE}{team.get('displayName', 'Unnamed')}")
+                        print(f"{Fore.BLUE}  Description: {Fore.WHITE}{team.get('description') or 'None'}")
                         print()
                     if '@odata.nextLink' in data:
                         if self.no_ask:
@@ -720,7 +756,9 @@ class AzurePEASS(CloudPEASS):
                             cont = input("Show more Joined Teams? (y/N): ")
                         if cont.lower() != 'y':
                             break
-                        teams_url = data['@odata.nextLink']
+                        teams_url = self._next_graph_url(
+                            data, teams_url, seen_urls, "Joined Teams"
+                        )
                     else:
                         break
                 
@@ -737,6 +775,7 @@ class AzurePEASS(CloudPEASS):
         headers = {'Authorization': f'Bearer {token}'}
         # Indentation for hierarchical display
         indent = "  " * (depth - 1)
+        seen_urls = {url}
         while url:
             data = self._graph_get_json(url, headers, "OneDrive items")
             if not data:
@@ -746,9 +785,9 @@ class AzurePEASS(CloudPEASS):
                 last_modified = item.get('lastModifiedDateTime', 'Unknown')
                 web_url = item.get('webUrl', 'Unknown')
                 # Determine the type of the item
-                if 'folder' in item:
-                    child_count = item['folder'].get('childCount', 0)
-                    special_folder = item['folder'].get('specialFolder', {}).get('name', '')
+                folder = item.get('folder')
+                if isinstance(folder, dict):
+                    special_folder = (folder.get('specialFolder') or {}).get('name', '')
                     if special_folder:
                         msg = f"{indent}- {Fore.MAGENTA}Folder: {Fore.RESET}{name} | {Fore.CYAN}Special folder:{Fore.RESET} {special_folder} | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}"
                     else:
@@ -756,7 +795,7 @@ class AzurePEASS(CloudPEASS):
                     print(msg)
                     
                     # Recursive call for folder contents if max_depth is not reached
-                    if depth < max_depth:
+                    if depth < max_depth and item.get('id'):
                         folder_children_url = f"{self.graph_base}/v1.0/me/drive/items/{item['id']}/children?$top=50"
                         self._list_items(folder_children_url, token, depth + 1, max_depth)
                 
@@ -765,11 +804,7 @@ class AzurePEASS(CloudPEASS):
                     print(f"{indent}- {Fore.GREEN}File: {Fore.RESET}{name} | {Fore.CYAN}Size: {Fore.RESET}{size} | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}")
             
             # Handle pagination: continue if a next page exists
-            next_link = data.get('@odata.nextLink') or data.get('nextLink')
-            if next_link:
-                url = next_link
-            else:
-                break
+            url = self._next_graph_url(data, url, seen_urls, "OneDrive items")
 
     @staticmethod
     def _decode_claims(token):
