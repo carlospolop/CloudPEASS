@@ -440,9 +440,9 @@ class CloudPEASS:
         print(f"{Fore.WHITE}  Low/Other Permissions{Style.RESET_ALL} - Less interesting permissions.")
         if self.cloud_provider.lower().strip() == "azure":
             print(
-                f"{Fore.CYAN}  Azure attack details and required permission combinations: "
+                f"{Fore.CYAN}  Azure attack details by service and required permission combinations: "
                 "https://cloud.hacktricks.wiki/en/pentesting-cloud/azure-security/"
-                "az-privilege-escalation/az-high-impact-permissions"
+                "az-privilege-escalation/"
                 f"{Style.RESET_ALL}"
             )
         print()
