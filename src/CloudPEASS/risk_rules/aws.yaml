@@ -44,7 +44,6 @@ critical_exact:
   - ssm:SendCommand
   - ssm:StartSession
   - sts:GetDelegatedAccessToken
-  - sts:GetFederationToken
   - sts:GetServiceBearerToken
 
 ## =====================
@@ -61,8 +60,11 @@ medium_override_exact:
 
 ## Exact action names that must always be classified as `high`.
 high_exact:
+  - lambda:GetFunction
+  - route53domains:GetDomainDetail
   - secretsmanager:PutSecretValue
   - secretsmanager:UpdateSecret
+  - sts:GetFederationToken
 
 ## Evidence-backed downgrades for upstream entries that require an additional
 ## capability or return encrypted data rather than directly usable credentials.
@@ -71,6 +73,7 @@ high_override_exact:
   - codeartifact:GetAuthorizationToken
   - ec2:GetPasswordData
   - sts:GetDelegatedAccessToken
+  - sts:GetFederationToken
   - sts:GetServiceBearerToken
 
 ## =====================

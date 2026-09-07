@@ -11,7 +11,11 @@ from CloudPEASS.permission_risk_classifier import (
     classify_all,
     classify_permission,
 )
-from sensitive_permissions.aws import sensitive_combinations, very_sensitive_combinations
+from sensitive_permissions.aws import (
+    sensitive_combinations,
+    tested_risk_documentation,
+    very_sensitive_combinations,
+)
 
 
 def azure_rules() -> AzureRules:
@@ -466,6 +470,21 @@ class AwsRiskClassificationTest(unittest.TestCase):
                     classify_permission("aws", permission, unknown_default="medium"),
                     level,
                 )
+
+    def test_live_validated_sensitive_reads_and_credentials_are_high(self) -> None:
+        expected = {
+            "lambda:GetFunction": "high",
+            "route53domains:GetDomainDetail": "high",
+            "sts:GetFederationToken": "high",
+        }
+        self.assertEqual(set(tested_risk_documentation), set(expected))
+        for permission, level in expected.items():
+            with self.subTest(permission=permission):
+                self.assertEqual(
+                    classify_permission("aws", permission, unknown_default="medium"),
+                    level,
+                )
+                self.assertTrue(tested_risk_documentation[permission].endswith(".md"))
 
     def test_every_permission_is_in_exactly_one_category(self) -> None:
         permissions = [

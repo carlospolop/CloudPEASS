@@ -136,13 +136,16 @@ very_sensitive_combinations = [
     ["states:UpdateStateMachine"],
 
     ["sts:AssumeRole"],
-    ["sts:GetFederationToken"],
     ["sts:AssumeRoleWithSAML"],
     ["sts:AssumeRoleWithWebIdentity"],
     ["codeartifact:GetAuthorizationToken", "sts:GetServiceBearerToken"]
 ]
 
 sensitive_combinations = [
+    ["lambda:GetFunction"],
+    ["route53domains:GetDomainDetail"],
+    ["sts:GetFederationToken"],
+
     ["apigateway:POST"],
     ["apigateway:GET"],
     ["apigateway:PUT"],
@@ -290,3 +293,13 @@ sensitive_combinations = [
 
     ["dlm:CreateLifecyclePolicy"]
 ]
+
+
+# Live-tested, non-mutating attack paths and their service-specific HackTricks
+# evidence. Keep this deliberately narrow: documentation-only candidates do
+# not belong here.
+tested_risk_documentation = {
+    "lambda:GetFunction": "aws-privilege-escalation/aws-lambda-privesc/README.md",
+    "route53domains:GetDomainDetail": "aws-privilege-escalation/aws-route53-domains-privesc/README.md",
+    "sts:GetFederationToken": "aws-privilege-escalation/aws-sts-privesc/README.md",
+}
