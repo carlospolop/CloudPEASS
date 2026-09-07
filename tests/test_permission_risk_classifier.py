@@ -192,6 +192,14 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Logic/workflows/triggers/run/action": "high",
             "Microsoft.Logic/workflows/triggers/histories/resubmit/action": "high",
             "Microsoft.DataFactory/factories/pipelines/createRun/action": "high",
+            "Microsoft.App/jobs/start/action": "critical",
+            "Microsoft.App/jobs/listSecrets/action": "critical",
+            "Microsoft.App/managedEnvironments/daprComponents/listSecrets/action": "critical",
+            "Microsoft.Devices/provisioningServices/listkeys/action": "critical",
+            "Microsoft.Devices/provisioningServices/keys/listkeys/action": "critical",
+            "Microsoft.Compute/disks/beginGetAccess/action": "high",
+            "Microsoft.Compute/snapshots/beginGetAccess/action": "high",
+            "Microsoft.Compute/restorePointCollections/restorePoints/diskRestorePoints/beginGetAccess/action": "high",
         }
         for permission, expected in tested_sensitive_data_credentials.items():
             with self.subTest(permission=permission):

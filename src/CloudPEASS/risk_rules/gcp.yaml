@@ -25,9 +25,11 @@ critical_exact:
   - compute.instances.osLogin
   - compute.instances.setMetadata
   - compute.projects.setCommonInstanceMetadata
+  - container.nodes.proxy
   - container.pods.exec
   - container.secrets.get
   - container.secrets.list
+  - container.serviceAccounts.createToken
   - iam.serviceAccountKeys.create
   - iam.serviceAccounts.actAs
   - iam.serviceAccounts.getAccessToken
@@ -67,7 +69,11 @@ high_exact:
   - compute.instances.getSerialPortOutput
   - compute.instances.setServiceAccount
   - container.clusters.getCredentials
+  - container.pods.attach
+  - container.pods.getLogs
   - container.pods.portForward
+  - container.pods.proxy
+  - container.services.proxy
   - datastore.entities.create
   - datastore.entities.delete
   - datastore.entities.get
@@ -75,12 +81,16 @@ high_exact:
   - logging.logMetrics.delete
   - logging.logs.delete
   - logging.sinks.delete
+  - healthcare.dicomStores.dicomWebDelete
+  - healthcare.dicomStores.dicomWebRead
+  - healthcare.dicomStores.dicomWebWrite
   - healthcare.fhirResources.create
   - healthcare.fhirResources.delete
   - healthcare.fhirResources.get
   - healthcare.fhirResources.patch
   - healthcare.fhirResources.update
   - healthcare.fhirStores.searchResources
+  - healthcare.hl7V2Messages.get
   - iam.serviceAccounts.getOpenIdToken
   - monitoring.alertPolicies.delete
   - monitoring.notificationChannels.delete
@@ -90,6 +100,7 @@ high_exact:
   - redis.instances.getAuthString
   - run.routes.invoke
   - secretmanager.versions.add
+  - secretmanager.versions.destroy
   - orgpolicy.policy.set
   - securitycenter.findings.bulkMuteUpdate
   - securitycenter.findings.setMute

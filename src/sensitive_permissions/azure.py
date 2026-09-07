@@ -42,6 +42,11 @@ very_sensitive_combinations = [
     ["Microsoft.ContainerRegistry/registries/listBuildSourceUploadUrl/action", "Microsoft.ContainerRegistry/registries/scheduleRun/action"],
 
     ["Microsoft.ContainerInstance/containerGroups/containers/exec/action"],
+    ["Microsoft.App/jobs/start/action"],
+    ["Microsoft.App/jobs/listSecrets/action"],
+    ["Microsoft.App/managedEnvironments/daprComponents/listSecrets/action"],
+    ["Microsoft.Devices/provisioningServices/listkeys/action"],
+    ["Microsoft.Devices/provisioningServices/keys/listkeys/action"],
     ["Microsoft.App/containerApps/getAuthToken/action", "Microsoft.App/containerApps/exec/action"],
     ["Microsoft.App/containerApps/getAuthToken/action", "Microsoft.App/containerApps/debug/action"],
 
@@ -171,6 +176,9 @@ sensitive_combinations = [
     ["Microsoft.Logic/workflows/triggers/run/action"],
     ["Microsoft.Logic/workflows/triggers/histories/resubmit/action"],
     ["Microsoft.DataFactory/factories/pipelines/createRun/action"],
+    ["Microsoft.Compute/disks/beginGetAccess/action"],
+    ["Microsoft.Compute/snapshots/beginGetAccess/action"],
+    ["Microsoft.Compute/restorePointCollections/restorePoints/diskRestorePoints/beginGetAccess/action"],
     ["Microsoft.DocumentDB/databaseAccounts/readonlykeys/action"],
     ["Microsoft.DocumentDB/databaseAccounts/readonlykeys/read"],
     ["Microsoft.Search/searchServices/createQueryKey/action"],

@@ -259,6 +259,16 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.compute/virtualmachinescalesets/virtualmachines/runcommands/write",
         "microsoft.hybridcompute/machines/runcommands/write",
         "microsoft.containerinstance/containergroups/containers/exec/action",
+        # Live validation confirmed that start/action accepts a per-execution
+        # container image and command override, providing code execution in the
+        # target Job's identity and network context without jobs/write.
+        "microsoft.app/jobs/start/action",
+        # These actions returned reusable credentials or cleartext inline
+        # secrets during live validation.
+        "microsoft.app/jobs/listsecrets/action",
+        "microsoft.app/managedenvironments/daprcomponents/listsecrets/action",
+        "microsoft.devices/provisioningservices/listkeys/action",
+        "microsoft.devices/provisioningservices/keys/listkeys/action",
         "microsoft.managedidentity/userassignedidentities/federatedidentitycredentials/write",
         "microsoft.web/sites/config/list/action",
         "microsoft.web/sites/publishxml/action",
@@ -327,6 +337,12 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.logic/workflows/triggers/run/action",
         "microsoft.logic/workflows/triggers/histories/resubmit/action",
         "microsoft.datafactory/factories/pipelines/createrun/action",
+        # A read SAS from each operation was live-tested by downloading a
+        # seeded byte range from the raw managed VHD. This exposes the complete
+        # disk/snapshot without requiring attachment to an attacker VM.
+        "microsoft.compute/disks/begingetaccess/action",
+        "microsoft.compute/snapshots/begingetaccess/action",
+        "microsoft.compute/restorepointcollections/restorepoints/diskrestorepoints/begingetaccess/action",
         "microsoft.managedidentity/userassignedidentities/assign/action",
         "microsoft.app/containerapps/getauthtoken/action",
         "microsoft.resources/deploymentscripts/write",

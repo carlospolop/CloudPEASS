@@ -18,6 +18,8 @@ from src.sensitive_permissions.gcp import (
     [
         "resourcemanager.projects.setIamPolicy",
         "container.pods.exec",
+        "container.nodes.proxy",
+        "container.serviceAccounts.createToken",
         "cloudbuild.builds.create",
         "composer.environments.executeAirflowCommand",
         "secretmanager.versions.access",
@@ -36,15 +38,24 @@ def test_direct_compromise_permissions_are_critical(permission):
         "pubsub.subscriptions.consume",
         "run.routes.invoke",
         "secretmanager.versions.add",
+        "secretmanager.versions.destroy",
         "container.clusters.getCredentials",
+        "container.pods.attach",
+        "container.pods.getLogs",
+        "container.pods.proxy",
+        "container.services.proxy",
         "bigtable.tables.mutateRows",
         "compute.instances.getSerialPortOutput",
+        "healthcare.dicomStores.dicomWebDelete",
+        "healthcare.dicomStores.dicomWebRead",
+        "healthcare.dicomStores.dicomWebWrite",
         "healthcare.fhirResources.create",
         "healthcare.fhirResources.delete",
         "healthcare.fhirResources.get",
         "healthcare.fhirResources.patch",
         "healthcare.fhirResources.update",
         "healthcare.fhirStores.searchResources",
+        "healthcare.hl7V2Messages.get",
         "iam.serviceAccounts.getOpenIdToken",
         "cloudkms.cryptoKeyVersions.destroy",
         "artifactregistry.repositories.uploadArtifacts",
@@ -75,7 +86,6 @@ def test_data_plane_and_context_dependent_permissions_are_high(permission):
         "cloudfunctions.functions.sourceCodeSet",
         "composer.environments.create",
         "container.serviceAccounts.create",
-        "container.serviceAccounts.createToken",
         "monitoring.dashboards.delete",
         "run.jobs.run",
         "run.jobs.runWithOverrides",
@@ -170,13 +180,6 @@ def test_legacy_combinations_do_not_promote_every_create_and_update():
                 "iam.serviceAccounts.getAccessToken",
             },
         ),
-        (
-            {"container.serviceAccounts.createToken"},
-            {
-                "container.clusters.getCredentials",
-                "container.serviceAccounts.createToken",
-            },
-        ),
     ],
 )
 def test_context_dependent_privesc_is_critical_only_when_complete(incomplete, complete):
@@ -196,6 +199,18 @@ def test_context_dependent_privesc_is_critical_only_when_complete(incomplete, co
 def test_only_updating_an_existing_custom_role_is_directly_critical():
     assert classify_permission("gcp", "iam.roles.create") == "medium"
     assert classify_permission("gcp", "iam.roles.update") == "critical"
+
+
+def test_preknown_gke_endpoint_does_not_require_cluster_discovery_permission():
+    peass = CloudPEASS(
+        very_sensitive_combinations,
+        sensitive_combinations,
+        "GCP",
+        1,
+    )
+    permission = "container.serviceAccounts.createToken"
+    result = peass.analyze_sensitive_combinations({permission})
+    assert result["very_sensitive_perms"] == {permission}
 
 
 def test_cloud_sql_data_api_is_high_only_with_login_permission():
