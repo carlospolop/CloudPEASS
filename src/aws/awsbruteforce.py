@@ -5,11 +5,26 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from tqdm import tqdm
 import shutil
+import shlex
+
+import boto3
 
 from colorama import Fore, init
 
 
 class AWSBruteForce():
+
+    # These are named like reads but mint temporary credentials/tokens.
+    # They are unnecessary for permission discovery and therefore never probed.
+    BLOCKED_COMMANDS = {
+        ("ecr", "get-authorization-token"),
+        ("ecr", "get-login-password"),
+        ("ecr-public", "get-authorization-token"),
+        ("ecr-public", "get-login-password"),
+        ("sts", "get-federation-token"),
+        ("sts", "get-session-token"),
+        ("sts", "get-web-identity-token"),
+    }
 
     def __init__(self, debug, region, profile, aws_services, threads, access_key_id=None, secret_access_key=None, session_token=None):
         self.debug = debug
@@ -23,14 +38,12 @@ class AWSBruteForce():
         self.secret_access_key = secret_access_key
         self.session_token = session_token
 
-        if shutil.which("aws") is None:
-            print("AWS CLI is not installed or not in PATH. Please install the AWS CLI before running this tool.")
-            exit(1)
+        self.aws_cli = shutil.which("aws")
 
     # Utility functions
     def transform_command(self, command):
         substitutions = [
-            (r'accessanalizer', 'access-analyzer'),
+            (r'accessanaly[sz]er:', 'access-analyzer:'),
             (r'amp:', 'aps:'),
             (r'apigateway:Get.*', 'apigateway:GET'),
             (r'apigatewayv2:Get.*', 'apigateway:GET'),
@@ -49,7 +62,7 @@ class AWSBruteForce():
             (r'connectcampaigns:', 'connect-campaigns:'),
             (r'connectcases:', 'cases:'),
             (r'customer-profiles:', 'profile:'),
-            (r'deploy:', 'codeploy:'),
+            (r'deploy:', 'codedeploy:'),
             (r'detective:ListOrganizationAdminAccounts', 'detective:ListOrganizationAdminAccount'),
             (r'docdb:', 'rds:'),
             (r'dynamodbstreams:', 'dynamodb:'),
@@ -121,7 +134,8 @@ class AWSBruteForce():
             (r'waf-regional:ListWebAcls', 'waf-regional:ListWebACLs'),
             (r'keyspaces:ListKeyspaces', 'cassandra:Select'),
             (r'keyspaces:ListTables', 'cassandra:Select'),
-            (r's3api:ListBuckets', 's3:ListAllMyBuckets')
+            (r's3api:ListBuckets', 's3:ListAllMyBuckets'),
+            (r's3api:', 's3:'),
         ]
 
         for pattern, replacement in substitutions:
@@ -133,16 +147,22 @@ class AWSBruteForce():
         return ''.join(word.capitalize() for word in command.split('-'))
 
     def _build_command(self, profile, region, service, command, extra):
+        base = [self.aws_cli or "aws", "--cli-connect-timeout", "19"]
         if profile:
-            base = f'aws --cli-connect-timeout 19 --profile {profile} --region {region} {service} {command} {extra}'
-        else:
-            base = f'aws --cli-connect-timeout 19 --region {region} {service} {command} {extra}'
-        return base.strip()
+            base.extend(["--profile", profile])
+        if region:
+            base.extend(["--region", region])
+        base.extend([service, command])
+        if extra:
+            base.extend(extra if isinstance(extra, list) else shlex.split(extra))
+        return base
 
     def _build_env(self, profile):
-        if profile:
-            return None
         env = os.environ.copy()
+        env["AWS_PAGER"] = ""
+        env["AWS_CLI_AUTO_PROMPT"] = "off"
+        if profile:
+            return env
         for var_name in (
             "AWS_PROFILE",
             "AWS_DEFAULT_PROFILE",
@@ -178,7 +198,10 @@ class AWSBruteForce():
         env["PAGER"] = "cat"
         env["MANPAGER"] = "cat"
 
-        command = ["aws"]
+        if not self.aws_cli:
+            return []
+
+        command = [self.aws_cli]
         if service:
             command.append(service)
         command.append("help")
@@ -213,118 +236,154 @@ class AWSBruteForce():
 
         return output.decode(errors="replace").splitlines()
 
-    def run_command(self, profile, region, service, command, extra='', cont=0):
+    @staticmethod
+    def _display_command(command):
+        return shlex.join(command)
+
+    @staticmethod
+    def _placeholder_for(option):
+        option_name = option.lstrip("-").lower()
+        if "arn" in option_name:
+            return "arn:aws:iam::123456789012:role/CloudPEASSProbe"
+        if any(part in option_name for part in ("account", "owner")):
+            return "123456789012"
+        if "region" in option_name:
+            return "us-east-1"
+        if any(part in option_name for part in ("max-items", "max-results", "limit", "size")):
+            return "1"
+        return "CloudPEASSProbe"
+
+    @staticmethod
+    def _required_options(output):
+        """Extract required CLI options without depending on bullet or line characters."""
+        matches = re.findall(
+            r"(?:following arguments are required|arguments are required):\s*([^\r\n]+)",
+            output,
+            flags=re.I,
+        )
+        options = []
+        for match in matches:
+            options.extend(re.findall(r"--[a-zA-Z0-9][a-zA-Z0-9-]*", match))
+        return list(dict.fromkeys(options))
+
+    def run_command(self, profile, region, service, command, extra=None, cont=0):
+        extra = list(extra or [])
         full_command = self._build_command(profile, region, service, command, extra)
+        display_command = self._display_command(full_command)
         env = self._build_env(profile)
         
         try:
-            result = subprocess.run(full_command, shell=True, capture_output=True, timeout=20, env=env)
-            output = result.stdout.decode() + result.stderr.decode()
+            result = subprocess.run(full_command, capture_output=True, timeout=20, env=env)
+            output = result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace")
 
             if result.returncode == 0 or re.search(r'NoSuchEntity|ResourceNotFoundException|NotFoundException', output, re.I):
                 if self.debug:
-                    print(f"[DEBUG] Successful or resource not found: {output.strip()}")
+                    print(f"[DEBUG] Successful or resource-not-found response: {display_command}")
                 perm_command = self.transform_command(f"{service}:{self.capitalize(command)}")
-                print(f"{Fore.YELLOW}[+] {Fore.WHITE}You can access: {Fore.YELLOW}{service} {command} {Fore.BLUE}({full_command}) {Fore.GREEN}({perm_command}){Fore.RESET}")
+                confidence = "confirmed" if result.returncode == 0 else "likely; resource was not found"
+                print(f"{Fore.YELLOW}[+] {Fore.WHITE}Read access ({confidence}): {Fore.YELLOW}{service} {command} {Fore.BLUE}({display_command}) {Fore.GREEN}({perm_command}){Fore.RESET}")
                 
                 with self.lock:
                     self.found_permissions.append(perm_command)
 
             elif re.search(r'AccessDenied|ForbiddenException|UnauthorizedOperation|UnsupportedCommandException|AuthorizationException', output, re.I):
                 if self.debug:
-                    print(f"[DEBUG] Access denied for: {full_command}")
+                    print(f"[DEBUG] Access denied for: {display_command}")
+
+            elif self._required_options(output):
+                if cont < 3:
+                    for required_arg in self._required_options(output):
+                        if required_arg not in extra:
+                            extra.extend([required_arg, self._placeholder_for(required_arg)])
+                    self.run_command(profile, region, service, command, extra, cont + 1)
+                elif self.debug:
+                    print(f"[DEBUG] Stopped adding required args for: {command}\n{output.strip()}")
 
             elif re.search(r'ValidationException|ValidationError|InvalidArnException|InvalidRequestException|InvalidParameterValueException|InvalidARNFault|Invalid ARN|InvalidIpamScopeId.Malformed|InvalidParameterException|invalid literal for', output, re.I):
                 if self.debug:
-                    print(f"[DEBUG] Validation error for: {full_command}")
+                    print(f"[DEBUG] Validation error for: {display_command}")
 
             elif re.search(r'Could not connect to the endpoint URL', output, re.I):
                 if self.debug:
-                    print(f"[DEBUG] Could not connect to endpoint: {full_command}")
+                    print(f"[DEBUG] Could not connect to endpoint: {display_command}")
 
             elif re.search(r'Unknown options|MissingParameter|InvalidInputException|error: argument', output, re.I):
                 if self.debug:
-                    print(f"[DEBUG] Option error for: {full_command}")
-
-            elif re.search(r'arguments are required', output, re.I):
-                required_arg_match = re.search(r'arguments are required: ([^\s,]+)', output)
-                if required_arg_match:
-                    required_arg = required_arg_match.group(1)
-                    name_string = "OrganizationAccountAccessRole"
-                    arn_string = f"arn:aws:iam::123456789012:role/{name_string}"
-
-                    test_extra = f"{extra} {required_arg} {name_string}".strip()
-                    test_cmd = self._build_command(profile, region, service, command, test_extra)
-                    test_result = subprocess.run(test_cmd, shell=True, capture_output=True, timeout=20, env=env)
-                    test_output = test_result.stdout.decode() + test_result.stderr.decode()
-
-                    if re.search(r'ValidationException|ValidationError|InvalidArnException|InvalidRequestException|InvalidParameterValueException|InvalidARNFault|Invalid ARN|InvalidIpamScopeId.Malformed|InvalidParameterException|invalid literal for', test_output, re.I):
-                        extra = f"{extra} {required_arg} {arn_string}".strip()
-                    else:
-                        extra = f"{extra} {required_arg} {name_string}".strip()
-                    
-                    if cont < 3:
-                        self.run_command(profile, region, service, command, extra, cont+1)
-                    else:
-                        if self.debug:
-                            print(f"[DEBUG] Prevented eternal loop of args from: {command}\n{output.strip()}")
+                    print(f"[DEBUG] Option error for: {display_command}")
 
             else:
                 if self.debug:
-                    print(f"[DEBUG] Unhandled response for: {full_command}\n{output.strip()}")
+                    print(f"[DEBUG] Unhandled response for: {display_command}\n{output.strip()}")
 
         except subprocess.TimeoutExpired:
             if self.debug:
-                print(f"[DEBUG] Command timed out: {full_command}")
-            print(f"[-] Timeout: {full_command}")
+                print(f"[DEBUG] Command timed out: {display_command}")
+            print(f"[-] Timeout: {display_command}")
+
+    @staticmethod
+    def _help_entries(output, heading):
+        """Parse AWS help sections across groff/plain/Unicode bullet formats."""
+        entries = []
+        in_range = False
+        for raw_line in output:
+            line = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw_line)
+            while "\b" in line:
+                line = re.sub(r".\x08", "", line)
+            line = line.strip()
+            upper = line.upper()
+            if heading in upper:
+                in_range = True
+                continue
+            if in_range and ("SEE ALSO" in upper or re.match(r"^[A-Z][A-Z ]{3,}$", line)):
+                if heading not in upper:
+                    in_range = False
+            if not in_range or not line:
+                continue
+            line = re.sub(r"^(?:o|\*|\+|•|·|▪|‣|-)\s+", "", line)
+            if re.fullmatch(r"[a-z0-9][a-z0-9-]*", line):
+                entries.append(line)
+        return list(dict.fromkeys(entries))
+
+    @staticmethod
+    def _botocore_services():
+        return boto3.Session().get_available_services()
+
+    @staticmethod
+    def _botocore_commands(service):
+        try:
+            model = boto3.Session()._session.get_service_model(service)
+        except Exception:
+            return []
+        commands = []
+        for operation in model.operation_names:
+            if operation.startswith(("List", "Describe", "Get", "BatchGet", "Head", "Lookup", "Search")):
+                command = re.sub(r"(.)([A-Z][a-z]+)", r"\1-\2", operation)
+                command = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", command).lower()
+                commands.append(command)
+        return commands
 
     def get_aws_services(self):
         output = self._get_aws_help()
-        start_string = "AVAILABLE SERVICES"
-        end_string = "SEE ALSO"
-        point = "o"
-        in_range = False
-        services = []
-
-        for line in output:
-            line = line.strip()
-            if start_string in line.upper():
-                in_range = True
-            elif end_string in line.upper():
-                in_range = False
-
-            if in_range and line and line != point and start_string not in line:
-                if line.startswith("o "):
-                    line = line[2:]
-                services.append(line)
-
-        return services
+        return self._help_entries(output, "AVAILABLE SERVICES") or self._botocore_services()
 
     def get_commands_for_service(self, service):
         output = self._get_aws_help(service)
-        start_string = "AVAILABLE COMMANDS"
-        end_string = "SEE ALSO"
-        in_range = False
-        commands = []
-
-        for line in output:
-            line = line.strip()
-            if start_string in line.upper():
-                in_range = True
-            elif end_string in line.upper():
-                in_range = False
-
-            if in_range and line:
-                if line.startswith("o "):
-                    line = line[2:]
-                if re.match(r'^(list|ls|describe|get)', line):
-                    commands.append(line)
-
-        return commands
+        commands = self._help_entries(output, "AVAILABLE COMMANDS")
+        commands = [c for c in commands if re.match(r'^(list|ls|describe|get|batch-get|head|lookup|search)', c)]
+        commands = commands or self._botocore_commands(service)
+        return [command for command in commands if (service, command) not in self.BLOCKED_COMMANDS]
 
     def brute_force_permissions(self):
+        self.found_permissions = []
         commands_to_run = []
         print(f"{Fore.GREEN}Starting permission enumeration...")
+
+        if not self.aws_cli:
+            print(
+                f"{Fore.YELLOW}AWS CLI is not installed; skipping live read-only probes. "
+                f"IAM policy parsing, simulation, and offline inference remain available.{Fore.RESET}"
+            )
+            return []
 
         services = self.get_aws_services()
 

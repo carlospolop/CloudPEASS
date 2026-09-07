@@ -126,6 +126,7 @@ class CloudPEASS:
                     "type": resource_type,
                     "name": resource_name,
                     "permissions": set(),
+                    "deny_perms": set(),
                     "is_admin": is_admin
                 }
             else:
@@ -133,14 +134,13 @@ class CloudPEASS:
                 if is_admin:
                     final_resources[resource_id]["is_admin"] = True
             final_resources[resource_id]["permissions"].update(resource["permissions"])
+            final_resources[resource_id]["deny_perms"].update(resource.get("deny_perms", []))
 
 
         grouped = defaultdict(list)
         for resource in final_resources.values():
             perms_set = frozenset(resource["permissions"])
-            deny_perms_set = set()
-            if "deny_perms" in resource:
-                deny_perms_set = frozenset(resource["deny_perms"])
+            deny_perms_set = frozenset(resource.get("deny_perms", []))
             
             # Add in perms_set the deny permissions adding the prefix "-"
             perms_set = perms_set.union({"-" + perm for perm in deny_perms_set})
@@ -286,7 +286,7 @@ class CloudPEASS:
             # Debug: Check if we're properly detecting is_admin
             if r_dict.get("is_admin", False):
                 is_admin = True
-            if "/" in r_dict["id"]:
+            if r_dict["id"]:
                 resource_ids.append(r_dict["id"])
             else:
                 resource_ids.append(r_dict["id"] + ":" + r_dict["type"] + ":" + r_dict["name"])
@@ -327,7 +327,12 @@ class CloudPEASS:
             
             if is_admin:
                 has_admin = True
-            if perms:
+            deny_perms = (
+                getattr(resource, "deny_perms", [])
+                if hasattr(resource, "deny_perms")
+                else resource.get("deny_perms", []) if isinstance(resource, dict) else []
+            )
+            if perms or deny_perms:
                 final_resources.append(resource)
         resources = final_resources
 
@@ -392,6 +397,28 @@ class CloudPEASS:
                 else:
                     low_perms.append(perm)
             
+            max_per_category = getattr(self, "max_permissions_per_category", None)
+            if max_per_category:
+                def print_category(label, values, color):
+                    ordered = sorted(values)
+                    shown = ordered[:max_per_category]
+                    print(
+                        f"{color}{label} ({len(ordered)}){Style.RESET_ALL}: "
+                        f"{Fore.WHITE}{', '.join(shown) if shown else 'none'}"
+                    )
+                    if len(ordered) > len(shown):
+                        print(
+                            f"{Fore.BLUE}  ... {len(ordered) - len(shown)} more {label.lower()} "
+                            "permission(s); use --out-json-path for the complete list."
+                        )
+
+                print_category("Critical", critical_perms, Fore.RED + Back.YELLOW)
+                print_category("High", high_perms, Fore.RED)
+                print_category("Medium", medium_perms, Fore.YELLOW)
+                print_category("Low/other", low_perms, Fore.WHITE)
+                print("\n" + Fore.LIGHTWHITE_EX + "-" * 80 + "\n" + Style.RESET_ALL)
+                continue
+
             # Build permissions message with sorted categories
             perms_msg = f"{Fore.WHITE}Permissions: "
             

@@ -2,7 +2,7 @@
 
 import requests
 from typing import List, Set, Dict
-import itertools
+import time
 
 aws_bf_permissions_detectable = [
 	"accessanalyzer:GetAnalyzer",
@@ -2318,86 +2318,85 @@ aws_bf_permissions_detectable = [
 
 class AWSManagedPoliciesGuesser:
     def __init__(self, discovered_permissions: Set[str]):
-        # discovered_permissions: permissions the user was detected to have.
         self.discovered_permissions = discovered_permissions
 
-    def fetch_managed_policies(self, url: str, cont: int = 0) -> List[Dict]:
-        try:
-            response = requests.get(url)
-        except:
-            if cont < 3:
-                return self.fetch_managed_policies(url, cont + 1)
-            else:
-                raise Exception(f"Failed to fetch data: {url}")
-            
-        if response.status_code == 200:
-            return response.json().get("policies", [])
-        raise Exception(f"Failed to fetch data: HTTP {response.status_code}")
+    @staticmethod
+    def _canonical(action: str) -> str:
+        action = action.casefold()
+        return action.replace("accessanalyzer:", "access-analyzer:")
+
+    def fetch_managed_policies(self, url: str) -> List[Dict]:
+        error = None
+        for attempt in range(4):
+            try:
+                response = requests.get(url, timeout=(5, 20))
+                response.raise_for_status()
+                return response.json().get("policies", [])
+            except (requests.RequestException, ValueError, KeyError) as exc:
+                error = exc
+                if attempt < 3:
+                    time.sleep(2 ** attempt)
+        raise RuntimeError(f"Failed to fetch managed-policy data from {url}: {error}")
 
     def guess_permissions(self) -> Dict:
-        # Fetch policies from the provided URL.
         policies = self.fetch_managed_policies(
             "https://raw.githubusercontent.com/iann0036/iam-dataset/main/aws/managed_policies.json"
         )
-        
-        # Build a mapping of policy name to its set of effective actions.
         policy_actions = {
-            policy['name']: set(policy.get('effective_action_names', []))
-            for policy in policies if 'name' in policy
+            policy["name"]: set(policy.get("effective_action_names", []))
+            for policy in policies
+            if "name" in policy
         }
-        
-        # Pre-filter: Only keep policies that include at least one permission from self.discovered_permissions.
-        relevant_policy_actions = {
-            name: actions 
-            for name, actions in policy_actions.items() 
-            if actions & self.discovered_permissions
+
+        detectable = {self._canonical(action) for action in aws_bf_permissions_detectable}
+        discovered = {self._canonical(action) for action in self.discovered_permissions}
+        target = discovered & detectable
+        if not target:
+            return {}
+
+        entries = []
+        for name, actions in policy_actions.items():
+            canonical_actions = {self._canonical(action) for action in actions}
+            detectable_actions = canonical_actions & detectable
+            if detectable_actions & target:
+                entries.append((name, actions, detectable_actions))
+
+        candidates_by_action = {
+            action: [index for index, entry in enumerate(entries) if action in entry[2]]
+            for action in target
         }
-        
-        # Prepare result containers.
+        if any(not candidates for candidates in candidates_by_action.values()):
+            return {}
+
+        best = []
+        seen = set()
+
+        def visit(selected, covered):
+            signature = frozenset(selected)
+            if signature in seen:
+                return
+            seen.add(signature)
+            if target <= covered:
+                names = tuple(sorted(entries[index][0] for index in selected))
+                combined_actions = set().union(*(entries[index][1] for index in selected))
+                union_detectable = set().union(*(entries[index][2] for index in selected))
+                missing = len(union_detectable - target)
+                if missing < 100:
+                    best.append((missing, names, combined_actions))
+                    best.sort(key=lambda item: (item[0], len(item[1]), item[1]))
+                    del best[3:]
+                return
+            if len(selected) == 3:
+                return
+            uncovered = target - covered
+            pivot = min(uncovered, key=lambda action: len(candidates_by_action[action]))
+            for index in candidates_by_action[pivot]:
+                if index not in selected:
+                    visit(selected | {index}, covered | entries[index][2])
+
+        visit(set(), set())
         result = {}
-        
-        # Detectable permissions (global) converted to a set.
-        detectable = set(aws_bf_permissions_detectable)
-        
-        # Consider only the relevant policies.
-        policy_names = list(relevant_policy_actions.keys())
-        
-        # Iterate over all combinations of 1 to 3 relevant policies.
-        for r in range(1, 4):
-            for combo in itertools.combinations(policy_names, r):
-                # Combine actions for the current set of policies.
-                combined_actions = set()
-                for name in combo:
-                    combined_actions |= relevant_policy_actions[name]
-                
-                # Focus on detectable permissions.
-                union_detectable = combined_actions & detectable
-                
-                # Compute missing expected permissions.
-                n_missing_detected = len([item for item in self.discovered_permissions if item not in union_detectable])
-                
-                # Skip combinations that doesn't have all the found permissions.
-                if n_missing_detected != 0:
-                    continue
-
-                # Store top 3 combinations with smaller n_missing_total as long as less than 100 permissions were not found.
-                n_missing_total = len([item for item in union_detectable if item not in self.discovered_permissions])
-                if n_missing_total < 100:
-                    if len(result) < 3 or any(k for k in result.keys() if n_missing_total < k):
-                        policyname_already_in_result = False
-                        for value in result.values():
-                            if set(value["policies"]).issubset(combo):
-                                policyname_already_in_result = True
-                                break
-                        if not policyname_already_in_result:
-                            result[n_missing_total] = {
-                                "policies": list(combo),
-                                "permissions": sorted(combined_actions)
-                            }
-                        if len(result) > 3:
-                            result.pop(max(result.keys()))
-        
-        if result:
-            result = dict(sorted(result.items(), key=lambda item: item[0]))
-
-        return result
+        for missing, names, actions in best:
+            if missing not in result:
+                result[missing] = {"policies": list(names), "permissions": sorted(actions)}
+        return dict(sorted(result.items()))

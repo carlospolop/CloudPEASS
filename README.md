@@ -337,40 +337,31 @@ python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--projects <
 <details>
 <summary><h2>AWSPEAS ⚡️🔐</h2></summary>
 
-**AWSPEAS** is your ultimate tool for enumerating **AWS permissions** and uncovering potential **privilege escalation** paths and other attack vectors—all while leaving your target environment unchanged. It leverages multiple techniques to gather, simulate, and even infer permissions, giving you deep insights into the security posture of your AWS setup.
+**AWSPEAS** enumerates the current AWS principal's permissions and highlights privilege-escalation and sensitive-access opportunities while leaving the target unchanged. It never calls AWS create, update, delete, invoke, run, start, send, or execute operations.
 
 ### How It Works
 
-AWSPEAS uses an intelligent cascading approach to enumerate permissions:
+AWSPEAS uses three permission-free-or-read-only fallbacks:
 
-1. **IAM Policy Enumeration (First Priority):**  
-   Retrieves and reviews all IAM policies attached to the compromised principal. *(Requires appropriate IAM permissions.)*  
-   - ✅ **If successful**: Skips simulation and brute-force entirely
+1. **IAM policy reads:** Reads the current user or role, all paginated inline/attached/group policies, managed-policy default versions, resource scopes, conditions, explicit denies, `NotAction`, `NotResource`, and permissions boundaries. If granular calls are blocked, it tries `GetAccountAuthorizationDetails` independently.
 
-2. **Permission Simulation (Second Priority):**  
-   If IAM retrieval fails, simulates the effective permissions of the principal using `simulate-principal-policy`. *(Requires a single IAM permission.)*  
-   - ✅ **If successful**: Skips brute-force
+2. **IAM simulation:** If policy visibility is partial, empty, conditional, or boundary-limited, it tries `SimulatePrincipalPolicy`. Simulation is read-only and does not execute the tested actions. Assumed-role sessions are resolved to their IAM role ARN when IAM permits it. The AWS action catalog falls back to installed botocore models when the online AWS catalog is unavailable.
 
-3. **Brute-Force Enumeration (Automatic Fallback):**  
-   If both IAM and simulation fail (or are skipped), automatically tests **List, Get, and Describe API calls via the AWS CLI**.  
-   - **Service Filtering:** Use the **`--aws-services`** flag to target only specific services for faster enumeration.  
-   - **Policy Inference:** Integrates a version of **[aws-Perms2ManagedPolicies](https://github.com/carlospolop/aws-Perms2ManagedPolicies)** to predict additional permissions based on identified permissions and AWS managed policies.
+3. **Live read-only probes:** If both methods above are incomplete, AWSPEAS tests only read command families (`List`, `Get`, `Describe`, `BatchGet`, `Head`, `Lookup`, and `Search`). The AWS CLI is optional unless this fallback is needed. Help parsing supports plain, groff, and Unicode bullet formats, with botocore service models as an OS-independent fallback. Use `--aws-services` to limit requests or `--bruteforce-always` to check for resource-policy access even after complete IAM reads.
 
-**Note:** You can skip any technique using `--skip-iam-policies`, `--skip-simulation`, or `--skip-bruteforce` flags.
+Optional managed-policy inference can suggest unconfirmed permissions from successful live probes. Inferred permissions are labeled separately and must not be treated as confirmed.
+
+AWS authorization can also depend on SCPs, RCPs, session policies, resource policies, VPC endpoint policies, request context, and service-specific behavior. AWSPEAS reports these limitations rather than presenting static policy statements as universally effective access.
 
 ### Operational Security Considerations ⚠️
 
-- **Canary Account Detection:**  
-  AWSPEAS tries to detect if the AWS account ID appears to belong to a **Canary service**. If a canary account is suspected, you'll be prompted for confirmation before the tool proceeds. Moreover, after the first interaction with the AWS API, the name of the principal is also gathered and AWSPEAS use it to try to detect if the principal is a canary account. Note that at this point it might be **too late** because an API interaction has already been done, but at least you will be warned about it.
+- **Canary detection:** AWSPEAS first tries to decode the account ID locally from modern AKIA/ASIA access-key IDs. This can stop before the first STS call for known canary accounts. It then checks the returned ARN/name for canary patterns. With `--no-ask`, a possible canary stops safely.
+- **CloudTrail:** Read calls can still be logged. "Read-only" means no target state is intentionally changed, not that the scan is invisible.
 
 
 ### Authentication & Execution Requirements
 
-Before running AWSPEAS, ensure that you have:
-- **AWS CLI** installed and configured on your PATH
-- Either:
-  - A properly configured **AWS profile** (used to connect to the target AWS account), or
-  - AWS credentials: **Access Key ID** and **Secret Access Key** (with optional **Session Token** for temporary credentials)
+AWSPEAS accepts an AWS profile, explicit credentials, or the normal boto3 credential chain (environment variables, container/instance roles, web identity, and configured defaults). A region is optional; it uses the session/environment region and then `us-east-1`. The AWS CLI is needed only for live probes.
 
 ### AWSPEAS Help & Usage
 
@@ -380,15 +371,16 @@ Before running AWSPEAS, ensure that you have:
 ```bash
 python3 ./AWSPEAS.py --help
 
-usage: AWSPEAS.py [-h] (--profile PROFILE | --access-key-id ACCESS_KEY_ID) [--secret-access-key SECRET_ACCESS_KEY] [--session-token SESSION_TOKEN]
-                  [--out-json-path OUT_JSON_PATH] [--threads THREADS] [--debug] --region REGION [--aws-services AWS_SERVICES]
-                  [--skip-iam-policies] [--skip-simulation] [--skip-bruteforce] [--skip-managed-policies-guess]
-
-Run AWSPEASS to find all your current permissions in AWS and check for potential privilege escalation risks. AWSPEASS requires either a profile or AWS credentials (access key + secret key).
+usage: AWSPEAS.py [-h] [--profile PROFILE | --access-key-id ACCESS_KEY_ID]
+                  [--secret-access-key SECRET_ACCESS_KEY] [--session-token SESSION_TOKEN]
+                  [--region REGION] [--out-json-path OUT_JSON_PATH] [--threads THREADS]
+                  [--debug] [--aws-services AWS_SERVICES] [--skip-iam-policies]
+                  [--skip-simulation] [--skip-bruteforce] [--bruteforce-always]
+                  [--skip-managed-policies-guess] [--no-ask]
 
 options:
   -h, --help            show this help message and exit
-  --profile PROFILE     AWS profile to use
+  --profile PROFILE     AWS profile (otherwise use the normal AWS credential chain)
   --access-key-id ACCESS_KEY_ID
                         AWS Access Key ID
   --secret-access-key SECRET_ACCESS_KEY
@@ -399,22 +391,27 @@ options:
                         Output JSON file path (e.g. /tmp/aws_results.json)
   --threads THREADS     Number of threads to use
   --debug               Print more infromation when brute-forcing permissions
-  --region REGION       Indicate the region to use for brute-forcing permissions
+  --region REGION       Region for regional probes (optional)
   --aws-services AWS_SERVICES
                         Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-services
                         s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)
   --skip-iam-policies   Skip retrieving permissions from IAM policies
   --skip-simulation     Skip simulating permissions using simulate-principal-policy
   --skip-bruteforce     Skip brute-force enumeration (automatic by default when IAM/simulation fail)
+  --bruteforce-always   Run live read-only probes even when policy enumeration is complete
   --skip-managed-policies-guess
                         Skip guessing permissions based on AWS managed policies
+  --no-ask              Do not prompt; use defaults (but stop safely on possible canary credentials)
 ```
 
 - **Usage Examples:**  
 
 ```bash
-# Basic usage with profile and region (IAM → Simulation → Brute-force automatically)
-python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION>
+# Normal AWS credential chain (environment, role, or default profile)
+python3 AWSPEAS.py
+
+# Named profile; region is optional
+python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --no-ask
 
 # Using AWS credentials directly (Access Key + Secret Key)
 python3 AWSPEAS.py --access-key-id <ACCESS_KEY_ID> --secret-access-key <SECRET_ACCESS_KEY> --region <AWS_REGION>
@@ -434,8 +431,11 @@ python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-simulati
 # Try IAM and simulation, but never brute-force
 python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-bruteforce
 
-# Full stealth mode - only brute-force, skip everything else
+# Live read-only fallback only
 python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --skip-iam-policies --skip-simulation --skip-managed-policies-guess
+
+# Also probe for read access granted by resource policies
+python3 AWSPEAS.py --profile <AWS_PROFILE> --aws-services s3api,sqs,sns --bruteforce-always
 ```
 
 </details>
