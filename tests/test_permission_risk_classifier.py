@@ -214,6 +214,34 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             ),
             "medium",
         )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.AppConfiguration/configurationStores/ListKeys/action"
+            ),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Devices/IotHubs/listkeys/action"),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Storage/storageAccounts/listAccountSas/action"),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Storage/storageAccounts/listServiceSas/action"),
+            "critical",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.EventGrid/topics/listKeys/action"),
+            "high",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.OperationalInsights/workspaces/listKeys/action"
+            ),
+            "high",
+        )
 
     def test_graph_scopes_and_unresolved_entra_evidence_are_classified(self) -> None:
         self.assertEqual(self.classify("openid"), "low")

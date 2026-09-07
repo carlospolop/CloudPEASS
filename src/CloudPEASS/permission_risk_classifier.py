@@ -262,11 +262,27 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.managedidentity/userassignedidentities/federatedidentitycredentials/write",
         "microsoft.web/sites/config/list/action",
         "microsoft.web/sites/publishxml/action",
+        "microsoft.storage/storageaccounts/listaccountsas/action",
+        "microsoft.storage/storageaccounts/listservicesas/action",
     }
 )
 
 _AZURE_HIGH_EXACT = frozenset(
     {
+        "microsoft.eventgrid/domains/listkeys/action",
+        "microsoft.eventgrid/domains/regeneratekey/action",
+        "microsoft.eventgrid/namespaces/listkeys/action",
+        "microsoft.eventgrid/namespaces/regeneratekey/action",
+        "microsoft.eventgrid/namespaces/topics/listkeys/action",
+        "microsoft.eventgrid/namespaces/topics/regeneratekey/action",
+        "microsoft.eventgrid/partnernamespaces/listkeys/action",
+        "microsoft.eventgrid/partnernamespaces/regeneratekey/action",
+        "microsoft.eventgrid/topics/listkeys/action",
+        "microsoft.eventgrid/topics/regeneratekey/action",
+        "microsoft.operationalinsights/workspaces/listkeys/action",
+        "microsoft.operationalinsights/workspaces/regeneratesharedkey/action",
+        "microsoft.operationalinsights/workspaces/sharedkeys/action",
+        "microsoft.operationalinsights/workspaces/sharedkeys/read",
         "microsoft.authorization/roledefinitions/write",
         "microsoft.compute/virtualmachines/login/action",
         "microsoft.containerservice/managedclusters/listclusterusercredential/action",
