@@ -368,6 +368,54 @@ class K8sClient:
             raise last_error
         raise last_error or APIError("kubectl request failed")
 
+    def probe_get(self, path: str) -> tuple[int | None, int]:
+        """Probe a safe non-resource GET without retaining or printing its body."""
+        self._validate_safe_get_path(path)
+        if self.api_client is None:
+            args = ["get", "--raw", path]
+            self._validate_kubectl_args(args)
+            command = self._kubectl_base() + args
+            try:
+                completed = subprocess.run(
+                    command,
+                    text=False,
+                    capture_output=True,
+                    timeout=self.timeout,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return None, 0
+            if completed.returncode == 0:
+                return 200, len(completed.stdout)
+            error_text = (completed.stderr or completed.stdout).decode(
+                "utf-8", errors="replace"
+            )
+            return self._status_from_error(error_text), 0
+
+        header_params = {"Accept": "*/*"}
+        if self.impersonate_user:
+            header_params["Impersonate-User"] = self.impersonate_user
+        if self.impersonate_groups:
+            header_params["Impersonate-Group"] = self.impersonate_groups[0]
+        kwargs = {
+            "auth_settings": ["BearerToken"],
+            "header_params": header_params,
+            "_return_http_data_only": True,
+            "_preload_content": True,
+            "_request_timeout": self.timeout,
+        }
+        if getattr(self, "_modern_call_api", False):
+            kwargs["response_types_map"] = {200: "str"}
+        else:
+            kwargs["response_type"] = "str"
+        try:
+            result = self.api_client.call_api(path, "GET", **kwargs)
+        except Exception as exc:
+            return getattr(exc, "status", None), 0
+        if isinstance(result, bytes):
+            return 200, len(result)
+        return 200, len(str(result or "").encode("utf-8"))
+
     def _official_request(
         self,
         method: str,
@@ -433,6 +481,8 @@ class K8sClient:
             return 401
         if "Forbidden" in message:
             return 403
+        if "NotFound" in message or "Not Found" in message or re.search(r"\b404\b", message):
+            return 404
         if "Too Many Requests" in message or re.search(r"\b429\b", message):
             return 429
         if "ServiceUnavailable" in message or re.search(r"\b503\b", message):
@@ -485,7 +535,18 @@ class K8sClient:
 
     @staticmethod
     def _validate_safe_get_path(path: str) -> None:
-        decoded_path = unquote(urlsplit(path).path).rstrip("/")
+        if not path.startswith("/"):
+            raise ValueError("Kubernetes API path must start with /")
+        parsed = urlsplit(path)
+        if parsed.scheme or parsed.netloc:
+            raise ValueError("Kubernetes API path must be relative to the configured server")
+        decoded_path = parsed.path
+        for _ in range(3):
+            newly_decoded = unquote(decoded_path)
+            if newly_decoded == decoded_path:
+                break
+            decoded_path = newly_decoded
+        decoded_path = decoded_path.rstrip("/")
         if re.search(
             r"/(?:pods|nodes|services)/[^/]+/(?:exec|attach|portforward|proxy)(?:/|$)",
             decoded_path,

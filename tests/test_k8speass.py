@@ -11,7 +11,7 @@ from src.CloudPEASS.interactive import confirm_slow_operation
 from src.k8s.client import APIError, K8sClient
 from src.k8s.discovery import discover_api_resources
 from src.k8s.k8speass import K8sPEASS
-from src.k8s.models import PermissionFinding, PermissionKey
+from src.k8s.models import APIResource, Coverage, PermissionFinding, PermissionKey
 from src.k8s.passive import is_valid_namespace_name
 from src.k8s.reviews import findings_from_rules
 from src.k8s.risks import classify_permission
@@ -79,6 +79,32 @@ class ReadOnlyGuardrailTests(unittest.TestCase):
         self.assertTrue(K8sClient._is_transient(None, "connection reset by peer"))
         self.assertFalse(K8sClient._is_transient(401, "Unauthorized"))
         self.assertFalse(K8sClient._is_transient(403, "Forbidden"))
+
+    def test_status_classifier_recognizes_not_found(self):
+        self.assertEqual(K8sClient._status_from_error("Error from server (NotFound)"), 404)
+        self.assertEqual(K8sClient._status_from_error("HTTP 404 Not Found"), 404)
+
+    def test_kubectl_probe_get_returns_status_without_parsing_body(self):
+        client = object.__new__(K8sClient)
+        client.api_client = None
+        client.timeout = 1
+        client._kubectl_base = lambda: ["kubectl"]
+        response = SimpleNamespace(returncode=0, stdout=b"plain text", stderr=b"")
+        with patch("src.k8s.client.subprocess.run", return_value=response):
+            self.assertEqual(client.probe_get("/debug/pprof/"), (200, 10))
+
+    def test_probe_get_still_rejects_proxy_paths(self):
+        client = object.__new__(K8sClient)
+        client.api_client = None
+        for unsafe_path in (
+            "/api/v1/nodes/node-1/proxy/metrics",
+            "/api/v1/nodes/node-1%2Fproxy%2Fmetrics",
+            "/api/v1/nodes/node-1%252Fproxy%252Fmetrics",
+            "https://attacker.invalid/debug/pprof/",
+            "//attacker.invalid/debug/pprof/",
+        ):
+            with self.subTest(path=unsafe_path), self.assertRaises(ValueError):
+                client.probe_get(unsafe_path)
 
     def test_kubectl_transient_failure_is_retried(self):
         client = object.__new__(K8sClient)
@@ -169,6 +195,164 @@ class ReadOnlyGuardrailTests(unittest.TestCase):
 
 
 class PermissionModelTests(unittest.TestCase):
+    @staticmethod
+    def _scanner_with_probe(status, size=0):
+        scanner = object.__new__(K8sPEASS)
+        scanner.client = SimpleNamespace(probe_get=Mock(return_value=(status, size)))
+        scanner._nonresource_probe_cache = {}
+        return scanner
+
+    def test_high_nonresource_url_requires_live_safe_endpoint(self):
+        finding = PermissionFinding(
+            key=PermissionKey("get", non_resource_url="/debug/*"),
+            allowed=True,
+            severity="high",
+            explanation="sensitive",
+        )
+        scanner = self._scanner_with_probe(200, 123)
+        confirmed = scanner._validate_high_nonresource_findings([finding])[0]
+        self.assertEqual(confirmed.severity, "high")
+        self.assertTrue(confirmed.resource_served)
+        self.assertIn("123 bytes", confirmed.explanation)
+
+        scanner = self._scanner_with_probe(404)
+        dormant = scanner._validate_high_nonresource_findings([finding])[0]
+        self.assertEqual(dormant.severity, "low")
+        self.assertEqual(dormant.potential_severity, "high")
+        self.assertFalse(dormant.resource_served)
+
+    def test_unbounded_nonresource_pattern_is_conditional_not_high(self):
+        finding = PermissionFinding(
+            key=PermissionKey("get", non_resource_url="/debug/custom"),
+            allowed=True,
+            severity="high",
+        )
+        scanner = self._scanner_with_probe(200)
+        conditional = scanner._validate_high_nonresource_findings([finding])[0]
+        self.assertEqual(conditional.severity, "medium")
+        self.assertEqual(conditional.potential_severity, "high")
+        scanner.client.probe_get.assert_not_called()
+
+    def test_nonresource_probe_results_are_cached(self):
+        scanner = self._scanner_with_probe(200, 5)
+        findings = [
+            PermissionFinding(
+                key=PermissionKey("get", non_resource_url="/debug/*"),
+                allowed=True,
+                severity="high",
+            ),
+            PermissionFinding(
+                key=PermissionKey("get", non_resource_url="*"),
+                allowed=True,
+                severity="high",
+            ),
+        ]
+        scanner._validate_high_nonresource_findings(findings)
+        scanner.client.probe_get.assert_called_once_with("/debug/pprof/")
+
+    def test_unserved_explicit_rbac_grant_is_downgraded(self):
+        scanner = object.__new__(K8sPEASS)
+        scanner.coverage = Coverage(discovery_complete=True)
+        finding = PermissionFinding(
+            key=PermissionKey("patch", resource="clustertrustbundles"),
+            allowed=True,
+            severity="high",
+            explanation="potential",
+        )
+        normalized = scanner._normalize_summarized_findings([finding], [])[0]
+        self.assertEqual(normalized.severity, "low")
+        self.assertEqual(normalized.potential_severity, "high")
+        self.assertFalse(normalized.resource_served)
+        self.assertIn("not served", normalized.explanation)
+
+    def test_unadvertised_operation_is_dormant_but_special_verbs_are_preserved(self):
+        scanner = object.__new__(K8sPEASS)
+        scanner.coverage = Coverage(discovery_complete=True)
+        resources = [
+            APIResource(
+                group="",
+                version="v1",
+                resource="pods",
+                subresource="log",
+                namespaced=True,
+                verbs=("get",),
+            ),
+            APIResource(
+                group="rbac.authorization.k8s.io",
+                version="v1",
+                resource="roles",
+                namespaced=True,
+                verbs=("create", "get", "patch", "update"),
+            ),
+        ]
+        findings = [
+            PermissionFinding(
+                key=PermissionKey(
+                    "create", resource="pods", subresource="log", namespace="demo"
+                ),
+                allowed=True,
+                severity="medium",
+            ),
+            PermissionFinding(
+                key=PermissionKey(
+                    "escalate",
+                    group="rbac.authorization.k8s.io",
+                    resource="roles",
+                    namespace="demo",
+                ),
+                allowed=True,
+                severity="critical",
+            ),
+        ]
+        dormant, special = scanner._normalize_summarized_findings(findings, resources)
+        self.assertEqual(dormant.severity, "low")
+        self.assertFalse(dormant.resource_served)
+        self.assertEqual(special.severity, "critical")
+        self.assertTrue(special.resource_served)
+
+    def test_uninstalled_policy_resource_is_dormant_even_for_use(self):
+        scanner = object.__new__(K8sPEASS)
+        scanner.coverage = Coverage(discovery_complete=True)
+        finding = PermissionFinding(
+            key=PermissionKey(
+                "use",
+                group="security.openshift.io",
+                resource="securitycontextconstraints",
+            ),
+            allowed=True,
+            severity="medium",
+        )
+        normalized = scanner._normalize_summarized_findings([finding], [])[0]
+        self.assertEqual(normalized.severity, "low")
+        self.assertEqual(normalized.potential_severity, "medium")
+        self.assertFalse(normalized.resource_served)
+
+    def test_exact_confirmation_preserves_served_metadata(self):
+        scanner = object.__new__(K8sPEASS)
+        scanner.coverage = Coverage()
+        key = PermissionKey("get", resource="secrets", namespace="demo")
+        summarized = PermissionFinding(
+            key=key,
+            allowed=True,
+            confidence="summarized",
+            severity="critical",
+            resource_served=True,
+            explanation="served endpoint evidence",
+        )
+        scanner._run_access_reviews = Mock(
+            return_value=[
+                PermissionFinding(
+                    key=key,
+                    allowed=True,
+                    confidence="confirmed",
+                    severity="critical",
+                )
+            ]
+        )
+        confirmed = scanner._confirm_high_risk([summarized])
+        self.assertTrue(confirmed[0].resource_served)
+        self.assertEqual(confirmed[0].explanation, "served endpoint evidence")
+
     def test_resource_names_generate_named_and_selector_findings(self):
         status = {
             "resourceRules": [
@@ -196,6 +380,158 @@ class PermissionModelTests(unittest.TestCase):
         severity, explanation = classify_permission(key)
         self.assertEqual(severity, "critical")
         self.assertIn("token", explanation.lower())
+
+    def test_permission_risk_matrix_covers_offensive_control_paths(self):
+        cases = [
+            ("critical", PermissionKey("get", resource="*")),
+            ("high", PermissionKey("create", resource="*")),
+            ("critical", PermissionKey("list", resource="secrets")),
+            ("high", PermissionKey("patch", resource="secrets")),
+            (
+                "critical",
+                PermissionKey("create", resource="serviceaccounts", subresource="token"),
+            ),
+            ("critical", PermissionKey("get", resource="nodes", subresource="proxy")),
+            ("medium", PermissionKey("create", resource="nodes", subresource="checkpoint")),
+            ("critical", PermissionKey("bind", resource="clusterroles")),
+            ("critical", PermissionKey("escalate", resource="roles")),
+            ("critical", PermissionKey("impersonate", resource="groups")),
+            (
+                "critical",
+                PermissionKey(
+                    "impersonate",
+                    resource="serviceaccounts",
+                    name="system:serviceaccount:demo:builder",
+                ),
+            ),
+            ("high", PermissionKey("approve", resource="signers")),
+            ("medium", PermissionKey("sign", resource="signers")),
+            ("medium", PermissionKey("attest", resource="signers")),
+            ("high", PermissionKey("create", resource="certificatesigningrequests")),
+            ("medium", PermissionKey("create", resource="podcertificaterequests")),
+            (
+                "high",
+                PermissionKey(
+                    "update",
+                    resource="certificatesigningrequests",
+                    subresource="approval",
+                ),
+            ),
+            ("medium", PermissionKey("use", resource="*")),
+            ("high", PermissionKey("create", resource="pods", subresource="exec")),
+            (
+                "high",
+                PermissionKey("patch", resource="pods", subresource="ephemeralcontainers"),
+            ),
+            ("medium", PermissionKey("create", resource="pods", subresource="eviction")),
+            ("high", PermissionKey("create", resource="bindings")),
+            ("high", PermissionKey("get", resource="services", subresource="proxy")),
+            ("medium", PermissionKey("patch", resource="nodes", subresource="status")),
+            ("high", PermissionKey("create", resource="daemonsets")),
+            ("high", PermissionKey("patch", resource="clusterrolebindings")),
+            ("high", PermissionKey("patch", resource="validatingadmissionpolicybindings")),
+            ("high", PermissionKey("create", resource="namespaces")),
+            (
+                "medium",
+                PermissionKey(
+                    "use",
+                    group="security.openshift.io",
+                    resource="securitycontextconstraints",
+                ),
+            ),
+            (
+                "medium",
+                PermissionKey(
+                    "patch",
+                    group="kyverno.io",
+                    resource="policyexceptions",
+                ),
+            ),
+            ("high", PermissionKey("delete", resource="networkpolicies")),
+            ("high", PermissionKey("patch", resource="services")),
+            ("medium", PermissionKey("create", resource="endpointslices")),
+            ("medium", PermissionKey("patch", resource="servicecidrs")),
+            ("high", PermissionKey("create", resource="persistentvolumes")),
+            ("medium", PermissionKey("create", resource="volumesnapshotcontents")),
+            ("medium", PermissionKey("patch", resource="customresourcedefinitions")),
+            ("medium", PermissionKey("create", resource="deviceclasses")),
+            (
+                "medium",
+                PermissionKey(
+                    "arbitrary-node:patch",
+                    group="resource.k8s.io",
+                    resource="resourceclaims",
+                    subresource="driver",
+                ),
+            ),
+            (
+                "medium",
+                PermissionKey(
+                    "request-serviceaccounts-token-audience",
+                    resource="registry.example",
+                    name="build-sa",
+                ),
+            ),
+            ("medium", PermissionKey("delete", resource="nodes")),
+            ("medium", PermissionKey("patch", resource="serviceaccounts")),
+            (
+                "high",
+                PermissionKey(
+                    "patch",
+                    resource="configmaps",
+                    namespace="kube-system",
+                    name="aws-auth",
+                ),
+            ),
+            ("high", PermissionKey("update", resource="configmaps")),
+            ("medium", PermissionKey("create", resource="configmaps")),
+            ("medium", PermissionKey("delete", resource="pods")),
+            ("medium", PermissionKey("patch", resource="pods")),
+            (
+                "medium",
+                PermissionKey(
+                    "create",
+                    group="argoproj.io",
+                    resource="applications",
+                ),
+            ),
+            ("medium", PermissionKey("get", resource="pods", subresource="log")),
+            ("medium", PermissionKey("list", resource="pods")),
+            ("medium", PermissionKey("patch", resource="leases")),
+            (
+                "medium",
+                PermissionKey(
+                    "patch", group="wgpolicyk8s.io", resource="policyreports"
+                ),
+            ),
+            ("medium", PermissionKey("get", non_resource_url="/metrics")),
+            ("low", PermissionKey("get", resource="namespaces")),
+            ("low", PermissionKey("get", non_resource_url="/version")),
+        ]
+        for expected, key in cases:
+            with self.subTest(permission=key.human()):
+                severity, explanation = classify_permission(key)
+                self.assertEqual(severity, expected)
+                self.assertTrue(explanation)
+
+    def test_aws_auth_needs_platform_evidence_and_stays_high(self):
+        severity, _ = classify_permission(
+            PermissionKey(
+                "patch", resource="configmaps", namespace="application", name="aws-auth"
+            )
+        )
+        self.assertEqual(severity, "high")
+
+    def test_special_verbs_are_not_critical_on_unrelated_resources(self):
+        for key in (
+            PermissionKey("bind", resource="pods"),
+            PermissionKey("escalate", resource="configmaps"),
+            PermissionKey("impersonate", resource="pods"),
+            PermissionKey("approve", resource="pods"),
+        ):
+            with self.subTest(permission=key.human()):
+                severity, _ = classify_permission(key)
+                self.assertNotEqual(severity, "critical")
 
     def test_no_opinion_exact_review_does_not_erase_positive_rules_review(self):
         key = PermissionKey(

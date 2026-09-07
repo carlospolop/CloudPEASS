@@ -8,6 +8,9 @@ read-only: HTTP `GET` plus the three non-persisted self-review APIs
 resource and never uses exec, attach, port-forward, workload proxying,
 TokenRequest, CSR, or dry-run write probes.
 
+The severity taxonomy and complete critical/high permission families are
+documented in [K8sPEASS permission risk model](K8sPEASS-risk-model.md).
+
 ## Quick start
 
 ```bash
@@ -39,6 +42,13 @@ disable this or a value up to 5 for unstable links.
    explicitly unverified JWT claims as a fallback.
 2. Dynamically discover core APIs, aggregated APIs, CRDs, subresources,
    advertised verbs, API versions, and whether each resource is namespaced.
+   Explicit RBAC tuples for an API group/resource or operation that is not
+   currently served are retained as dormant grants and do not inflate the
+   active critical/high totals. Their potential severity remains in JSON in
+   case that API is installed later.
+   Sensitive non-resource URL grants use only bounded read-only availability
+   checks for known safe paths: confirmed endpoints stay high, HTTP 404 is
+   dormant, and unsafe or inconclusive patterns remain conditional/medium.
 3. Request a `SelfSubjectRulesReview` for every known namespace. Preserve
    wildcard rules, non-resource URLs, special verbs, subresources, and
    `resourceNames` restrictions. Namespace names are sourced from the API when
@@ -77,8 +87,9 @@ disable this or a value up to 5 for unstable links.
   constraints through `SelfSubjectAccessReview`, so a positive rules-review
   result is retained when the exact review returns only “no opinion.”
 - The JSON report includes all allowed, denied, and unknown review results,
-  discovery coverage, inaccessible optional inventories, admission evidence,
-  and the discovered API-resource catalog. The concise console view hides
+  active versus dormant/unserved grants, discovery coverage, inaccessible
+  optional inventories, admission evidence, and the discovered API-resource
+  catalog. The concise console view hides
   low-risk and repeated entries unless `--show-all` is used.
 - JSON output is written through a private, uniquely named temporary file and
   atomically replaced, avoiding partial reports and collisions between scans.

@@ -87,6 +87,7 @@ class K8sPEASS:
         self.show_all = show_all
         self.out_path = out_path
         self.coverage = Coverage()
+        self._nonresource_probe_cache: dict[str, tuple[int | None, int]] = {}
 
     def close(self) -> None:
         self.client.close()
@@ -180,6 +181,7 @@ class K8sPEASS:
             summarized.extend(findings_from_rules(status, namespace))
 
         summarized = self._normalize_summarized_findings(summarized, resources)
+        summarized = self._validate_high_nonresource_findings(summarized)
         confirmed = self._confirm_high_risk(summarized)
         if not summarized:
             confirmed.extend(self._fallback_checks(namespaces, resources))
@@ -272,15 +274,180 @@ class K8sPEASS:
                     key=new_key,
                     severity=severity,
                     explanation=explanation,
+                    resource_served=True,
+                )
+                advertised_verbs = {verb.lower() for verb in selected.verbs}
+                if (
+                    key.verb.lower() not in advertised_verbs
+                    and not self._is_special_verb_for_served_resource(key)
+                ):
+                    finding = replace(
+                        finding,
+                        severity="low",
+                        potential_severity=severity,
+                        resource_served=False,
+                        explanation=(
+                            f"Dormant RBAC grant: the served {selected.api_name} endpoint "
+                            f"does not advertise verb {key.verb!r}. It would be {severity} "
+                            "if a matching operation becomes available."
+                        ),
+                    )
+            elif (
+                self.coverage.discovery_complete
+                and key.resource != "*"
+                and not self._authorization_without_discovery(key)
+            ):
+                severity, _ = classify_permission(key)
+                api_name = key.full_resource
+                if key.group:
+                    api_name += f".{key.group}"
+                finding = replace(
+                    finding,
+                    severity="low",
+                    potential_severity=severity,
+                    resource_served=False,
+                    explanation=(
+                        f"Dormant RBAC grant: {api_name} is not served by the current "
+                        f"API discovery catalog. It would be {severity} if that API is installed."
+                    ),
                 )
             normalized.append(finding)
         return normalized
+
+    def _validate_high_nonresource_findings(
+        self, findings: list[PermissionFinding]
+    ) -> list[PermissionFinding]:
+        """Confirm that a sensitive non-resource URL is present using safe GETs.
+
+        RBAC may authorize a URL which this API server does not expose. Only a
+        successful, bounded well-known probe remains an active high finding.
+        Other grants retain their potential severity but are not advertised as
+        tested high-impact paths.
+        """
+        normalized: list[PermissionFinding] = []
+        for finding in findings:
+            path = finding.key.non_resource_url
+            if not path or finding.severity not in {"critical", "high"}:
+                normalized.append(finding)
+                continue
+
+            candidate = self._safe_nonresource_probe_candidate(path)
+            if not candidate:
+                normalized.append(
+                    replace(
+                        finding,
+                        severity="medium",
+                        potential_severity=finding.severity,
+                        resource_served=None,
+                        explanation=(
+                            f"Conditional sensitive API-server URL grant {path}; "
+                            "K8sPEASS has no bounded safe availability probe for this pattern."
+                        ),
+                    )
+                )
+                continue
+
+            if candidate not in self._nonresource_probe_cache:
+                self._nonresource_probe_cache[candidate] = self.client.probe_get(candidate)
+            status, byte_length = self._nonresource_probe_cache[candidate]
+            if status == 200:
+                normalized.append(
+                    replace(
+                        finding,
+                        resource_served=True,
+                        explanation=(
+                            f"{finding.explanation} Read-only availability probe "
+                            f"confirmed {candidate} ({byte_length} bytes)."
+                        ),
+                    )
+                )
+            elif status == 404:
+                normalized.append(
+                    replace(
+                        finding,
+                        severity="low",
+                        potential_severity=finding.severity,
+                        resource_served=False,
+                        explanation=(
+                            f"Dormant RBAC grant: {path} authorizes a sensitive URL, "
+                            f"but the safe candidate {candidate} returned HTTP 404."
+                        ),
+                    )
+                )
+            else:
+                status_text = f"HTTP {status}" if status is not None else "no response"
+                normalized.append(
+                    replace(
+                        finding,
+                        severity="medium",
+                        potential_severity=finding.severity,
+                        resource_served=None,
+                        explanation=(
+                            f"Conditional sensitive API-server URL grant {path}; "
+                            f"the safe candidate {candidate} produced {status_text}, so "
+                            "the high-impact path was not confirmed."
+                        ),
+                    )
+                )
+        return normalized
+
+    @staticmethod
+    def _safe_nonresource_probe_candidate(path: str) -> str:
+        normalized = path.lower()
+        if normalized == "*" or normalized.startswith("/debug"):
+            candidate = "/debug/pprof/"
+            if normalized in {"*", "/debug", "/debug/*", "/debug/pprof", "/debug/pprof/", "/debug/pprof/*"}:
+                return candidate
+        if normalized.startswith("/logs") and normalized in {"/logs", "/logs/", "/logs/*"}:
+            return "/logs/"
+        return ""
+
+    @staticmethod
+    def _is_special_verb_for_served_resource(key: PermissionKey) -> bool:
+        """Return True for real special verbs omitted from discovery verb lists."""
+        verb = key.verb.lower()
+        if key.non_resource_url or key.resource == "*" or verb == "*":
+            return True
+        if verb in {
+            "approve",
+            "attest",
+            "bind",
+            "escalate",
+            "impersonate",
+            "sign",
+            "unsafe-delete-ignore-read-errors",
+            "use",
+            "request-serviceaccounts-token-audience",
+        } or verb.endswith((":patch", ":update")):
+            return True
+        return False
+
+    @staticmethod
+    def _authorization_without_discovery(key: PermissionKey) -> bool:
+        """Return True only for virtual or kubelet authorization resources."""
+        resource = key.resource.lower()
+        subresource = key.subresource.lower()
+        if key.non_resource_url or resource == "*" or key.verb == "*":
+            return True
+        if resource == "nodes" and subresource in {
+            "checkpoint",
+            "configz",
+            "healthz",
+            "log",
+            "metrics",
+            "pods",
+            "spec",
+            "stats",
+        }:
+            return True
+        return resource in {"groups", "signers", "uids", "userextras", "users"}
 
     def _confirm_high_risk(
         self, summarized: list[PermissionFinding], limit: int = 75
     ) -> list[PermissionFinding]:
         candidates: list[PermissionKey] = []
         seen: set[PermissionKey] = set()
+        source_by_key: dict[PermissionKey, PermissionFinding] = {}
         for finding in summarized:
             if finding.severity not in {"critical", "high"}:
                 continue
@@ -288,13 +455,23 @@ class K8sPEASS:
                 continue
             seen.add(finding.key)
             candidates.append(finding.key)
+            source_by_key[finding.key] = finding
         if len(candidates) > limit:
             self.coverage.warnings.append(
                 f"Confirmed the first {limit} high-risk summarized permissions. "
                 "Use --brute-force-permissions for exhaustive exact checks."
             )
             candidates = candidates[:limit]
-        return self._run_access_reviews(candidates)
+        confirmed = self._run_access_reviews(candidates)
+        return [
+            replace(
+                finding,
+                resource_served=source_by_key[finding.key].resource_served,
+                potential_severity=source_by_key[finding.key].potential_severity,
+                explanation=source_by_key[finding.key].explanation,
+            )
+            for finding in confirmed
+        ]
 
     def _fallback_checks(
         self,
@@ -611,6 +788,16 @@ class K8sPEASS:
             severity: sum(1 for finding in allowed if finding.severity == severity)
             for severity in SEVERITY_ORDER
         }
+        dormant = [
+            finding
+            for finding in allowed
+            if finding.resource_served is False and finding.potential_severity
+        ]
+        conditional = [
+            finding
+            for finding in allowed
+            if finding.resource_served is None and finding.potential_severity
+        ]
         print(f"{Fore.YELLOW}\nPermission summary")
         print(
             f"{Fore.RED}{Back.YELLOW} Critical: {counts['critical']} {Style.RESET_ALL} "
@@ -621,6 +808,11 @@ class K8sPEASS:
             f"{Fore.WHITE}Exact authorization reviews: "
             f"{Fore.CYAN}{self.coverage.exact_checks}"
         )
+        if dormant or conditional:
+            print(
+                f"{Fore.WHITE}Not counted as active critical/high: "
+                f"{Fore.CYAN}{len(dormant)} dormant, {len(conditional)} conditional"
+            )
 
         for severity in ("critical", "high", "medium", "low"):
             items = [item for item in allowed if item.severity == severity]

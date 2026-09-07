@@ -81,6 +81,8 @@ class PermissionFinding:
     explanation: str = ""
     admission: str = "not-applicable"
     resource_names: list[str] = field(default_factory=list)
+    resource_served: bool | None = None
+    potential_severity: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
