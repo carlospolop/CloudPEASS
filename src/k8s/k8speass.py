@@ -408,6 +408,8 @@ class K8sPEASS:
         verb = key.verb.lower()
         if key.non_resource_url or key.resource == "*" or verb == "*":
             return True
+        if verb.startswith(("impersonate:", "impersonate-on:")):
+            return True
         if verb in {
             "approve",
             "attest",
@@ -440,7 +442,12 @@ class K8sPEASS:
             "stats",
         }:
             return True
-        return resource in {"groups", "signers", "uids", "userextras", "users"}
+        if resource in {"groups", "signers", "uids", "userextras", "users"}:
+            return True
+        return key.group == "authentication.k8s.io" and resource in {
+            "nodes",
+            "serviceaccounts",
+        }
 
     def _confirm_high_risk(
         self, summarized: list[PermissionFinding], limit: int = 75
@@ -506,6 +513,46 @@ class K8sPEASS:
                         resource="deployments",
                         namespace=namespace,
                     ),
+                    PermissionKey("patch", resource="pods", namespace=namespace),
+                    PermissionKey(
+                        "patch",
+                        resource="pods",
+                        subresource="status",
+                        namespace=namespace,
+                    ),
+                    PermissionKey("create", resource="services", namespace=namespace),
+                    PermissionKey("create", resource="endpoints", namespace=namespace),
+                    PermissionKey(
+                        "create",
+                        group="discovery.k8s.io",
+                        version="v1",
+                        resource="endpointslices",
+                        namespace=namespace,
+                    ),
+                    PermissionKey(
+                        "patch",
+                        resource="services",
+                        subresource="status",
+                        namespace=namespace,
+                    ),
+                    PermissionKey("create", resource="configmaps", namespace=namespace),
+                    PermissionKey(
+                        "impersonate-on:user-info:get",
+                        resource="secrets",
+                        namespace=namespace,
+                    ),
+                    PermissionKey(
+                        "impersonate:serviceaccount",
+                        group="authentication.k8s.io",
+                        version="v1",
+                        resource="serviceaccounts",
+                        namespace=namespace,
+                    ),
+                    PermissionKey(
+                        "impersonate-on:serviceaccount:create",
+                        resource="pods",
+                        namespace=namespace,
+                    ),
                     PermissionKey(
                         "create",
                         group="rbac.authorization.k8s.io",
@@ -526,9 +573,50 @@ class K8sPEASS:
                 ),
                 PermissionKey(
                     "impersonate",
+                    version="v1",
+                    resource="users",
+                ),
+                PermissionKey(
+                    "impersonate:user-info",
                     group="authentication.k8s.io",
                     version="v1",
                     resource="users",
+                ),
+                PermissionKey(
+                    "patch",
+                    group="admissionregistration.k8s.io",
+                    version="v1",
+                    resource="validatingadmissionpolicies",
+                ),
+                PermissionKey(
+                    "patch",
+                    group="admissionregistration.k8s.io",
+                    version="v1",
+                    resource="validatingadmissionpolicybindings",
+                ),
+                PermissionKey(
+                    "patch",
+                    group="admissionregistration.k8s.io",
+                    version="v1",
+                    resource="mutatingadmissionpolicies",
+                ),
+                PermissionKey(
+                    "patch",
+                    group="admissionregistration.k8s.io",
+                    version="v1",
+                    resource="mutatingadmissionpolicybindings",
+                ),
+                PermissionKey(
+                    "patch",
+                    group="admissionregistration.k8s.io",
+                    version="v1",
+                    resource="validatingwebhookconfigurations",
+                ),
+                PermissionKey(
+                    "delete",
+                    group="admissionregistration.k8s.io",
+                    version="v1",
+                    resource="mutatingwebhookconfigurations",
                 ),
                 PermissionKey("get", non_resource_url="/metrics"),
                 PermissionKey("get", non_resource_url="/debug/pprof/"),
@@ -601,13 +689,13 @@ class K8sPEASS:
                 ),
                 PermissionKey(
                     verb="impersonate",
-                    group="authentication.k8s.io",
+                    group="",
                     version="v1",
                     resource="users",
                 ),
                 PermissionKey(
                     verb="impersonate",
-                    group="authentication.k8s.io",
+                    group="",
                     version="v1",
                     resource="groups",
                 ),
@@ -641,6 +729,24 @@ class K8sPEASS:
                     version="v1",
                     resource="signers",
                 ),
+                PermissionKey(
+                    verb="impersonate:user-info",
+                    group="authentication.k8s.io",
+                    version="v1",
+                    resource="users",
+                ),
+                PermissionKey(
+                    verb="impersonate:arbitrary-node",
+                    group="authentication.k8s.io",
+                    version="v1",
+                    resource="nodes",
+                ),
+                PermissionKey(
+                    verb="impersonate-on:user-info:get",
+                    group="",
+                    version="v1",
+                    resource="secrets",
+                ),
             }
         )
         for namespace in namespaces:
@@ -665,6 +771,20 @@ class K8sPEASS:
                         group="",
                         version="v1",
                         resource="serviceaccounts",
+                        namespace=namespace,
+                    ),
+                    PermissionKey(
+                        verb="impersonate:serviceaccount",
+                        group="authentication.k8s.io",
+                        version="v1",
+                        resource="serviceaccounts",
+                        namespace=namespace,
+                    ),
+                    PermissionKey(
+                        verb="impersonate-on:serviceaccount:create",
+                        group="",
+                        version="v1",
+                        resource="pods",
                         namespace=namespace,
                     ),
                 }

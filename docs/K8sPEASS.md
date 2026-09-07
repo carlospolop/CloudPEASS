@@ -57,10 +57,14 @@ disable this or a value up to 5 for unstable links.
 4. Confirm summarized high/critical results with exact
    `SelfSubjectAccessReview` calls. If rules review is unavailable or empty,
    run a small fixed set of useful checks so the tool still provides value to
-   principals that cannot list RBAC, namespaces, or workload objects.
+   principals that cannot list RBAC, namespaces, or workload objects. These
+   include credential, workload, traffic-redirection, admission-control, and
+   traditional/constrained-impersonation checks. They are authorization-review
+   requests only and do not exercise the allowed operation.
 5. Optionally run an exhaustive matrix over every discovered API resource,
    subresource, advertised verb and known namespace, plus security-sensitive
-   special verbs and non-resource URLs. This can be slow and noisy in audit
+   special verbs—including Kubernetes 1.36+ constrained impersonation—and
+   non-resource URLs. This can be slow and noisy in audit
    logs, so interactive runs ask first. `--brute-force-permissions` is the
    explicit bypass; `--no-ask` safely skips it unless that flag is present.
 6. If readable, explain matching RoleBindings/ClusterRoleBindings and their

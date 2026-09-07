@@ -254,7 +254,11 @@ class PermissionModelTests(unittest.TestCase):
         scanner = object.__new__(K8sPEASS)
         scanner.coverage = Coverage(discovery_complete=True)
         finding = PermissionFinding(
-            key=PermissionKey("patch", resource="clustertrustbundles"),
+            key=PermissionKey(
+                "patch",
+                group="certificates.k8s.io",
+                resource="clustertrustbundles",
+            ),
             allowed=True,
             severity="high",
             explanation="potential",
@@ -393,9 +397,19 @@ class PermissionModelTests(unittest.TestCase):
             ),
             ("critical", PermissionKey("get", resource="nodes", subresource="proxy")),
             ("medium", PermissionKey("create", resource="nodes", subresource="checkpoint")),
-            ("critical", PermissionKey("bind", resource="clusterroles")),
-            ("critical", PermissionKey("escalate", resource="roles")),
-            ("critical", PermissionKey("impersonate", resource="groups")),
+            (
+                "critical",
+                PermissionKey(
+                    "bind", group="rbac.authorization.k8s.io", resource="clusterroles"
+                ),
+            ),
+            (
+                "critical",
+                PermissionKey(
+                    "escalate", group="rbac.authorization.k8s.io", resource="roles"
+                ),
+            ),
+            ("high", PermissionKey("impersonate", resource="groups")),
             (
                 "critical",
                 PermissionKey(
@@ -404,15 +418,36 @@ class PermissionModelTests(unittest.TestCase):
                     name="system:serviceaccount:demo:builder",
                 ),
             ),
-            ("high", PermissionKey("approve", resource="signers")),
-            ("medium", PermissionKey("sign", resource="signers")),
-            ("medium", PermissionKey("attest", resource="signers")),
-            ("high", PermissionKey("create", resource="certificatesigningrequests")),
+            (
+                "high",
+                PermissionKey(
+                    "approve", group="certificates.k8s.io", resource="signers"
+                ),
+            ),
+            (
+                "medium",
+                PermissionKey("sign", group="certificates.k8s.io", resource="signers"),
+            ),
+            (
+                "medium",
+                PermissionKey(
+                    "attest", group="certificates.k8s.io", resource="signers"
+                ),
+            ),
+            (
+                "high",
+                PermissionKey(
+                    "create",
+                    group="certificates.k8s.io",
+                    resource="certificatesigningrequests",
+                ),
+            ),
             ("medium", PermissionKey("create", resource="podcertificaterequests")),
             (
                 "high",
                 PermissionKey(
                     "update",
+                    group="certificates.k8s.io",
                     resource="certificatesigningrequests",
                     subresource="approval",
                 ),
@@ -427,9 +462,23 @@ class PermissionModelTests(unittest.TestCase):
             ("high", PermissionKey("create", resource="bindings")),
             ("high", PermissionKey("get", resource="services", subresource="proxy")),
             ("medium", PermissionKey("patch", resource="nodes", subresource="status")),
-            ("high", PermissionKey("create", resource="daemonsets")),
-            ("high", PermissionKey("patch", resource="clusterrolebindings")),
-            ("high", PermissionKey("patch", resource="validatingadmissionpolicybindings")),
+            ("high", PermissionKey("create", group="apps", resource="daemonsets")),
+            (
+                "medium",
+                PermissionKey(
+                    "patch",
+                    group="rbac.authorization.k8s.io",
+                    resource="clusterrolebindings",
+                ),
+            ),
+            (
+                "high",
+                PermissionKey(
+                    "patch",
+                    group="admissionregistration.k8s.io",
+                    resource="validatingadmissionpolicybindings",
+                ),
+            ),
             ("high", PermissionKey("create", resource="namespaces")),
             (
                 "medium",
@@ -447,9 +496,19 @@ class PermissionModelTests(unittest.TestCase):
                     resource="policyexceptions",
                 ),
             ),
-            ("high", PermissionKey("delete", resource="networkpolicies")),
+            (
+                "high",
+                PermissionKey(
+                    "delete", group="networking.k8s.io", resource="networkpolicies"
+                ),
+            ),
             ("high", PermissionKey("patch", resource="services")),
-            ("medium", PermissionKey("create", resource="endpointslices")),
+            (
+                "high",
+                PermissionKey(
+                    "create", group="discovery.k8s.io", resource="endpointslices"
+                ),
+            ),
             ("medium", PermissionKey("patch", resource="servicecidrs")),
             ("high", PermissionKey("create", resource="persistentvolumes")),
             ("medium", PermissionKey("create", resource="volumesnapshotcontents")),
@@ -484,9 +543,9 @@ class PermissionModelTests(unittest.TestCase):
                 ),
             ),
             ("high", PermissionKey("update", resource="configmaps")),
-            ("medium", PermissionKey("create", resource="configmaps")),
+            ("high", PermissionKey("create", resource="configmaps")),
             ("medium", PermissionKey("delete", resource="pods")),
-            ("medium", PermissionKey("patch", resource="pods")),
+            ("high", PermissionKey("patch", resource="pods")),
             (
                 "medium",
                 PermissionKey(
@@ -513,6 +572,172 @@ class PermissionModelTests(unittest.TestCase):
                 severity, explanation = classify_permission(key)
                 self.assertEqual(severity, expected)
                 self.assertTrue(explanation)
+
+    def test_new_minikube_verified_paths_are_high(self):
+        cases = (
+            PermissionKey("create", resource="services"),
+            PermissionKey("create", resource="endpoints"),
+            PermissionKey(
+                "create", group="discovery.k8s.io", resource="endpointslices"
+            ),
+            PermissionKey("patch", resource="pods", subresource="status"),
+            PermissionKey("patch", resource="services", subresource="status"),
+            PermissionKey(
+                "delete",
+                group="admissionregistration.k8s.io",
+                resource="validatingadmissionpolicies",
+            ),
+            PermissionKey(
+                "patch",
+                group="admissionregistration.k8s.io",
+                resource="validatingwebhookconfigurations",
+            ),
+            PermissionKey(
+                "delete",
+                group="admissionregistration.k8s.io",
+                resource="mutatingwebhookconfigurations",
+            ),
+            PermissionKey(
+                "create",
+                group="admissionregistration.k8s.io",
+                resource="mutatingadmissionpolicies",
+            ),
+            PermissionKey(
+                "patch",
+                group="admissionregistration.k8s.io",
+                resource="mutatingadmissionpolicybindings",
+            ),
+        )
+        for key in cases:
+            with self.subTest(permission=key.human()):
+                severity, _ = classify_permission(key)
+                self.assertEqual(severity, "high")
+
+    def test_constrained_impersonation_is_conditional_and_impact_aware(self):
+        cases = (
+            (
+                "high",
+                PermissionKey(
+                    "impersonate:user-info",
+                    group="authentication.k8s.io",
+                    resource="users",
+                ),
+            ),
+            (
+                "high",
+                PermissionKey(
+                    "impersonate-on:user-info:get", resource="secrets"
+                ),
+            ),
+            (
+                "medium",
+                PermissionKey(
+                    "impersonate-on:user-info:get", resource="namespaces"
+                ),
+            ),
+            (
+                "medium",
+                PermissionKey(
+                    "impersonate",
+                    group="authentication.k8s.io",
+                    resource="uids",
+                ),
+            ),
+        )
+        for expected, key in cases:
+            with self.subTest(permission=key.human()):
+                severity, explanation = classify_permission(key)
+                self.assertEqual(severity, expected)
+                self.assertIn("impersonat", explanation.lower())
+
+    def test_builtin_names_in_unrelated_api_groups_are_not_overrated(self):
+        cases = (
+            PermissionKey("get", group="example.test", resource="secrets"),
+            PermissionKey("patch", group="example.test", resource="pods"),
+            PermissionKey("create", group="example.test", resource="services"),
+            PermissionKey("get", group="apps", resource="*"),
+        )
+        for key in cases:
+            with self.subTest(permission=key.human()):
+                severity, _ = classify_permission(key)
+                self.assertNotIn(severity, {"critical", "high"})
+
+        core_wildcard, _ = classify_permission(PermissionKey("get", resource="*"))
+        all_groups_wildcard, _ = classify_permission(
+            PermissionKey("get", group="*", resource="*")
+        )
+        self.assertEqual(core_wildcard, "critical")
+        self.assertEqual(all_groups_wildcard, "critical")
+
+    def test_constrained_impersonation_virtual_resources_survive_discovery(self):
+        for key in (
+            PermissionKey(
+                "impersonate:user-info",
+                group="authentication.k8s.io",
+                resource="users",
+            ),
+            PermissionKey(
+                "impersonate:serviceaccount",
+                group="authentication.k8s.io",
+                resource="serviceaccounts",
+            ),
+            PermissionKey(
+                "impersonate:arbitrary-node",
+                group="authentication.k8s.io",
+                resource="nodes",
+            ),
+        ):
+            with self.subTest(permission=key.human()):
+                self.assertTrue(K8sPEASS._authorization_without_discovery(key))
+                self.assertTrue(K8sPEASS._is_special_verb_for_served_resource(key))
+
+    def test_zero_visibility_fallback_checks_include_new_high_paths(self):
+        scanner = object.__new__(K8sPEASS)
+        scanner._run_access_reviews = Mock(side_effect=lambda candidates: candidates)
+        candidates = scanner._fallback_checks(["demo"], [])
+        identities = {
+            (key.verb, key.group, key.resource, key.subresource, key.namespace)
+            for key in candidates
+        }
+        expected = {
+            ("patch", "", "pods", "status", "demo"),
+            ("patch", "", "services", "status", "demo"),
+            ("create", "", "services", "", "demo"),
+            ("create", "", "endpoints", "", "demo"),
+            ("create", "discovery.k8s.io", "endpointslices", "", "demo"),
+            ("create", "", "configmaps", "", "demo"),
+            ("impersonate:user-info", "authentication.k8s.io", "users", "", ""),
+            ("impersonate-on:user-info:get", "", "secrets", "", "demo"),
+            (
+                "patch",
+                "admissionregistration.k8s.io",
+                "mutatingadmissionpolicies",
+                "",
+                "",
+            ),
+        }
+        self.assertTrue(expected.issubset(identities))
+
+    def test_exhaustive_checks_use_correct_virtual_impersonation_groups(self):
+        candidates = K8sPEASS._exhaustive_candidates([], ["demo"])
+        identities = {
+            (key.verb, key.group, key.resource, key.namespace) for key in candidates
+        }
+        self.assertIn(("impersonate", "", "users", ""), identities)
+        self.assertIn(("impersonate", "", "groups", ""), identities)
+        self.assertIn(
+            ("impersonate:user-info", "authentication.k8s.io", "users", ""),
+            identities,
+        )
+        self.assertIn(
+            (
+                "impersonate:serviceaccount",
+                "authentication.k8s.io",
+                "serviceaccounts",
+                "demo",
+            ),
+            identities,
+        )
 
     def test_aws_auth_needs_platform_evidence_and_stays_high(self):
         severity, _ = classify_permission(
