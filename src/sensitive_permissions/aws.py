@@ -325,7 +325,6 @@ sensitive_combinations = [
     ["states:RevealSecrets"],
 
     ["workdocs:CreateUser"],
-    ["workdocs:GetDocument"],
     ["workdocs:AddResourcePermissions"],
     ["workdocs:AddUserToGroup"],
 

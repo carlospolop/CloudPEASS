@@ -132,6 +132,34 @@ def test_sensitive_read_probes_use_valid_safe_placeholders():
         f"Start={(date.today() - timedelta(days=1)).isoformat()},"
         f"End={date.today().isoformat()}"
     )
+    assert placeholder(
+        "--workspace-id", "workspaces", "describe-workspace-snapshots"
+    ) == "ws-00000000"
+    assert placeholder(
+        "--portal-id", "workspaces-web", "list-sessions"
+    ) == "00000000-0000-0000-0000-000000000000"
+    assert placeholder(
+        "--session-id", "workspaces-web", "get-session"
+    ) == "00000000-0000-0000-0000-000000000000"
+    assert placeholder(
+        "--id", "workspaces-thin-client", "get-device"
+    ) == "000000000000000000000000"
+    assert placeholder(
+        "--id", "workspaces-thin-client", "get-environment"
+    ) == "000000000"
+    assert placeholder(
+        "--workspace-instance-id",
+        "workspaces-instances",
+        "get-workspace-instance",
+    ) == "wsinst-00000000"
+    assert placeholder(
+        "--organization-id", "workmail", "list-users"
+    ) == "m-00000000000000000000000000000000"
+    # A fabricated pool ID returned AccessDenied even to the validation admin,
+    # so it must not be treated as permission evidence.
+    assert placeholder(
+        "--pool-id", "workspaces", "describe-workspaces-pool-sessions"
+    ) == "CloudPEASSProbe"
 
 
 def test_caller_account_id_uses_safe_argv_and_validates_output(monkeypatch):

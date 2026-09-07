@@ -643,5 +643,12 @@ def test_invalid_downloaded_aws_regex_cannot_replace_bundled_baseline(
     assert data["write_like_prefix_regex"].startswith("^(Put|")
 
 
+def test_workdocs_document_metadata_is_not_a_sensitive_data_finding():
+    assert classify_permission(
+        "aws", "workdocs:GetDocument", unknown_default="medium"
+    ) == "low"
+    assert ["workdocs:GetDocument"] not in sensitive_combinations
+
+
 if __name__ == "__main__":
     unittest.main()

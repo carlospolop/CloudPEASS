@@ -370,6 +370,25 @@ class AWSBruteForce():
                 return "DAILY"
             if option_name == "metrics":
                 return "UnblendedCost"
+        if service == "workspaces" and option_name == "workspace-id":
+            return "ws-00000000"
+        if service == "workspaces-web" and option_name in {
+            "portal-id",
+            "session-id",
+        }:
+            return "00000000-0000-0000-0000-000000000000"
+        if service == "workspaces-thin-client" and option_name == "id":
+            if command == "get-device":
+                return "000000000000000000000000"
+            if command == "get-environment":
+                return "000000000"
+        if (
+            service == "workspaces-instances"
+            and option_name == "workspace-instance-id"
+        ):
+            return "wsinst-00000000"
+        if service == "workmail" and option_name == "organization-id":
+            return "m-00000000000000000000000000000000"
         if "email" in option_name:
             return "cloudpeass-probe@example.invalid"
         if "arn" in option_name:

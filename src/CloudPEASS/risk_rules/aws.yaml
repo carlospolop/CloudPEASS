@@ -238,6 +238,8 @@ low_exact:
   - route53:ListGeoLocations
   - sts:GetCallerIdentity
   - sts:GetSessionToken
+  # Metadata only. Document bytes require GetDocumentVersion with Fields=SOURCE.
+  - workdocs:GetDocument
 
 ## =====================
 ## HEURISTICS / SUPPORTING LISTS
