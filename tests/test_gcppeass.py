@@ -96,6 +96,11 @@ def bare_peass():
             "pubsub_snapshot",
             "projects/demo-project/snapshots/recovery",
         ),
+        (
+            "dns-zone:projects/demo-project/managedZones/public-zone",
+            "dns_zone",
+            "projects/demo-project/managedZones/public-zone",
+        ),
     ],
 )
 def test_normalize_resource_formats(value, expected_type, expected_id):
@@ -228,6 +233,7 @@ def test_read_only_transport_blocks_mutating_endpoints():
         "projects/demo-project/locations/us-central1/workflows/workflow",
         "projects/demo-project/locations/global/keyRings/ring",
         "projects/demo-project/locations/global/keyRings/ring/cryptoKeys/key",
+        "projects/demo-project/managedZones/public-zone",
     ],
 )
 def test_every_resource_request_builder_passes_the_transport_guard(resource):
@@ -318,6 +324,16 @@ def test_workflow_fallback_uses_current_permission_namespace():
         "workflows.workflows.",
         "workflows.executions.",
     )
+
+
+def test_dns_fallback_covers_workspace_recovery_permission_pair():
+    assert TYPE_PREFIXES["dns_zone"] == ("dns.",)
+    assert {
+        "dns.changes.create",
+        "dns.resourceRecordSets.create",
+        "dns.resourceRecordSets.update",
+        "dns.resourceRecordSets.delete",
+    } <= BUILTIN_FALLBACK_PERMISSIONS
 
 
 def test_testable_catalog_drops_cross_service_permissions():
@@ -420,6 +436,89 @@ def test_cloud_run_service_discovery_follows_knative_continue_token():
         "projects/demo-project/locations/europe-west1/services/second",
     ]
     assert calls[1]["continue"] == "opaque-token"
+
+
+def test_cloud_dns_zone_discovery_and_read_only_request_builders():
+    peass = bare_peass()
+    peass._paged_items = Mock(
+        return_value=[
+            {"name": "public-zone", "dnsName": "example.com."},
+            {"dnsName": "missing-name.example."},
+        ]
+    )
+    targets = peass._discover_dns_zones("demo-project")
+    assert [target["id"] for target in targets] == [
+        "projects/demo-project/managedZones/public-zone"
+    ]
+    target = targets[0]
+    policy_method, policy_url, _, _ = peass._policy_request(target)
+    test_method, test_url, _, body = peass._test_request(
+        target, ["dns.changes.create"]
+    )
+    assert policy_method == test_method == "POST"
+    assert policy_url.endswith(
+        "/dns/v1/projects/demo-project/managedZones/public-zone:getIamPolicy"
+    )
+    assert test_url.endswith(
+        "/dns/v1/projects/demo-project/managedZones/public-zone:testIamPermissions"
+    )
+    assert body == {"permissions": ["dns.changes.create"]}
+
+
+def test_cross_cloud_notes_require_complete_dns_pair_and_specific_sa_target():
+    peass = bare_peass()
+    project = peass.normalize_resource("projects/demo-project")
+    assert peass._cross_cloud_pivot_notes(
+        project, ["dns.resourceRecordSets.create"]
+    ) == []
+    dns_notes = peass._cross_cloud_pivot_notes(
+        project,
+        ["dns.changes.create", "dns.resourceRecordSets.create"],
+    )
+    assert len(dns_notes) == 1
+    assert "administrator-recovery" in dns_notes[0]
+    policy_notes = peass._cross_cloud_pivot_notes(
+        project, ["dns.managedZones.setIamPolicy"]
+    )
+    assert len(policy_notes) == 1
+    assert "roles/dns.admin" in policy_notes[0]
+
+    sa = peass.normalize_resource(
+        "service-account:runner@demo-project.iam.gserviceaccount.com"
+    )
+    sa_notes = peass._cross_cloud_pivot_notes(
+        sa, ["iam.serviceAccounts.signJwt"]
+    )
+    assert len(sa_notes) == 1
+    assert "domain-wide delegation" in sa_notes[0]
+    assert peass._cross_cloud_pivot_notes(
+        project, ["iam.serviceAccounts.signJwt"]
+    ) == []
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [
+        "https://mail.google.com/",
+        "https://www.googleapis.com/auth/admin.directory.user.readonly",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/gmail.metadata",
+        "https://www.googleapis.com/auth/spreadsheets.readonly",
+    ],
+)
+def test_workspace_scope_detection_covers_non_mail_apis(scope):
+    assert bare_peass()._is_workspace_scope(scope)
+
+
+def test_cloud_and_identity_only_scopes_are_not_mislabeled_as_workspace_data():
+    peass = bare_peass()
+    assert not peass._is_workspace_scope(
+        "https://www.googleapis.com/auth/cloud-platform"
+    )
+    assert not peass._is_workspace_scope(
+        "https://www.googleapis.com/auth/userinfo.email"
+    )
 
 
 def test_invalid_permission_bisection_preserves_valid_results():

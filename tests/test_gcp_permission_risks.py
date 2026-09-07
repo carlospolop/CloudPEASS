@@ -277,6 +277,34 @@ def test_logging_data_access_is_high_only_with_list_and_view_permissions():
 
 
 @pytest.mark.parametrize(
+    "record_permission",
+    [
+        "dns.resourceRecordSets.create",
+        "dns.resourceRecordSets.update",
+        "dns.resourceRecordSets.delete",
+    ],
+)
+def test_cloud_dns_write_is_high_only_with_change_and_record_permissions(
+    record_permission,
+):
+    peass = CloudPEASS(
+        very_sensitive_combinations,
+        sensitive_combinations,
+        "GCP",
+        1,
+    )
+    assert classify_permission("gcp", "dns.changes.create") == "medium"
+    assert classify_permission("gcp", record_permission) == "medium"
+    for incomplete in ({"dns.changes.create"}, {record_permission}):
+        result = peass.analyze_sensitive_combinations(incomplete)
+        assert not ({"dns.changes.create", record_permission} <= result["sensitive_perms"])
+
+    complete = {"dns.changes.create", record_permission}
+    result = peass.analyze_sensitive_combinations(complete)
+    assert result["sensitive_perms"] == complete
+
+
+@pytest.mark.parametrize(
     "data_permission",
     [
         "spanner.databases.read",

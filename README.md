@@ -79,7 +79,7 @@ python3 AzurePEAS.py --help
 GCPPEAS layers several independent techniques so a denied enumeration call does not stop the scan:
 
 1. **Permissionless/local clues:** explicit `--project`, `--service-account`, and repeatable `--resource` values are always tested. On a GCP workload, the metadata server supplies the current project, VM, and attached service account without IAM permissions. Credential and standard project environment variables are also used.
-2. **Container and resource discovery:** Resource Manager search, Cloud Asset Inventory, and independent service-specific list calls discover projects, folders, organizations, VMs, Functions, buckets, service accounts, secrets, Cloud Run services/jobs, Artifact Registry repositories, Pub/Sub topics/subscriptions/snapshots, BigQuery datasets/tables/routines, Workflows, and KMS key rings/keys. Each failure is isolated and summarized; regional fallbacks continue when only some locations are denied.
+2. **Container and resource discovery:** Resource Manager search, Cloud Asset Inventory, and independent service-specific list calls discover projects, folders, organizations, VMs, Functions, buckets, service accounts, secrets, Cloud Run services/jobs, Artifact Registry repositories, Pub/Sub topics/subscriptions/snapshots, BigQuery datasets/tables/routines, Workflows, KMS key rings/keys, and Cloud DNS managed zones. Each failure is isolated and summarized; regional fallbacks continue when only some locations are denied.
 3. **Effective permission tests:** Google's `queryTestablePermissions` supplies the current, resource-applicable catalog and `testIamPermissions` checks it in batches. These methods avoid parsing platform-dependent `gcloud help` output. If catalog lookup fails, GCPPEAS falls back to official predefined roles, a public catalog, and finally a built-in core set. Failed or partial tests are reported rather than silently treated as zero permissions.
 4. **IAM policy supplement:** where `getIamPolicy` is allowed, direct/public/domain/known-group bindings and custom roles add context. Static grants are never merged over a successful effective test because IAM Deny, principal access boundaries, or request conditions may block them. If effective testing is unavailable, policy permissions are retained but clearly labeled as unverified. BigQuery datasets, which do not expose a dataset-level `testIamPermissions` method, use read-only metadata/list capability probes; BigQuery itself documents that table/routine tests can fail open.
 
@@ -91,6 +91,7 @@ python3 GCPPEAS.py --resource gs://known-bucket --only-specified
 python3 GCPPEAS.py --resource projects/victim-project/secrets/known-secret --only-specified
 python3 GCPPEAS.py --resource projects/victim-project/datasets/known_dataset/tables/known_table --only-specified
 python3 GCPPEAS.py --resource //run.googleapis.com/projects/victim-project/locations/us-central1/services/known-service --only-specified
+python3 GCPPEAS.py --resource dns-zone:projects/victim-project/managedZones/known-zone --only-specified
 ```
 
 `--billing-project` only sets the quota-project header; GCPPEAS never enables an API or changes billing/IAM. Read calls and `testIamPermissions` can still appear in audit or access logs, so read-only does not mean invisible.
@@ -120,7 +121,7 @@ python3 GCPPEAS.py
 python3 GCPPEAS.py --project victim-project --out-json-path gcp-results.json
 ```
 
-GCPPEAS reports Gmail/Drive-capable OAuth scopes but does not automatically read mailbox or Drive content.
+GCPPEAS reports Workspace-capable OAuth scopes—including Gmail, Drive, Calendar, Admin SDK, Chat, Classroom, and editors—but does not automatically read Workspace content. A token containing both Workspace and Cloud scopes is called out as a cross-control-plane credential. Service-account signing/key permissions and complete Cloud DNS record-write pairs also receive concise GCP↔Workspace pivot notes with their required conditions.
 
 ### Useful controls
 

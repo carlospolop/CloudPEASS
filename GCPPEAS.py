@@ -119,6 +119,21 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
         "cloudkms.keyRings.getIamPolicy",
         "cloudkms.keyRings.list",
         "cloudkms.keyRings.setIamPolicy",
+        "dns.changes.create",
+        "dns.changes.get",
+        "dns.changes.list",
+        "dns.managedZones.create",
+        "dns.managedZones.delete",
+        "dns.managedZones.get",
+        "dns.managedZones.getIamPolicy",
+        "dns.managedZones.list",
+        "dns.managedZones.setIamPolicy",
+        "dns.managedZones.update",
+        "dns.resourceRecordSets.create",
+        "dns.resourceRecordSets.delete",
+        "dns.resourceRecordSets.get",
+        "dns.resourceRecordSets.list",
+        "dns.resourceRecordSets.update",
         "iam.serviceAccountKeys.create",
         "iam.serviceAccountKeys.delete",
         "iam.serviceAccountKeys.disable",
@@ -235,6 +250,7 @@ TYPE_PREFIXES = {
     "workflow": ("workflows.workflows.", "workflows.executions."),
     "kms_keyring": ("cloudkms.keyRings.",),
     "kms_key": ("cloudkms.cryptoKeys.", "cloudkms.cryptoKeyVersions."),
+    "dns_zone": ("dns.",),
 }
 
 ASSET_TYPE_HINTS = {
@@ -256,6 +272,7 @@ ASSET_TYPE_HINTS = {
     "workflows.googleapis.com/Workflow": "workflow",
     "cloudkms.googleapis.com/KeyRing": "kms_keyring",
     "cloudkms.googleapis.com/CryptoKey": "kms_key",
+    "dns.googleapis.com/ManagedZone": "dns_zone",
 }
 
 RESOURCE_HOSTS = {
@@ -279,6 +296,7 @@ RESOURCE_HOSTS = {
     "workflow": "workflows.googleapis.com",
     "kms_keyring": "cloudkms.googleapis.com",
     "kms_key": "cloudkms.googleapis.com",
+    "dns_zone": "dns.googleapis.com",
 }
 
 
@@ -543,6 +561,8 @@ class GCPPEASS(CloudPEASS):
             email = raw.split(":", 1)[1]
             sa_project = email.split("@", 1)[1].split(".", 1)[0] if "@" in email else project_hint
             raw = f"projects/{sa_project}/serviceAccounts/{email}"
+        elif raw.startswith("dns-zone:"):
+            raw = raw.split(":", 1)[1]
         elif raw.startswith("function-v2:"):
             raw = raw.split(":", 1)[1]
             asset_type = "cloudfunctions.googleapis.com/Function"
@@ -619,6 +639,8 @@ class GCPPEASS(CloudPEASS):
             resource_type, host = "kms_key", host or "cloudkms.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/locations/[^/]+/keyRings/[^/]+", path):
             resource_type, host = "kms_keyring", host or "cloudkms.googleapis.com"
+        elif re.fullmatch(r"projects/[^/]+/managedZones/[^/]+", path):
+            resource_type, host = "dns_zone", host or "dns.googleapis.com"
 
         # A recognized Cloud Asset type must also have the expected name shape.
         if hinted_type and resource_type != hinted_type:
@@ -812,6 +834,20 @@ class GCPPEASS(CloudPEASS):
                 f"{IAM_API}/projects/{project}/serviceAccounts",
                 "accounts",
                 params={"pageSize": 100},
+            )
+            if item.get("name")
+        ]
+
+    def _discover_dns_zones(self, project: str) -> List[dict]:
+        return [
+            self.normalize_resource(
+                f"projects/{project}/managedZones/{item['name']}",
+                source="Cloud DNS managed-zone list",
+            )
+            for item in self._paged_items(
+                f"https://dns.googleapis.com/dns/v1/projects/{project}/managedZones",
+                "managedZones",
+                params={"maxResults": 100},
             )
             if item.get("name")
         ]
@@ -1171,6 +1207,7 @@ class GCPPEASS(CloudPEASS):
             ("Cloud Functions v2", self._discover_functions, (project, "v2")),
             ("Cloud Storage", self._discover_storage, (project,)),
             ("service accounts", self._discover_service_accounts, (project,)),
+            ("Cloud DNS managed zones", self._discover_dns_zones, (project,)),
             ("Secret Manager", self._discover_secrets, (project,)),
             ("Cloud Run services", self._discover_run, (project, "services")),
             ("Pub/Sub topics", self._discover_pubsub, (project, "topics")),
@@ -1274,6 +1311,13 @@ class GCPPEASS(CloudPEASS):
             return (
                 "POST",
                 f"https://iam.googleapis.com/v1/{resource}:getIamPolicy",
+                None,
+                {"options": {"requestedPolicyVersion": 3}},
+            )
+        if resource_type == "dns_zone":
+            return (
+                "POST",
+                f"https://dns.googleapis.com/dns/v1/{resource}:getIamPolicy",
                 None,
                 {"options": {"requestedPolicyVersion": 3}},
             )
@@ -1398,6 +1442,13 @@ class GCPPEASS(CloudPEASS):
             return (
                 "POST",
                 f"https://compute.googleapis.com/compute/v1/{resource}/testIamPermissions",
+                {},
+                body,
+            )
+        if resource_type == "dns_zone":
+            return (
+                "POST",
+                f"https://dns.googleapis.com/dns/v1/{resource}:testIamPermissions",
                 {},
                 body,
             )
@@ -1594,6 +1645,7 @@ class GCPPEASS(CloudPEASS):
                 "BigQuery documents that testIamPermissions can fail open; do not use this result "
                 "as an authorization decision."
             )
+        notes.extend(self._cross_cloud_pivot_notes(target, permissions))
         return CloudResource(
             resource_id=target["id"],
             name=target["id"].rsplit("/", 1)[-1],
@@ -1605,6 +1657,54 @@ class GCPPEASS(CloudPEASS):
             evidence=evidence,
             enumeration_note=" ".join(notes),
         )
+
+    @staticmethod
+    def _cross_cloud_pivot_notes(target: dict, permissions: Sequence[str]) -> List[str]:
+        """Explain high-signal GCP/Workspace trust edges without attempting abuse."""
+        permission_set = set(permissions)
+        notes: List[str] = []
+        if target.get("type") == "service_account":
+            signing = sorted(
+                permission_set
+                & {
+                    "iam.serviceAccounts.signBlob",
+                    "iam.serviceAccounts.signJwt",
+                    "iam.serviceAccountKeys.create",
+                }
+            )
+            if signing:
+                notes.append(
+                    "Workspace pivot check: this service account is usable through "
+                    f"{', '.join(signing)}. If its numeric OAuth client ID already has "
+                    "Workspace domain-wide delegation, these capabilities can create a delegated "
+                    "JWT for a known Workspace user without needing ordinary GCP roles held by that "
+                    "user. The requested OAuth scope must be present in the DWD grant."
+                )
+
+        dns_writes = sorted(
+            permission_set
+            & {
+                "dns.resourceRecordSets.create",
+                "dns.resourceRecordSets.update",
+                "dns.resourceRecordSets.delete",
+            }
+        )
+        if "dns.changes.create" in permission_set and dns_writes:
+            notes.append(
+                "Workspace pivot check: dns.changes.create plus "
+                f"{', '.join(dns_writes)} can publish DNS changes. If an affected public zone is "
+                "authoritative for a Workspace primary domain, its TXT/CNAME write path can satisfy "
+                "Google administrator-recovery domain verification. Confirm the zone's public "
+                "delegation before treating this as a Workspace takeover path."
+            )
+        if "dns.managedZones.setIamPolicy" in permission_set:
+            notes.append(
+                "DNS privilege escalation: dns.managedZones.setIamPolicy can grant roles/dns.admin "
+                "on the affected zone, yielding the record-write pair above. If this is the "
+                "authoritative public zone for a Workspace primary domain, also assess the "
+                "administrator-recovery pivot. Preserve the existing policy etag and bindings."
+            )
+        return notes
 
     def _enumerate_bigquery_dataset(self, target: dict) -> CloudResource:
         """Use safe capability probes because BigQuery datasets lack testIamPermissions."""
@@ -1956,18 +2056,54 @@ class GCPPEASS(CloudPEASS):
         if user_info.get("scopes"):
             print(f"{Fore.BLUE}OAuth scopes: {Fore.WHITE}{', '.join(user_info['scopes'])}")
             workspace = [
+                scope for scope in user_info["scopes"] if self._is_workspace_scope(scope)
+            ]
+            cloud = [
                 scope
                 for scope in user_info["scopes"]
-                if "/gmail" in scope or "/drive" in scope
+                if scope.rstrip("/").endswith("/auth/cloud-platform")
+                or scope.rstrip("/").endswith("/auth/cloud-platform.read-only")
             ]
+            user_info["workspace_scopes"] = workspace
+            user_info["cloud_scopes"] = cloud
+            user_info["cross_cloud_token"] = bool(workspace and cloud)
             if workspace:
                 print(
                     f"{Fore.GREEN}Workspace-capable scope(s) detected; GCPPEASS does not read mailbox "
                     "or Drive content automatically."
                 )
+            if workspace and cloud:
+                print(
+                    f"{Fore.RED}Cross-cloud token: this credential has both Google Cloud and "
+                    "Workspace API scopes. Test the same identity against both control planes."
+                )
         if self.extra_token and not use_extra and self.extra_token != token:
             user_info["extra_token"] = self.print_whoami_info(True)
         return user_info
+
+    @staticmethod
+    def _is_workspace_scope(scope: str) -> bool:
+        normalized = (scope or "").lower().rstrip("/")
+        if normalized == "https://mail.google.com":
+            return True
+        return any(
+            marker in normalized
+            for marker in (
+                "/auth/admin.",
+                "/auth/apps.",
+                "/auth/calendar",
+                "/auth/chat.",
+                "/auth/classroom.",
+                "/auth/contacts",
+                "/auth/directory.",
+                "/auth/documents",
+                "/auth/drive",
+                "/auth/gmail.",
+                "/auth/groups",
+                "/auth/presentations",
+                "/auth/spreadsheets",
+            )
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -2003,7 +2139,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=[],
         help=(
             "Known resource name; repeat the option or use commas. Accepts full //service/name "
-            "names, canonical projects/... names, gs://bucket, bucket:NAME, and service-account:EMAIL"
+            "names, canonical projects/... names, gs://bucket, bucket:NAME, service-account:EMAIL, "
+            "and dns-zone:projects/PROJECT/managedZones/ZONE"
         ),
     )
 
