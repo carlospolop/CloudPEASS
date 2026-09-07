@@ -1,0 +1,281 @@
+version: 2
+provider: gcp
+
+# Immediate privilege escalation, impersonation, credential disclosure, or
+# interactive code execution. Suffix rules also cover newly introduced GCP
+# permissions whose service names are not yet known to CloudPEASS.
+critical_suffixes:
+  - .actas
+  - .setiampolicy
+  - .getaccesstoken
+  - .signblob
+  - .signjwt
+
+critical_exact:
+  - apikeys.keys.getKeyString
+  - appengine.instances.enableDebug
+  - clientauthconfig.clients.getWithSecret
+  - clientauthconfig.clients.listWithSecrets
+  - cloudbuild.builds.create
+  - composer.environments.update
+  - cloudkms.cryptoKeyVersions.useToDecrypt
+  - cloudkms.cryptoKeyVersions.useToDecryptViaDelegation
+  - compute.instances.osAdminLogin
+  - compute.instances.osLogin
+  - compute.instances.setMetadata
+  - compute.projects.setCommonInstanceMetadata
+  - container.pods.exec
+  - container.secrets.get
+  - container.secrets.list
+  - iam.serviceAccountKeys.create
+  - iam.serviceAccounts.actAs
+  - iam.serviceAccounts.getAccessToken
+  - iam.serviceAccounts.setIamPolicy
+  - iam.serviceAccounts.signBlob
+  - iam.serviceAccounts.signJwt
+  - osconfig.patchJobs.exec
+  - resourcemanager.folders.setIamPolicy
+  - resourcemanager.organizations.setIamPolicy
+  - resourcemanager.projects.setIamPolicy
+  - secretmanager.versions.access
+  - storage.hmacKeys.create
+
+# Direct data-plane access, invocation, tunnelling, or dangerous changes that
+# generally need additional context before they become full compromise.
+high_suffixes: []
+
+high_exact:
+  - apikeys.keys.create
+  - artifactregistry.repositories.uploadArtifacts
+  - artifactregistry.repositories.downloadArtifacts
+  - bigquery.tables.export
+  - bigquery.tables.getData
+  - bigquery.tables.updateData
+  - bigtable.authorizedViews.readRows
+  - bigtable.tables.mutateRows
+  - bigtable.tables.readRows
+  - cloudbuild.builds.approve
+  - cloudbuild.repositories.accessReadToken
+  - cloudbuild.repositories.accessReadWriteToken
+  - cloudfunctions.functions.invoke
+  - cloudfunctions.functions.sourceCodeGet
+  - cloudkms.cryptoKeyVersions.destroy
+  - cloudsql.instances.connect
+  - cloudsql.instances.export
+  - cloudsql.instances.login
+  - compute.instances.setServiceAccount
+  - container.clusters.getCredentials
+  - container.pods.portForward
+  - logging.logMetrics.delete
+  - logging.logs.delete
+  - logging.sinks.delete
+  - logging.views.access
+  - iam.serviceAccounts.getOpenIdToken
+  - monitoring.alertPolicies.delete
+  - monitoring.notificationChannels.delete
+  - pubsub.snapshots.seek
+  - pubsub.subscriptions.consume
+  - pubsub.topics.publish
+  - run.routes.invoke
+  - orgpolicy.policy.set
+  - securitycenter.findings.bulkMuteUpdate
+  - securitycenter.findings.setMute
+  - source.repos.get
+  - source.repos.update
+  - storage.objects.create
+  - storage.objects.delete
+  - storage.objects.get
+  - storage.objects.update
+  - workflows.executions.create
+
+# Exact overrides for names that contain security-looking words but disclose
+# only metadata or perform ordinary lifecycle operations.
+medium_exact:
+  - agentidentity.authProviders.retrieveCredentials
+  - alloydb.instances.executeSql
+  - apikeys.keys.undelete
+  - artifactregistry.files.download
+  - backupdr.bvdataSources.fetchAccessToken
+  - biglake.tables.getData
+  - bigquery.models.getData
+  - bigquery.readsessions.getData
+  - bigquery.rowAccessPolicies.getFilteredData
+  - bigtable.logicalViews.readRows
+  - bigtable.materializedViews.readRows
+  - chronicle.feeds.generateSecret
+  - chronicle.instances.generateWorkspaceConnectionToken
+  - clientauthconfig.clients.createSecret
+  - cloudasset.assets.exportAllAccessPolicy
+  - cloudasset.assets.exportApikeysKeys
+  - cloudasset.assets.exportCloudkmsCryptoKeyVersions
+  - cloudasset.assets.exportCloudkmsCryptoKeys
+  - cloudasset.assets.exportCloudkmsEkmConnections
+  - cloudasset.assets.exportCloudkmsImportJobs
+  - cloudasset.assets.exportCloudkmsKeyRings
+  - cloudasset.assets.exportIamPolicy
+  - cloudasset.assets.exportIamRoles
+  - cloudasset.assets.exportIamServiceAccountKeys
+  - cloudasset.assets.exportIamServiceAccounts
+  - cloudasset.assets.exportOrgPolicy
+  - cloudasset.assets.exportSecretManagerSecretVersions
+  - cloudasset.assets.exportSecretManagerSecrets
+  - cloudfunctions.functions.call
+  - cloudfunctions.functions.sourceCodeSet
+  - cloudsql.instances.executeSql
+  - composer.environments.executeAirflowCommand
+  - composer.environments.create
+  - datafusion.namespaces.provisionCredential
+  - datafusion.secureKeys.getSecret
+  - dataprocrm.nodes.mintOAuthToken
+  - developerconnect.gitRepositoryLinks.fetchReadToken
+  - developerconnect.gitRepositoryLinks.fetchReadWriteToken
+  - developerconnect.users.fetchAccessToken
+  - discoveryengine.dataConnectors.acquireAccessToken
+  - discoveryengine.dataConnectors.acquireAndStoreRefreshToken
+  - discoveryengine.locations.exchangeAuthCredentials
+  - edgecontainer.clusters.generateAccessToken
+  - edgecontainer.clusters.generateOfflineCredential
+  - firebaseauth.configs.getSecret
+  - gkehub.gateway.generateCredentials
+  - gkemulticloud.awsClusters.generateAccessToken
+  - gkemulticloud.azureClusters.generateAccessToken
+  - iam.googleapis.com/oauthClientCredentials.create
+  - iam.googleapis.com/oauthClientCredentials.update
+  - iamconnectors.connectors.retrieveCredentials
+  - managedidentities.domains.resetpassword
+  - monitoring.dashboards.delete
+  - networkmanagement.providers.generateProviderAccessToken
+  - recaptchaenterprise.keys.retrievelegacysecretkey
+  - run.jobs.run
+  - run.jobs.runWithOverrides
+  - run.instances.sshRead
+  - run.instances.sshRoot
+  - run.jobs.sshRead
+  - run.jobs.sshRoot
+  - run.services.sshRead
+  - run.services.sshRoot
+  - run.workerpools.sshRead
+  - run.workerpools.sshRoot
+  - secretmanager.secrets.update
+  - spanner.databases.select
+  - transferappliance.credentials.get
+  - vmwareengine.privateClouds.resetNsxCredentials
+  - vmwareengine.privateClouds.resetVcenterCredentials
+  - vmwareengine.privateClouds.showNsxCredentials
+  - vmwareengine.privateClouds.showVcenterCredentials
+
+low_exact:
+  - cloudasset.assets.listSecretManagerSecretVersions
+  - cloudasset.assets.listSecretManagerSecrets
+  - iam.googleapis.com/oauthClientCredentials.get
+  - iam.googleapis.com/oauthClientCredentials.list
+  - iam.serviceAccountKeys.get
+  - iam.serviceAccountKeys.list
+  - secretmanager.locations.get
+  - secretmanager.locations.list
+  - secretmanager.secrets.get
+  - secretmanager.secrets.getIamPolicy
+  - secretmanager.secrets.list
+  - secretmanager.secrets.listEffectiveTags
+  - secretmanager.secrets.listTagBindings
+  - secretmanager.versions.get
+  - secretmanager.versions.list
+
+low_verbs:
+  - batchget
+  - batchread
+  - check
+  - describe
+  - fetch
+  - get
+  - list
+  - lookup
+  - query
+  - read
+  - resolve
+  - search
+  - validate
+  - verify
+  - view
+
+medium_verbs:
+  - cancel
+  - deactivate
+  - delete
+  - destroy
+  - disable
+  - explain
+  - invalidate
+  - move
+  - pause
+  - predict
+  - remove
+  - restart
+  - resume
+  - start
+  - stop
+  - suspend
+  - undelete
+  - undeploy
+  - upgrade
+
+high_verbs:
+  - add
+  - approve
+  - attach
+  - bind
+  - connect
+  - create
+  - deploy
+  - enable
+  - execute
+  - export
+  - import
+  - insert
+  - invoke
+  - login
+  - mutate
+  - patch
+  - reset
+  - rotate
+  - run
+  - set
+  - tag
+  - untag
+  - update
+  - upload
+  - write
+
+dangerous_write_keywords: []
+
+iam_roles_critical_verbs: [update]
+iam_roles_medium_verbs: [delete, undelete]
+
+override_medium_suffixes:
+  - .calculate
+  - .calculatecoverage
+  - .createtagbinding
+  - .deletetagbinding
+  - .diagnose
+  - .preview
+  - .purge
+  - .report
+  - .restore
+  - .rollback
+  - .setlabels
+  - .simulate
+  - .summarize
+  - .summarizeall
+  - .test
+  - .translate
+  - .updatetag
+  - .usereadonly
+  - .validate
+  - .wait
+
+override_medium_prefixes:
+  - recommender.
+
+# Only reads that are reliably secret-bearing belong here. Public-key and
+# secret-metadata operations are covered by low_exact above.
+sensitive_read_keywords: []

@@ -121,6 +121,11 @@ def _load_yaml(provider: str) -> dict:
     external_data = downloaded_data or _parse_rules_yaml(
         yaml_text, provider, "cached"
     )
+    # GCP ships a catalog-audited rule set with CloudPEASS. Keep its severity
+    # decisions deterministic: a stale user cache or a temporarily different
+    # upstream revision must not silently relabel the same scan.
+    if provider == "gcp" and bundled_data:
+        return bundled_data
     if not bundled_data:
         return external_data
     if not external_data:
@@ -192,6 +197,9 @@ class AwsRules:
 class GcpRules:
     critical_suffixes: tuple[str, ...]
     critical_exact: set[str]
+    high_suffixes: tuple[str, ...]
+    high_exact: set[str]
+    medium_exact: set[str]
     low_exact: set[str]
     low_verbs: set[str]
     medium_verbs: set[str]
@@ -315,8 +323,15 @@ def load_rules(provider: str):
         iam_roles_critical_verbs = {str(v).lower() for v in (data.get("iam_roles_critical_verbs") or [])}
         iam_roles_medium_verbs = {str(v).lower() for v in (data.get("iam_roles_medium_verbs") or [])}
         _GCP_RULES = GcpRules(
-            critical_suffixes=tuple(data.get("critical_suffixes") or []),
+            critical_suffixes=tuple(
+                str(value).lower() for value in (data.get("critical_suffixes") or [])
+            ),
             critical_exact=set(data.get("critical_exact") or []),
+            high_suffixes=tuple(
+                str(value).lower() for value in (data.get("high_suffixes") or [])
+            ),
+            high_exact=set(data.get("high_exact") or []),
+            medium_exact=set(data.get("medium_exact") or []),
             low_exact=set(data.get("low_exact") or []),
             low_verbs=low_verbs,
             medium_verbs=medium_verbs,
@@ -583,10 +598,14 @@ def gcp_override_level(permission: str, rules: GcpRules) -> Optional[str]:
     permission = permission.strip()
     if not permission:
         return None
-    if permission in rules.low_exact:
-        return "low"
     if permission in rules.critical_exact:
         return "critical"
+    if permission in rules.high_exact:
+        return "high"
+    if permission in rules.medium_exact:
+        return "medium"
+    if permission in rules.low_exact:
+        return "low"
 
     lower = permission.lower()
     if lower.endswith(rules.override_medium_suffixes):
@@ -630,6 +649,9 @@ def gcp_regex_classify(permission: str, rules: GcpRules) -> Optional[str]:
     # Treat ALL `*.setIamPolicy` as privilege escalation.
     if lower.endswith(".setiampolicy"):
         return "critical"
+
+    if lower.endswith(rules.high_suffixes):
+        return "high"
 
     if lower.startswith("iam.roles."):
         role_verb = lower.rsplit(".", 1)[-1]
