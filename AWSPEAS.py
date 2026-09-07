@@ -70,6 +70,7 @@ class AWSPEASS(CloudPEASS):
         session_token=None,
         no_ask=False,
         bruteforce_always=False,
+        resource_arns=None,
     ):
         # A typo such as --threads 10000 should not exhaust file descriptors or
         # overwhelm either the local host or AWS read-only APIs.
@@ -83,6 +84,11 @@ class AWSPEASS(CloudPEASS):
         self.skip_managed_policies_guess = skip_managed_policies_guess
         self.no_ask = no_ask
         self.bruteforce_always = bruteforce_always
+        self.resource_arns = {
+            arn.strip()
+            for arn in (resource_arns or [])
+            if isinstance(arn, str) and arn.strip().startswith("arn:")
+        }
         self.access_key_id = access_key_id
         self.secret_access_key = secret_access_key
         self.session_token = session_token
@@ -910,6 +916,148 @@ class AWSPEASS(CloudPEASS):
                 return set(), False
         return set(), False
 
+    @staticmethod
+    def _service_for_arn(resource_arn):
+        parts = str(resource_arn).split(":", 5)
+        return parts[2].casefold() if len(parts) == 6 and parts[0] == "arn" else ""
+
+    def _discover_simulation_resources(self, allowed_permissions):
+        """Find ARNs that make resource-scoped simulator results meaningful."""
+        resources = set(getattr(self, "resource_arns", set()))
+        normalized = {str(permission).casefold() for permission in allowed_permissions}
+        if "*" in normalized or "secretsmanager:listsecrets" in normalized:
+            try:
+                client = self.session.client("secretsmanager", region_name=self.region)
+                paginator = client.get_paginator("list_secrets")
+                discovered = {
+                    secret.get("ARN")
+                    for page in paginator.paginate()
+                    for secret in page.get("SecretList", [])
+                    if isinstance(secret.get("ARN"), str) and secret.get("ARN")
+                }
+                resources.update(discovered)
+                if discovered:
+                    self.policy_notes.append(
+                        f"Discovered {len(discovered)} Secrets Manager ARN(s) for resource-specific simulation."
+                    )
+            except (BotoCoreError, ClientError) as exc:
+                if self.debug:
+                    print(f"{Fore.YELLOW}[DEBUG] Secrets Manager resource discovery failed: {exc}")
+                self.policy_notes.append(
+                    "Secrets Manager resource discovery failed; resource-scoped simulator results may be incomplete."
+                )
+        return sorted(resources)
+
+    def simulate_resource_batch(self, actions, resource_arns, max_attempts=5):
+        allowed = {arn: set() for arn in resource_arns}
+        marker = None
+        seen_markers = set()
+        requested = set(resource_arns)
+        for attempt in range(max_attempts):
+            try:
+                while True:
+                    kwargs = {
+                        "PolicySourceArn": self.entity_arn,
+                        "ActionNames": actions,
+                        "ResourceArns": resource_arns,
+                    }
+                    if marker:
+                        kwargs["Marker"] = marker
+                    response = self.iam_client.simulate_principal_policy(**kwargs)
+                    for result in response.get("EvaluationResults", []):
+                        action = result.get("EvalActionName")
+                        if not isinstance(action, str) or not action:
+                            continue
+                        specific_results = result.get("ResourceSpecificResults", [])
+                        if specific_results:
+                            for specific in specific_results:
+                                resource = specific.get("EvalResourceName")
+                                decision = specific.get("EvalResourceDecision")
+                                if resource in requested and str(decision).casefold() == "allowed":
+                                    allowed[resource].add(action)
+                        else:
+                            resource = result.get("EvalResourceName")
+                            if resource in requested and str(result.get("EvalDecision", "")).casefold() == "allowed":
+                                allowed[resource].add(action)
+                    if not response.get("IsTruncated"):
+                        return allowed, True
+                    marker = response.get("Marker")
+                    if not marker or marker in seen_markers:
+                        return allowed, False
+                    seen_markers.add(marker)
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code in {"Throttling", "ThrottlingException", "TooManyRequestsException", "RequestLimitExceeded"}:
+                    time.sleep(min(2 ** attempt, 16))
+                    continue
+                if self.debug:
+                    print(f"{Fore.YELLOW}[DEBUG] Resource-specific simulation batch failed ({code}): {exc}")
+                return allowed, False
+            except BotoCoreError as exc:
+                if self.debug:
+                    print(f"{Fore.YELLOW}[DEBUG] Resource-specific simulation batch failed: {exc}")
+                return allowed, False
+        return allowed, False
+
+    def simulate_resource_permissions(self, resource_arns, action_batch_size=100, resource_batch_size=20):
+        if not resource_arns:
+            return {}, True
+        actions_by_service = {}
+        for action in self._all_actions():
+            service, _, _ = action.partition(":")
+            actions_by_service.setdefault(service.casefold(), []).append(action)
+        resources_by_service = {}
+        for resource_arn in resource_arns:
+            service = self._service_for_arn(resource_arn)
+            if service:
+                resources_by_service.setdefault(service, []).append(resource_arn)
+
+        work = []
+        for service, service_resources in resources_by_service.items():
+            actions = sorted(actions_by_service.get(service, []))
+            for action_index in range(0, len(actions), action_batch_size):
+                for resource_index in range(0, len(service_resources), resource_batch_size):
+                    work.append((
+                        actions[action_index:action_index + action_batch_size],
+                        service_resources[resource_index:resource_index + resource_batch_size],
+                    ))
+        if not work:
+            return {}, True
+
+        print(
+            f"{Fore.GREEN}Running resource-specific simulation for {len(resource_arns)} ARN(s) "
+            f"in {len(work)} read-only batch(es)..."
+        )
+        allowed = {arn: set() for arn in resource_arns}
+        successful_batches = 0
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            futures = [
+                executor.submit(self.simulate_resource_batch, actions, resources)
+                for actions, resources in work
+            ]
+            for future in tqdm(
+                as_completed(futures), total=len(futures), desc="Simulating resource permissions"
+            ):
+                try:
+                    batch_allowed, ok = future.result()
+                except Exception as exc:
+                    if self.debug:
+                        print(f"{Fore.YELLOW}[DEBUG] Unexpected resource simulator worker failure: {exc}")
+                    continue
+                for resource_arn, actions in batch_allowed.items():
+                    allowed.setdefault(resource_arn, set()).update(actions)
+                successful_batches += int(ok)
+        complete = successful_batches == len(work)
+        if not complete:
+            self.policy_notes.append(
+                f"Resource-specific IAM simulation was partial: {successful_batches}/{len(work)} batches completed."
+            )
+        return {
+            resource_arn: sorted(actions)
+            for resource_arn, actions in allowed.items()
+            if actions
+        }, complete
+
     def simulate_permissions(self, batch_size=100):
         batch_size = max(1, min(int(batch_size), 100))
         if self.principal_type == "role" and not self.entity_arn:
@@ -1013,6 +1161,17 @@ class AWSPEASS(CloudPEASS):
             permissions=sorted(values["allow"]),
             deny_perms=sorted(values["deny"]),
             evidence="IAM policies",
+        )
+
+    def _simulated_scope_resource(self, resource_arn, permissions):
+        service = self._service_for_arn(resource_arn) or "AWS"
+        name = resource_arn.rsplit(":", 1)[-1].rsplit("/", 1)[-1]
+        return CloudResource(
+            resource_id=resource_arn,
+            name=name,
+            resource_type=f"{service} resource",
+            permissions=sorted(set(permissions)),
+            evidence="IAM policy simulator (resource-specific)",
         )
 
     def _guess_managed_policy_permissions(self, bf_permissions, resources):
@@ -1148,6 +1307,13 @@ class AWSPEASS(CloudPEASS):
                         method="IAM policy simulator",
                     )
                 )
+            if (simulation_complete or simulation_permissions) and simulation_permissions != ["*"]:
+                simulation_resources = self._discover_simulation_resources(simulation_permissions)
+                resource_permissions, _ = self.simulate_resource_permissions(simulation_resources)
+                resources.extend(
+                    self._simulated_scope_resource(resource_arn, permissions)
+                    for resource_arn, permissions in resource_permissions.items()
+                )
         else:
             print(f"{Fore.GREEN}[2/3] Full IAM policy documents were read; simulation is not needed.")
 
@@ -1227,6 +1393,15 @@ def build_parser():
         "--aws-services",
         help="Comma-separated services for live probes, for example: s3,ec2,lambda,iam",
     )
+    parser.add_argument(
+        "--resource-arn",
+        action="append",
+        default=[],
+        help=(
+            "Known ARN to test with resource-specific IAM simulation; repeat the option or "
+            "pass comma-separated ARNs"
+        ),
+    )
     parser.add_argument("--skip-iam-policies", action="store_true", help="Skip identity-policy enumeration")
     parser.add_argument("--skip-simulation", action="store_true", help="Skip IAM SimulatePrincipalPolicy")
     parser.add_argument("--skip-bruteforce", action="store_true", help="Skip live read-only API probes")
@@ -1259,6 +1434,12 @@ def main(argv=None):
         parser.error("--secret-access-key/--session-token require --access-key-id")
 
     aws_services = [service.strip() for service in (args.aws_services or "").split(",") if service.strip()]
+    resource_arns = [
+        arn.strip()
+        for value in args.resource_arn
+        for arn in value.split(",")
+        if arn.strip()
+    ]
     try:
         aws_peass = AWSPEASS(
             args.profile,
@@ -1278,6 +1459,7 @@ def main(argv=None):
             session_token=args.session_token,
             no_ask=args.no_ask,
             bruteforce_always=args.bruteforce_always,
+            resource_arns=resource_arns,
         )
         aws_peass.run_analysis()
     except (NoCredentialsError, RuntimeError, BotoCoreError, ClientError) as exc:

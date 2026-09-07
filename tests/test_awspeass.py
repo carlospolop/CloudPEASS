@@ -166,6 +166,17 @@ def test_parser_allows_default_credential_chain_and_optional_region():
     assert args.region is None
 
 
+def test_parser_accepts_repeatable_resource_arns():
+    args = build_parser().parse_args([
+        "--resource-arn", "arn:aws:s3:::one",
+        "--resource-arn", "arn:aws:s3:::two,arn:aws:s3:::three",
+    ])
+    assert args.resource_arn == [
+        "arn:aws:s3:::one",
+        "arn:aws:s3:::two,arn:aws:s3:::three",
+    ]
+
+
 def test_complete_catalog_simulation_is_compacted_to_admin_wildcard():
     instance = bare_awspeass()
     instance.principal_type = "user"
@@ -515,6 +526,89 @@ def test_simulator_stops_repeated_pagination_marker_as_partial():
     allowed, complete = instance.simulate_batch(["s3:GetObject"])
     assert allowed == {"s3:GetObject"}
     assert not complete
+
+
+def test_secretsmanager_resources_are_discovered_for_scoped_simulation():
+    class Paginator:
+        @staticmethod
+        def paginate():
+            yield {"SecretList": [
+                {"ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:flag-one"},
+                {"ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:flag-two"},
+            ]}
+
+    class SecretsManager:
+        @staticmethod
+        def get_paginator(operation):
+            assert operation == "list_secrets"
+            return Paginator()
+
+    class Session:
+        @staticmethod
+        def client(service, region_name=None):
+            assert service == "secretsmanager"
+            assert region_name == "us-east-1"
+            return SecretsManager()
+
+    instance = bare_awspeass()
+    instance.session = Session()
+    instance.region = "us-east-1"
+    instance.debug = False
+    instance.resource_arns = {"arn:aws:s3:::known-bucket"}
+
+    resources = instance._discover_simulation_resources(["secretsmanager:ListSecrets"])
+
+    assert resources == [
+        "arn:aws:s3:::known-bucket",
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:flag-one",
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:flag-two",
+    ]
+    assert any("Discovered 2 Secrets Manager ARN" in note for note in instance.policy_notes)
+
+
+def test_resource_specific_simulator_keeps_permissions_per_arn():
+    first = "arn:aws:secretsmanager:us-east-1:123456789012:secret:flag-one"
+    second = "arn:aws:secretsmanager:us-east-1:123456789012:secret:flag-two"
+
+    class IAM:
+        @staticmethod
+        def simulate_principal_policy(**kwargs):
+            assert kwargs["ResourceArns"] == [first, second]
+            return {
+                "EvaluationResults": [
+                    {
+                        "EvalActionName": "secretsmanager:GetSecretValue",
+                        "EvalResourceName": first,
+                        "EvalDecision": "allowed",
+                    },
+                    {
+                        "EvalActionName": "secretsmanager:DescribeSecret",
+                        "EvalResourceName": "*",
+                        "EvalDecision": "implicitDeny",
+                        "ResourceSpecificResults": [
+                            {"EvalResourceName": first, "EvalResourceDecision": "implicitDeny"},
+                            {"EvalResourceName": second, "EvalResourceDecision": "allowed"},
+                        ],
+                    },
+                ],
+                "IsTruncated": False,
+            }
+
+    instance = bare_awspeass()
+    instance.iam_client = IAM()
+    instance.entity_arn = "arn:aws:iam::123456789012:user/alice"
+    instance.debug = False
+
+    allowed, complete = instance.simulate_resource_batch(
+        ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+        [first, second],
+    )
+
+    assert complete
+    assert allowed == {
+        first: {"secretsmanager:GetSecretValue"},
+        second: {"secretsmanager:DescribeSecret"},
+    }
 
 
 def test_expired_cli_credentials_stop_remaining_probes(monkeypatch):

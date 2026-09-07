@@ -150,7 +150,7 @@ AWSPEAS uses three permission-free-or-read-only fallbacks:
 
 1. **IAM policy reads:** Reads the current user or role, all paginated inline/attached/group policies, managed-policy default versions, resource scopes, conditions, explicit denies, `NotAction`, `NotResource`, and permissions boundaries. If granular calls are blocked, it tries `GetAccountAuthorizationDetails` independently.
 
-2. **IAM simulation:** If policy visibility is partial, empty, conditional, or boundary-limited, it tries `SimulatePrincipalPolicy`. Simulation is read-only and does not execute the tested actions. Assumed-role sessions are resolved to their IAM role ARN when IAM permits it. The AWS action catalog falls back to installed botocore models when the online AWS catalog is unavailable.
+2. **IAM simulation:** If policy visibility is partial, empty, conditional, or boundary-limited, it tries `SimulatePrincipalPolicy`. Simulation is read-only and does not execute the tested actions. Because AWS otherwise evaluates resource-scoped actions against `*`, AWSPEAS uses explicitly supplied `--resource-arn` values and safely discovered Secrets Manager ARNs for a second resource-specific pass. Assumed-role sessions are resolved to their IAM role ARN when IAM permits it. The AWS action catalog falls back to installed botocore models when the online AWS catalog is unavailable.
 
 3. **Live read-only probes:** If both methods above are incomplete, AWSPEAS tests only read command families (`List`, `Get`, `Describe`, `BatchGet`, `Head`, `Lookup`, and `Search`). The AWS CLI is optional unless this fallback is needed. Help parsing supports plain, groff, and Unicode bullet formats, with botocore service models as an OS-independent fallback. Use `--aws-services` to limit requests or `--bruteforce-always` to check for resource-policy access even after complete IAM reads.
 
@@ -180,6 +180,7 @@ usage: AWSPEAS.py [-h] [--profile PROFILE | --access-key-id ACCESS_KEY_ID]
                   [--secret-access-key SECRET_ACCESS_KEY] [--session-token SESSION_TOKEN]
                   [--region REGION] [--out-json-path OUT_JSON_PATH] [--threads THREADS]
                   [--debug] [--aws-services AWS_SERVICES] [--skip-iam-policies]
+                  [--resource-arn RESOURCE_ARN]
                   [--skip-simulation] [--skip-bruteforce] [--bruteforce-always]
                   [--skip-managed-policies-guess] [--no-ask]
 
@@ -200,6 +201,8 @@ options:
   --aws-services AWS_SERVICES
                         Filter AWS services to brute-force permissions for indicating them as a comma separated list (e.g. --aws-services
                         s3,ec2,lambda,rds,sns,sqs,cloudwatch,cloudfront,iam,dynamodb)
+  --resource-arn RESOURCE_ARN
+                        Known ARN to test with resource-specific IAM simulation; repeat the option or pass comma-separated ARNs
   --skip-iam-policies   Skip retrieving permissions from IAM policies
   --skip-simulation     Skip simulating permissions using simulate-principal-policy
   --skip-bruteforce     Skip brute-force enumeration (automatic by default when IAM/simulation fail)
@@ -217,6 +220,9 @@ python3 AWSPEAS.py
 
 # Named profile; region is optional
 python3 AWSPEAS.py --profile <AWS_PROFILE> --region <AWS_REGION> --no-ask
+
+# Test a known resource ARN when it cannot be discovered with a safe List API
+python3 AWSPEAS.py --profile <AWS_PROFILE> --resource-arn arn:aws:s3:::known-bucket --no-ask
 
 # Using AWS credentials directly (Access Key + Secret Key)
 python3 AWSPEAS.py --access-key-id <ACCESS_KEY_ID> --secret-access-key <SECRET_ACCESS_KEY> --region <AWS_REGION>
