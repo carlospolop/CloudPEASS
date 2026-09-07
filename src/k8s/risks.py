@@ -392,7 +392,18 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
         "*",
     }:
         return "high", "Can add an allow policy or weaken an enforced workload network boundary."
-    if resource in {"services", "endpoints"} and group in CORE_GROUPS and verb in {
+    if resource == "services" and group in CORE_GROUPS and verb in {
+        "create",
+        "update",
+        "patch",
+        "*",
+    }:
+        return (
+            "high",
+            "Can name-squat or redirect cluster traffic through selectors, ports, "
+            "or an ExternalName DNS alias.",
+        )
+    if resource == "endpoints" and group in CORE_GROUPS and verb in {
         "create",
         "update",
         "patch",

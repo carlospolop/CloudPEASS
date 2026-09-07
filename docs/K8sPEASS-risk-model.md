@@ -54,8 +54,11 @@ control-plane modification, or a strong conditional escalation primitive:
   create/update/patch; EndpointSlice create/update/patch; Pod or Service status
   update/patch; PersistentVolume create; Node update/patch; and
   ClusterTrustBundle update/patch. The traffic paths include selectorless
-  backends, readiness spoofing, Service-name squatting, and LoadBalancer IP
-  interception.
+  backends, readiness spoofing, Service-name squatting, ExternalName DNS
+  redirection, and LoadBalancer IP interception. The ExternalName patch was
+  reproduced by changing an existing trusted ClusterIP Service into an alias
+  for an attacker Service: the same client hostname then sent its Authorization
+  header to the attacker backend.
 - Ingress create/patch when an active controller accepts the object.
   Create can expose an internal Service through a new host/path; patch can
   redirect a trusted route to another Service.

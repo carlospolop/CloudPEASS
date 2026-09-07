@@ -648,6 +648,13 @@ class PermissionModelTests(unittest.TestCase):
             )
             self.assertEqual(severity, "medium")
 
+    def test_service_patch_explains_external_name_redirection(self):
+        severity, explanation = classify_permission(
+            PermissionKey("patch", resource="services", name="victim")
+        )
+        self.assertEqual(severity, "high")
+        self.assertIn("ExternalName", explanation)
+
     def test_controller_subresources_are_not_controller_template_writes(self):
         for subresource in ("status", "scale"):
             severity, _ = classify_permission(
