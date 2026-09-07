@@ -620,6 +620,12 @@ class PermissionModelTests(unittest.TestCase):
             PermissionKey(
                 "create", group="networking.k8s.io", resource="networkpolicies"
             ),
+            PermissionKey(
+                "create", group="networking.k8s.io", resource="ingresses"
+            ),
+            PermissionKey(
+                "patch", group="networking.k8s.io", resource="ingresses"
+            ),
         )
         for key in cases:
             with self.subTest(permission=key.human()):
@@ -714,6 +720,16 @@ class PermissionModelTests(unittest.TestCase):
                 ),
                 risks,
             )
+        self.assertIn(
+            PermissionKey(
+                "delete",
+                group="apps",
+                resource="deployments",
+                namespace="policy-system",
+                name="guard-controller",
+            ),
+            risks,
+        )
 
     def test_constrained_impersonation_is_conditional_and_impact_aware(self):
         cases = (

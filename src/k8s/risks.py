@@ -405,6 +405,16 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
         and verb in {"create", "update", "patch", "*"}
     ):
         return "high", "Can create or redirect backends for a selectorless Service."
+    if (
+        resource == "ingresses"
+        and _group_is(group, "networking.k8s.io", "extensions")
+        and verb in CHANGE_VERBS
+    ):
+        return (
+            "high",
+            "Can expose an internal Service or redirect a trusted host/path when "
+            "an active Ingress controller accepts the object.",
+        )
     if resource in STORAGE_CONTROL_RESOURCES and group in CORE_GROUPS and verb in {"create", "*"}:
         return (
             "high",

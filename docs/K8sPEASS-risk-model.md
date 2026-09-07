@@ -56,6 +56,9 @@ control-plane modification, or a strong conditional escalation primitive:
   ClusterTrustBundle update/patch. The traffic paths include selectorless
   backends, readiness spoofing, Service-name squatting, and LoadBalancer IP
   interception.
+- Ingress create/update/patch when an active controller accepts the object.
+  Create can expose an internal Service through a new host/path; patch can
+  redirect a trusted route to another Service.
 - Exact deletion of an existing Service referenced by a
   `failurePolicy: Ignore` admission webhook. The resulting connection failure
   skips that webhook.
@@ -63,6 +66,9 @@ control-plane modification, or a strong conditional escalation primitive:
   correlation proves that Deployment owns every ready EndpointSlice Pod behind
   a `failurePolicy: Ignore` webhook Service. Scaling it to zero skips the
   unavailable webhook. Uncorrelated controller scale writes remain medium.
+- Exact deletion of that same sole ready Deployment backend. Generic
+  Deployment deletion remains medium; only the live fail-open correlation is
+  elevated.
 - Kubernetes 1.36+ constrained impersonation identity and `impersonate-on:*`
   action grants are high when their matching half exists and the delegated
   action has high or critical impact.

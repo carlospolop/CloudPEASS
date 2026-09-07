@@ -228,6 +228,19 @@ def admission_sensitive_permissions(
             )
             backend = target.get("singleReadyDeployment") or {}
             if isinstance(backend, dict) and backend.get("name"):
+                delete_key = PermissionKey(
+                    verb="delete",
+                    group="apps",
+                    resource="deployments",
+                    namespace=str(backend.get("namespace") or ""),
+                    name=str(backend.get("name") or ""),
+                )
+                result[delete_key] = (
+                    f"Deployment {delete_key.namespace}/{delete_key.name} is the "
+                    "only observed ready backend for a failurePolicy=Ignore "
+                    f"webhook in {item.get('name')!r}; deleting it makes webhook "
+                    "connection failures fail open."
+                )
                 for verb in ("patch", "update"):
                     scale_key = PermissionKey(
                         verb=verb,
