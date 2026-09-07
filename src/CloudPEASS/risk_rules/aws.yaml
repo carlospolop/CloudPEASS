@@ -60,12 +60,19 @@ medium_override_exact:
 
 ## Exact action names that must always be classified as `high`.
 high_exact:
+  - amplify:GetApp
+  - amplify:GetJob
   - apigateway:GET
   - cloudfront:GetDistribution
   - cloudfront:GetDistributionConfig
+  - cloudfront:GetFunction
   - cloudfront:ListDistributions
+  - cloudtrail:LookupEvents
   - codebuild:BatchGetBuilds
   - codebuild:BatchGetProjects
+  - codecommit:GetBlob
+  - codecommit:GetCommit
+  - codecommit:GetFile
   - codecommit:GitPull
   - cognito-idp:AdminGetUser
   - cognito-idp:DescribeIdentityProvider
@@ -78,24 +85,36 @@ high_exact:
   - dynamodb:TransactGetItems
   - ec2:DescribeLaunchTemplateVersions
   - ecr:GetDownloadUrlForLayer
+  - ecs:DescribeTaskDefinition
   - lambda:GetFunction
   - lambda:GetFunctionConfiguration
   - lambda:GetLayerVersion
   - logs:FilterLogEvents
   - logs:GetLogEvents
   - route53domains:GetDomainDetail
+  - sagemaker:DescribeTrainingJob
   - secretsmanager:PutSecretValue
   - secretsmanager:UpdateSecret
+  - sns:ListSubscriptions
+  - sns:ListSubscriptionsByTopic
+  - ssm:GetParameterHistory
   - sts:GetFederationToken
 
 ## Evidence-backed corrections for stale upstream/cache entries. These take
 ## precedence over critical_exact and low_exact during classification.
 high_override_exact:
+  - amplify:GetApp
+  - amplify:GetJob
   - apigateway:GET
   - cloudfront:GetDistribution
   - cloudfront:GetDistributionConfig
+  - cloudfront:GetFunction
   - cloudfront:ListDistributions
+  - cloudtrail:LookupEvents
   - codeartifact:GetAuthorizationToken
+  - codecommit:GetBlob
+  - codecommit:GetCommit
+  - codecommit:GetFile
   - cognito-idp:AdminGetUser
   - cognito-idp:DescribeIdentityProvider
   - cognito-idp:ListUsers
@@ -108,6 +127,11 @@ high_override_exact:
   - ec2:DescribeLaunchTemplateVersions
   - ec2:GetPasswordData
   - ecr:GetDownloadUrlForLayer
+  - ecs:DescribeTaskDefinition
+  - sagemaker:DescribeTrainingJob
+  - sns:ListSubscriptions
+  - sns:ListSubscriptionsByTopic
+  - ssm:GetParameterHistory
   - sts:GetDelegatedAccessToken
   - logs:FilterLogEvents
   - sts:GetFederationToken

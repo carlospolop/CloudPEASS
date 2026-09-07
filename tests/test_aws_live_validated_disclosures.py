@@ -6,12 +6,19 @@ from sensitive_permissions.aws import (
 
 
 LIVE_VALIDATED_HIGH_ACTIONS = {
+    "amplify:GetApp",
+    "amplify:GetJob",
     "apigateway:GET",
     "cloudfront:GetDistribution",
     "cloudfront:GetDistributionConfig",
+    "cloudfront:GetFunction",
     "cloudfront:ListDistributions",
+    "cloudtrail:LookupEvents",
     "codebuild:BatchGetBuilds",
     "codebuild:BatchGetProjects",
+    "codecommit:GetBlob",
+    "codecommit:GetCommit",
+    "codecommit:GetFile",
     "codecommit:GitPull",
     "cognito-idp:AdminGetUser",
     "cognito-idp:DescribeIdentityProvider",
@@ -24,10 +31,15 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "dynamodb:TransactGetItems",
     "ec2:DescribeLaunchTemplateVersions",
     "ecr:GetDownloadUrlForLayer",
+    "ecs:DescribeTaskDefinition",
     "lambda:GetFunctionConfiguration",
     "lambda:GetLayerVersion",
     "logs:FilterLogEvents",
     "logs:GetLogEvents",
+    "sagemaker:DescribeTrainingJob",
+    "sns:ListSubscriptions",
+    "sns:ListSubscriptionsByTopic",
+    "ssm:GetParameterHistory",
 }
 
 
