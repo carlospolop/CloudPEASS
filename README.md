@@ -162,173 +162,67 @@ python3 AzurePEAS.py --check-only-these-subs <SUB_ID1>,<SUB_ID2>
 <details>
 <summary><h2>GCPPEAS 🌐🔍</h2></summary>
 
-**GCPPEAS** is designed to enumerate **all your permissions on Google Cloud Platform (GCP)**, uncovering potential **privilege escalation** paths and other attack vectors—all without modifying any resources. It starts by **collecting the projects, folders, and organizations** that the compromised principal can enumerate, then expands its search to discover **additional assets such as Virtual Machines, Functions, Storage buckets, and Service Accounts**. This holistic approach minimizes blind spots and increases the chance of identifying permissions.
+**GCPPEAS** enumerates the current principal's effective GCP permissions and highlights privilege-escalation and sensitive-access paths. Its transport rejects non-read-only endpoints: it never creates, changes, enables, executes, invokes, starts, stops, or deletes cloud resources.
 
-### How It Works
+### How it works
 
-- **Resource Discovery:**  
-  GCPPEAS begins by gathering the provided projects, folders, or organizations and then discovers more resources within those containers.
+GCPPEAS layers several independent techniques so a denied enumeration call does not stop the scan:
 
-- **Permissions Enumeration:**  
-  It employs **two main techniques** to assess the user's permissions:
-  - **IAM Policy Retrieval:**  
-    Attempts to fetch the IAM policies of resources (this requires `*.getIamPolicy` permissions and might not be available in all cases).
-  - **Brute Force Testing:**  
-    Utilizes the GCP **`testIamPermissions`** API to brute force permission checks across all resources. This method is inherently non-intrusive—it does **not** modify any resource or configuration.
-  
-  > **Note:**  
-  > If you encounter errors indicating that the service `cloudresourcemanager.googleapis.com` is not enabled, you can:
-  > - Try to enable it with:  
-  >   ```bash
-  >   gcloud services enable cloudresourcemanager.googleapis.com
-  >   ```
-  > - Alternatively, create a new project under your control, enable the service there, assign the **`roles/serviceusage.serviceUsageConsumer`** role to the compromised principal, and use the `--billing-project` flag in GCPPEAS indicating the name ID of this project (this will allow you to brute-force permissions in the victim project even if that victim project doesn't have the service enabled).
-  > 
-  > The same approach applies if the error is related to `cloudidentity.googleapis.com`.
+1. **Permissionless/local clues:** explicit `--project`, `--service-account`, and repeatable `--resource` values are always tested. On a GCP workload, the metadata server supplies the current project, VM, and attached service account without IAM permissions. Credential and standard project environment variables are also used.
+2. **Container and resource discovery:** Resource Manager search, Cloud Asset Inventory, and independent service-specific list calls discover projects, folders, organizations, VMs, Functions, buckets, service accounts, secrets, Cloud Run services/jobs, Artifact Registry repositories, Pub/Sub resources, BigQuery datasets, Workflows, and KMS keys. Each failure is isolated and summarized.
+3. **Effective permission tests:** Google's `queryTestablePermissions` supplies the current, resource-applicable catalog and `testIamPermissions` checks it in batches. These methods avoid parsing platform-dependent `gcloud help` output. If catalog lookup fails, GCPPEAS falls back to official predefined roles, a public catalog, and finally a built-in core set.
+4. **IAM policy supplement:** where `getIamPolicy` is allowed, direct/public/domain/known-group bindings and custom roles add context. Conditional bindings are not assumed to apply; the effective test decides the current result. BigQuery datasets, which do not expose a dataset-level `testIamPermissions` method, use read-only metadata/list capability probes.
 
-- **Attack Surface Analysis:**  
-  Once permissions are collected, GCPPEAS correlates the data to pinpoint potential privilege escalation paths. Although some permissions might be directly assigned to individual resources—possibly resulting in false negatives—the tool also enumerates additional assets (like VMs, Storage, Functions, and Service Accounts) and tests their permissions to minimize such oversights.
+Knowing a resource name is often enough to test permissions even when the principal cannot list its parent. Examples:
 
-- **Authentication Requirements:**  
-  To execute GCPPEAS, you must provide either a **GCP access token** or a **JSON file with Service Account credentials**.
-
-### "Backdoor" `gcloud` for Google Drive Access 📂☁️
-
-By default `gcloud` doesn't generate tokens with Drive access, but it can, so here you havea  couple of options:
-
-- **Option 1:**  
-  Authenticate using the following if you know the username and password:
-  ```bash
-  gcloud auth login --enable-gdrive-access
-  ```
-  
-- **Option 2:**  
-  If you have compromised the victims laptop, modify the **`GetScopes`** function in the Python library (typically located at `/opt/homebrew/Caskroom/google-cloud-sdk/458.0.1/google-cloud-sdk/lib/surface/auth/login.py`) so that the `https://www.googleapis.com/auth/drive` scope is always included:
-  
-```python
-def GetScopes(args):
-    scopes = config.CLOUDSDK_SCOPES
-    # Include the REAUTH scope for users with 2FA enabled.
-    scopes += (config.REAUTH_SCOPE,)
-    
-    # Always add Google Drive scope
-    scopes += (auth_util.GOOGLE_DRIVE_SCOPE,)
-    if args.enable_gdrive_access:
-        scopes += (auth_util.GOOGLE_DRIVE_SCOPE,)
-    return scopes
-```
-
- The next time `gcloud auth login` is run, it will include the Drive scope. This method is particularly useful if you have access to the victim's machine and can modify the library.
-
-### Generate Gmail & Drive Token 💌☁️
-
-Follow these steps to create an access token that grants GCPPEAS access to Gmail and Google Drive:
-
-0. **Project Setup:**  
-   - Select or create a project in the [Google Cloud Console](https://console.cloud.google.com/).
-   - Optionally, use an AppSheet function to automate project creation.
-
-1. **Enable APIs:**  
-   - Enable the **Gmail API**:
-     
-     ```bash
-     gcloud services enable gmail.googleapis.com
-     ```
-     
-   - Enable the **Drive API**:
-     
-     ```bash
-     gcloud services enable drive.googleapis.com
-     ```
-
-2. **Configure OAuth Consent:**  
-   - Go to the **OAuth consent screen** in the Cloud Console and set up an application named **GCPPEAS**. Use your email as the test user.
-
-3. **Create OAuth Client:**  
-   - Generate an OAuth client with:
-     - **Name:** GCPPEAS
-     - **Application Type:** Desktop Application  
-   - Download the client secret JSON file.
-
-4. **Add Required Scopes:**  
-   - In the **Data access** settings, include the following scopes:
-     - `https://www.googleapis.com/auth/gmail.readonly`
-     - `https://www.googleapis.com/auth/drive`
-
-5. **Generate the Access Token:**  
-   - Use the following Python script to initiate the OAuth flow and obtain your token:
-  
-```python
-# python3 -m pip install google-auth-oauthlib
-from google_auth_oauthlib.flow import InstalledAppFlow
-
-# Define the necessary scopes
-SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/drive"
-]
-
-# Path to your downloaded client secret JSON file
-CLIENT_SECRET_FILE = "/path/to/client_secret.json"
-
-# Initialize and run the OAuth flow
-flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
-creds = flow.run_local_server(port=0)
-
-# Output the access token
-print("Access Token:", creds.token)
-```
-
-### GCPPEAS Help & Usage
-
-- **Help:**  
-  To display all available command options, run:
-  
 ```bash
-python3 ./GCPPEAS.py --help
-usage: GCPPEAS.py [-h] [--projects PROJECTS | --folders FOLDERS | --organizations ORGANIZATIONS | --service-accounts SERVICE_ACCOUNTS] (--sa-credentials-path SA_CREDENTIALS_PATH |
-                --token TOKEN) [--extra-token EXTRA_TOKEN] [--dont-get-iam-policies] [--skip-bruteforce] [--out-json-path OUT_JSON_PATH] [--threads THREADS]
-                [--billing-project BILLING_PROJECT] [--proxy PROXY] [--print-invalid-permissions]
-
-GCPPEASS: Enumerate GCP permissions and check for privilege escalations and other attacks.
-
-options:
-  -h, --help            show this help message and exit
-  --projects PROJECTS   Known project IDs (project names) separated by commas
-  --folders FOLDERS     Known folder IDs (folder number) separated by commas
-  --organizations ORGANIZATIONS
-                        Known organization IDs separated by commas
-  --service-accounts SERVICE_ACCOUNTS
-                        Known service account emails separated by commas
-  --sa-credentials-path SA_CREDENTIALS_PATH
-                        Path to credentials.json
-  --token TOKEN         Raw access token
-  --extra-token EXTRA_TOKEN
-                        Extra token potentially with access over Gmail and/or Drive
-  --dont-get-iam-policies
-                        Do not get IAM policies for the resources
-  --skip-bruteforce     Skip bruteforce permission enumeration without prompting
-  --out-json-path OUT_JSON_PATH
-                        Output JSON file path (e.g. /tmp/gcp_results.json)
-  --threads THREADS     Number of threads to use
-  --billing-project BILLING_PROJECT
-                        Indicate the billing project to use to brute-force permissions
-  --proxy PROXY         Indicate a proxy to use to connect to GCP for debugging (e.g. 127.0.0.1:8080)
-  --print-invalid-permissions
-                        Print found invalid permissions to improve th speed of the tool
-
+python3 GCPPEAS.py --project victim-project --only-specified
+python3 GCPPEAS.py --resource gs://known-bucket --only-specified
+python3 GCPPEAS.py --resource projects/victim-project/secrets/known-secret --only-specified
+python3 GCPPEAS.py --resource //run.googleapis.com/projects/victim-project/locations/us-central1/services/known-service --only-specified
 ```
 
-- **Usage Example:**  
-  Set your environment token and run GCPPEAS with your desired parameters:
-  
+`--billing-project` only sets the quota-project header; GCPPEAS never enables an API or changes billing/IAM. Read calls and `testIamPermissions` can still appear in audit or access logs, so read-only does not mean invisible.
+
+### Authentication
+
+Authentication follows the same fallback style as the other PEASS tools:
+
+- `--token`, then `CLOUDSDK_AUTH_ACCESS_TOKEN`
+- `--sa-credentials-path`, then `GOOGLE_APPLICATION_CREDENTIALS`
+- Application Default Credentials, including workload metadata credentials
+
+Examples:
+
 ```bash
-# Get token from gcloud
-export CLOUDSDK_AUTH_ACCES_TOKEN=$(gcloud auth print-access-token)
+# Existing gcloud user session
+export CLOUDSDK_AUTH_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+python3 GCPPEAS.py --project victim-project --only-specified
 
-# Run GCPPEAS (you can also pass an extra token for Gmail/Drive access)
-python3 GCPPEAS.py [--token <TOKEN>] [--extra-token <EXTRA_TOKEN>] [--projects <PROJECT_ID1>,<PROJECT_ID2>] [--folders <FOLDER_ID1>,<FOLDER_ID2>] [--organizations <ORGANIZATION_ID>] [--service-accounts <SA_EMAIL1>,<SA_EMAIL2>] [--billing-project <BILLING_PROJECT_ID>]
+# Service-account JSON
+python3 GCPPEAS.py --sa-credentials-path credentials.json --project victim-project
+
+# ADC / attached workload identity
+python3 GCPPEAS.py
+
+# Keep output locally for later analysis
+python3 GCPPEAS.py --project victim-project --out-json-path gcp-results.json
 ```
+
+GCPPEAS reports Gmail/Drive-capable OAuth scopes but does not automatically read mailbox or Drive content.
+
+### Useful controls
+
+- `--only-specified`: avoid broad container searches and scan only supplied projects/resources.
+- `--skip-iam-policies`: use the permissionless `testIamPermissions` path without policy reads.
+- `--skip-bruteforce`: policy-only mode; usually less complete.
+- `--skip-asset-inventory`: use service-specific discovery fallbacks only.
+- `--resource`: repeat for known resource names; comma-separated values are also accepted.
+- `--billing-project`: quota project only; no state change.
+- `--threads`, `--timeout`, `--retries`: bound concurrency and transient failures.
+- `--proxy`, `--insecure`, `--debug`: troubleshooting controls.
+
+Run `python3 GCPPEAS.py --help` for the complete current option list.
 
 </details>
 
