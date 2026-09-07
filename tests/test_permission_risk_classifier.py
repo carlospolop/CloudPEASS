@@ -455,7 +455,8 @@ class AwsRiskClassificationTest(unittest.TestCase):
             "lambda:Invoke*": "high",
             "ec2:Run*": "high",
             "codebuild:Start*": "high",
-            "ec2:Describe*": "low",
+            # Includes DescribeLaunchTemplateVersions, which returns user data.
+            "ec2:Describe*": "high",
             "s3:List*": "low",
             "madeup:Unknown*": "high",
         }

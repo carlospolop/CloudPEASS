@@ -60,9 +60,24 @@ medium_override_exact:
 
 ## Exact action names that must always be classified as `high`.
 high_exact:
+  - apigateway:GET
+  - cloudfront:GetDistribution
+  - cloudfront:GetDistributionConfig
+  - cloudfront:ListDistributions
   - codebuild:BatchGetBuilds
   - codebuild:BatchGetProjects
   - codecommit:GitPull
+  - cognito-idp:AdminGetUser
+  - cognito-idp:DescribeIdentityProvider
+  - cognito-idp:ListUsers
+  - cognito-idp:ListUsersInGroup
+  - dynamodb:BatchGetItem
+  - dynamodb:GetItem
+  - dynamodb:Query
+  - dynamodb:Scan
+  - dynamodb:TransactGetItems
+  - ec2:DescribeLaunchTemplateVersions
+  - ecr:GetDownloadUrlForLayer
   - lambda:GetFunction
   - lambda:GetFunctionConfiguration
   - lambda:GetLayerVersion
@@ -73,12 +88,26 @@ high_exact:
   - secretsmanager:UpdateSecret
   - sts:GetFederationToken
 
-## Evidence-backed downgrades for upstream entries that require an additional
-## capability or return encrypted data rather than directly usable credentials.
-## These deliberately take precedence over critical_exact during classification.
+## Evidence-backed corrections for stale upstream/cache entries. These take
+## precedence over critical_exact and low_exact during classification.
 high_override_exact:
+  - apigateway:GET
+  - cloudfront:GetDistribution
+  - cloudfront:GetDistributionConfig
+  - cloudfront:ListDistributions
   - codeartifact:GetAuthorizationToken
+  - cognito-idp:AdminGetUser
+  - cognito-idp:DescribeIdentityProvider
+  - cognito-idp:ListUsers
+  - cognito-idp:ListUsersInGroup
+  - dynamodb:BatchGetItem
+  - dynamodb:GetItem
+  - dynamodb:Query
+  - dynamodb:Scan
+  - dynamodb:TransactGetItems
+  - ec2:DescribeLaunchTemplateVersions
   - ec2:GetPasswordData
+  - ecr:GetDownloadUrlForLayer
   - sts:GetDelegatedAccessToken
   - logs:FilterLogEvents
   - sts:GetFederationToken

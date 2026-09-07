@@ -6,9 +6,24 @@ from sensitive_permissions.aws import (
 
 
 LIVE_VALIDATED_HIGH_ACTIONS = {
+    "apigateway:GET",
+    "cloudfront:GetDistribution",
+    "cloudfront:GetDistributionConfig",
+    "cloudfront:ListDistributions",
     "codebuild:BatchGetBuilds",
     "codebuild:BatchGetProjects",
     "codecommit:GitPull",
+    "cognito-idp:AdminGetUser",
+    "cognito-idp:DescribeIdentityProvider",
+    "cognito-idp:ListUsers",
+    "cognito-idp:ListUsersInGroup",
+    "dynamodb:BatchGetItem",
+    "dynamodb:GetItem",
+    "dynamodb:Query",
+    "dynamodb:Scan",
+    "dynamodb:TransactGetItems",
+    "ec2:DescribeLaunchTemplateVersions",
+    "ecr:GetDownloadUrlForLayer",
     "lambda:GetFunctionConfiguration",
     "lambda:GetLayerVersion",
     "logs:FilterLogEvents",
@@ -34,5 +49,9 @@ def test_live_validated_disclosures_have_service_specific_evidence():
         document = live_validated_disclosure_documentation[action]
         assert document.endswith(".md")
         assert document.startswith(
-            ("aws-privilege-escalation/", "aws-services/")
+            (
+                "aws-post-exploitation/",
+                "aws-privilege-escalation/",
+                "aws-services/",
+            )
         )

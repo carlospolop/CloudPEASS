@@ -142,9 +142,19 @@ very_sensitive_combinations = [
 ]
 
 sensitive_combinations = [
+    ["cloudfront:GetDistribution"],
+    ["cloudfront:GetDistributionConfig"],
+    ["cloudfront:ListDistributions"],
     ["codebuild:BatchGetBuilds"],
     ["codebuild:BatchGetProjects"],
     ["codecommit:GitPull"],
+    ["cognito-idp:AdminGetUser"],
+    ["cognito-idp:DescribeIdentityProvider"],
+    ["cognito-idp:ListUsers"],
+    ["cognito-idp:ListUsersInGroup"],
+    ["dynamodb:TransactGetItems"],
+    ["ec2:DescribeLaunchTemplateVersions"],
+    ["ecr:GetDownloadUrlForLayer"],
     ["lambda:GetFunctionConfiguration"],
     ["lambda:GetLayerVersion"],
     ["logs:FilterLogEvents"],
@@ -209,7 +219,7 @@ sensitive_combinations = [
     ["ec2:DescribeLaunchTemplates", "ec2:DescribeLaunchTemplateVersions"],
     ["ec2:DescribeInstances", "ec2:RunInstances", "ec2:CreateSecurityGroup", "ec2:AuthorizeSecurityGroupIngress", "ec2:CreateTrafficMirrorTarget", "ec2:CreateTrafficMirrorSession", "ec2:CreateTrafficMirrorFilter", "ec2:CreateTrafficMirrorFilterRule"],
 
-    ["ecr:GetAuthorizationToken", "ecr:BatchGetImage"],
+    ["ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
 
     ["ecs:RunTask"],
     ["ecs:StartTask"],
@@ -313,9 +323,24 @@ tested_risk_documentation = {
 
 
 live_validated_disclosure_documentation = {
+    "apigateway:GET": "aws-services/aws-api-gateway-enum.md",
+    "cloudfront:GetDistribution": "aws-services/aws-cloudfront-enum.md",
+    "cloudfront:GetDistributionConfig": "aws-services/aws-cloudfront-enum.md",
+    "cloudfront:ListDistributions": "aws-services/aws-cloudfront-enum.md",
     "codebuild:BatchGetBuilds": "aws-privilege-escalation/aws-codebuild-privesc/README.md",
     "codebuild:BatchGetProjects": "aws-privilege-escalation/aws-codebuild-privesc/README.md",
     "codecommit:GitPull": "aws-services/aws-datapipeline-codepipeline-codebuild-and-codecommit.md",
+    "cognito-idp:AdminGetUser": "aws-services/aws-cognito-enum/cognito-user-pools.md",
+    "cognito-idp:DescribeIdentityProvider": "aws-services/aws-cognito-enum/cognito-user-pools.md",
+    "cognito-idp:ListUsers": "aws-services/aws-cognito-enum/cognito-user-pools.md",
+    "cognito-idp:ListUsersInGroup": "aws-services/aws-cognito-enum/cognito-user-pools.md",
+    "dynamodb:BatchGetItem": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
+    "dynamodb:GetItem": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
+    "dynamodb:Query": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
+    "dynamodb:Scan": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
+    "dynamodb:TransactGetItems": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
+    "ec2:DescribeLaunchTemplateVersions": "aws-privilege-escalation/aws-ec2-privesc/README.md",
+    "ecr:GetDownloadUrlForLayer": "aws-post-exploitation/aws-ecr-post-exploitation/README.md",
     "lambda:GetFunctionConfiguration": "aws-privilege-escalation/aws-lambda-privesc/README.md",
     "lambda:GetLayerVersion": "aws-privilege-escalation/aws-lambda-privesc/README.md",
     "logs:FilterLogEvents": "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md",
