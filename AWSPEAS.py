@@ -30,11 +30,19 @@ POLICY_GENERATOR_URL = "https://awspolicygen.s3.amazonaws.com/js/policies.js"
 MANAGED_POLICIES_URL = (
     "https://raw.githubusercontent.com/iann0036/iam-dataset/main/aws/managed_policies.json"
 )
+UNKNOWN_RESOURCE_SCOPE = "<unknown resource scope>"
 AUTHORIZATION_ERRORS = {
     "AccessDenied",
     "AccessDeniedException",
+    "AuthFailure",
     "AuthorizationError",
     "Forbidden",
+    "NotAuthorized",
+    "NotAuthorizedException",
+    "OperationNotPermitted",
+    "PermissionDenied",
+    "Unauthorized",
+    "UnauthorizedException",
     "UnauthorizedOperation",
     "UnrecognizedClientException",
 }
@@ -124,10 +132,10 @@ class AWSPEASS(CloudPEASS):
         self.simulation_is_admin = False
         self.max_permissions_per_category = 50
 
-        # Temporary credentials may expire during a broad probe, so keep their
-        # profile refresh chain. Long-lived credentials can be passed directly,
-        # avoiding repeated credential_process/profile startup in every child.
-        cli_profile = profile_name if profile_name and self.credentials.token else None
+        # Preserve an explicitly selected profile for CLI probes. Besides
+        # refreshable credentials, profiles can contain custom endpoints, CA
+        # bundles, and service configuration that frozen keys cannot represent.
+        cli_profile = profile_name
         profiles = (
             self.session._session.full_config.get("profiles", {}) if cli_profile else {}
         )
@@ -424,7 +432,13 @@ class AWSPEASS(CloudPEASS):
         )
         return {
             "Version": "2012-10-17",
-            "Statement": [{"Effect": "Allow", "Action": actions, "Resource": "*"}],
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": actions,
+                    "Resource": UNKNOWN_RESOURCE_SCOPE,
+                }
+            ],
         }
 
     def _collect_direct_policies(self):
@@ -863,6 +877,7 @@ class AWSPEASS(CloudPEASS):
     def simulate_batch(self, actions, max_attempts=5):
         allowed = set()
         marker = None
+        seen_markers = set()
         for attempt in range(max_attempts):
             try:
                 while True:
@@ -878,8 +893,9 @@ class AWSPEASS(CloudPEASS):
                     if not response.get("IsTruncated"):
                         return allowed, True
                     marker = response.get("Marker")
-                    if not marker:
-                        return allowed, True
+                    if not marker or marker in seen_markers:
+                        return allowed, False
+                    seen_markers.add(marker)
             except ClientError as exc:
                 code = exc.response.get("Error", {}).get("Code", "")
                 if code in {"Throttling", "ThrottlingException", "TooManyRequestsException", "RequestLimitExceeded"}:

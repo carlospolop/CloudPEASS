@@ -4,7 +4,7 @@ from urllib.parse import quote
 import AWSPEAS as awspeas_module
 from botocore.exceptions import ClientError
 
-from AWSPEAS import AWSPEASS, build_parser
+from AWSPEAS import AWSPEASS, UNKNOWN_RESOURCE_SCOPE, build_parser
 from src.CloudPEASS.cloudpeass import CloudPEASS, CloudResource
 from src.aws.awsbruteforce import AWSBruteForce
 from src.aws.awsmanagedpoliciesguesser import AWSManagedPoliciesGuesser
@@ -194,6 +194,7 @@ def test_public_aws_managed_policy_fallback_is_permissionless_and_partial():
         "s3:GetObject",
         "ec2:DescribeInstances",
     ]
+    assert document["Statement"][0]["Resource"] == UNKNOWN_RESOURCE_SCOPE
     assert instance._public_managed_policy_document(
         "arn:aws:iam::123456789012:policy/ReadOnlyAccess"
     ) == {}
@@ -493,6 +494,51 @@ def test_simulator_retries_throttling_and_follows_markers(monkeypatch):
     assert allowed == {"s3:GetObject", "iam:GetUser"}
     assert sleeps == [1]
     assert instance.iam_client.calls[-1]["Marker"] == "next"
+
+
+def test_simulator_stops_repeated_pagination_marker_as_partial():
+    class IAM:
+        @staticmethod
+        def simulate_principal_policy(**kwargs):
+            return {
+                "EvaluationResults": [{
+                    "EvalActionName": "s3:GetObject", "EvalDecision": "allowed"
+                }],
+                "IsTruncated": True,
+                "Marker": "same-marker",
+            }
+
+    instance = bare_awspeass()
+    instance.iam_client = IAM()
+    instance.entity_arn = "arn:aws:iam::123456789012:user/alice"
+    instance.debug = False
+    allowed, complete = instance.simulate_batch(["s3:GetObject"])
+    assert allowed == {"s3:GetObject"}
+    assert not complete
+
+
+def test_expired_cli_credentials_stop_remaining_probes(monkeypatch):
+    instance = AWSBruteForce(
+        False, "us-east-1", None, [], 1, "AKIAEXAMPLE", "secret"
+    )
+    instance.aws_cli = "/usr/bin/aws"
+    calls = []
+
+    class Result:
+        returncode = 255
+        stdout = b""
+        stderr = b"ExpiredToken: the security token has expired"
+
+    def run(*args, **kwargs):
+        calls.append(args)
+        return Result()
+
+    monkeypatch.setattr("src.aws.awsbruteforce.subprocess.run", run)
+    instance.run_command(None, "us-east-1", "sts", "get-caller-identity")
+    instance.run_command(None, "us-east-1", "s3api", "list-buckets")
+    assert len(calls) == 1
+    assert instance.stop_event.is_set()
+    assert instance.probe_stats["credential_errors"] == 1
 
 
 def test_static_admin_is_validated_by_simulator_instead_of_ending_early():

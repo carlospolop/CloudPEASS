@@ -99,7 +99,8 @@ class AWSBruteForce():
         self.secret_access_key = secret_access_key
         self.session_token = session_token
         self.profile_uses_environment_credentials = profile_uses_environment_credentials
-        self.probe_stats = {"timeouts": 0, "os_errors": 0}
+        self.probe_stats = {"timeouts": 0, "os_errors": 0, "credential_errors": 0}
+        self.stop_event = threading.Event()
 
         self.aws_cli = shutil.which("aws")
 
@@ -376,6 +377,8 @@ class AWSBruteForce():
         return list(dict.fromkeys(options))
 
     def run_command(self, profile, region, service, command, extra=None, cont=0):
+        if getattr(self, "stop_event", None) and self.stop_event.is_set():
+            return
         extra = list(extra or [])
         full_command = self._build_command(profile, region, service, command, extra)
         display_command = self._display_command(full_command)
@@ -395,16 +398,39 @@ class AWSBruteForce():
                 with self.lock:
                     self.found_permissions.append(perm_command)
 
-            elif re.search(r'AccessDenied|ForbiddenException|UnauthorizedOperation|UnsupportedCommandException|AuthorizationException', output, re.I):
+            elif re.search(
+                r"ExpiredToken|InvalidClientTokenId|UnrecognizedClientException|"
+                r"InvalidSignatureException|SignatureDoesNotMatch|RequestExpired|"
+                r"TokenRefreshRequired|Unable to locate credentials|SSO session .*expired",
+                output,
+                re.I,
+            ):
+                with self.lock:
+                    self.probe_stats["credential_errors"] += 1
+                    self.stop_event.set()
+                if self.debug:
+                    print(f"[DEBUG] Credentials became unusable while running: {display_command}")
+
+            elif re.search(
+                r"AccessDenied|Forbidden|Unauthorized|NotAuthorized|AuthFailure|"
+                r"OperationNotPermitted|PermissionDenied|AuthorizationException",
+                output,
+                re.I,
+            ):
                 if self.debug:
                     print(f"[DEBUG] Access denied for: {display_command}")
 
             elif self._required_options(output):
                 if cont < 3:
+                    added = False
                     for required_arg in self._required_options(output):
                         if required_arg not in extra:
                             extra.extend([required_arg, self._placeholder_for(required_arg)])
-                    self.run_command(profile, region, service, command, extra, cont + 1)
+                            added = True
+                    if added:
+                        self.run_command(profile, region, service, command, extra, cont + 1)
+                    elif self.debug:
+                        print(f"[DEBUG] Required CLI arguments made no progress for: {command}")
                 elif self.debug:
                     print(f"[DEBUG] Stopped adding required args for: {command}\n{output.strip()}")
 
@@ -491,7 +517,11 @@ class AWSBruteForce():
 
     def brute_force_permissions(self):
         self.found_permissions = []
-        self.probe_stats = {"timeouts": 0, "os_errors": 0}
+        self.probe_stats = {"timeouts": 0, "os_errors": 0, "credential_errors": 0}
+        if not getattr(self, "stop_event", None):
+            self.stop_event = threading.Event()
+        else:
+            self.stop_event.clear()
         commands_to_run = []
         print(f"{Fore.GREEN}Starting permission enumeration...")
 
@@ -561,5 +591,10 @@ class AWSBruteForce():
             print(
                 f"{Fore.YELLOW}{self.probe_stats['os_errors']} probe(s) could not start; "
                 "rerun with --debug to see the local OS errors."
+            )
+        if self.probe_stats["credential_errors"]:
+            print(
+                f"{Fore.RED}Credentials became unusable during live probes; remaining probes "
+                "were stopped. Refresh the selected profile/session and rerun."
             )
         return self.found_permissions
