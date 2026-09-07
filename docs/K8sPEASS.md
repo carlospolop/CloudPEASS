@@ -76,9 +76,11 @@ disable this or a value up to 5 for unstable links.
    selectors are highlighted, but never called proven bypasses.
 8. Derive a small set of exact SSAR checks from readable live admission
    configuration: canonical negated authorizer checks and explicitly named
-   ValidatingAdmissionPolicy parameter objects. These are bounded checks, not
-   brute force. K8sPEASS raises them to high only when the exact permission is
-   allowed and the observed configuration makes the path applicable.
+   ValidatingAdmissionPolicy parameter objects, existing Services behind
+   fail-open webhooks, and sole ready Deployment backends proven through
+   EndpointSlice/Pod/ReplicaSet ownership. These are bounded checks, not brute
+   force. K8sPEASS raises them to high only when the exact permission is allowed
+   and the observed configuration makes the path applicable.
 
 ## Important interpretation notes
 

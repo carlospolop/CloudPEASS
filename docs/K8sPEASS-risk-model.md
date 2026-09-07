@@ -50,12 +50,19 @@ control-plane modification, or a strong conditional escalation primitive:
   patch/update require an existing object; delete additionally requires
   `parameterNotFoundAction: Allow`.
 - Namespace create/update/patch when selectors define an admission boundary.
-- NetworkPolicy update/patch/delete; Service or legacy Endpoints
+- NetworkPolicy create/update/patch/delete; Service or legacy Endpoints
   create/update/patch; EndpointSlice create/update/patch; Pod or Service status
   update/patch; PersistentVolume create; Node update/patch; and
   ClusterTrustBundle update/patch. The traffic paths include selectorless
   backends, readiness spoofing, Service-name squatting, and LoadBalancer IP
   interception.
+- Exact deletion of an existing Service referenced by a
+  `failurePolicy: Ignore` admission webhook. The resulting connection failure
+  skips that webhook.
+- Exact patch/update of a Deployment `/scale` subresource when read-only live
+  correlation proves that Deployment owns every ready EndpointSlice Pod behind
+  a `failurePolicy: Ignore` webhook Service. Scaling it to zero skips the
+  unavailable webhook. Uncorrelated controller scale writes remain medium.
 - Kubernetes 1.36+ constrained impersonation identity and `impersonate-on:*`
   action grants are high when their matching half exists and the delegated
   action has high or critical impact.
@@ -77,7 +84,8 @@ RBAC, topology, traffic, and storage metadata, review oracles for supplied
 subjects, RBAC object writes without matching bind/escalate, Pod delete/eviction,
 Node status, CSR status, Signer `sign`/`attest`, group/UID/user-extra
 impersonation grants that lack user impersonation,
-controller `status`/`scale` subresource writes,
+controller `status`/`scale` subresource writes without the correlated
+single-backend fail-open admission case,
 SCC/PSP `use`, controller-specific admission resources, Kyverno/Gatekeeper,
 PodTemplate, ServiceAccount, quota, LimitRange, PodDisruptionBudget,
 PriorityClass, PVC, snapshot/CSI, CRD/APIService, PodCertificateRequest, DRA,

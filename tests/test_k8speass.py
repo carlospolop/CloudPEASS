@@ -617,6 +617,9 @@ class PermissionModelTests(unittest.TestCase):
                 group="admissionregistration.k8s.io",
                 resource="mutatingadmissionpolicybindings",
             ),
+            PermissionKey(
+                "create", group="networking.k8s.io", resource="networkpolicies"
+            ),
         )
         for key in cases:
             with self.subTest(permission=key.human()):
@@ -671,6 +674,46 @@ class PermissionModelTests(unittest.TestCase):
         self.assertNotIn(
             PermissionKey("delete", resource="pods", name="x"), risks
         )
+
+    def test_fail_open_webhook_derives_exact_service_and_scale_checks(self):
+        admission = [
+            {
+                "type": "validating webhooks",
+                "name": "guard",
+                "configuration": {
+                    "failOpenTargets": [
+                        {
+                            "namespace": "policy-system",
+                            "name": "guard-webhook",
+                            "exists": True,
+                            "singleReadyDeployment": {
+                                "namespace": "policy-system",
+                                "name": "guard-controller",
+                            },
+                        }
+                    ]
+                },
+            }
+        ]
+        risks = admission_sensitive_permissions(admission)
+        self.assertIn(
+            PermissionKey(
+                "delete", resource="services", namespace="policy-system", name="guard-webhook"
+            ),
+            risks,
+        )
+        for verb in ("patch", "update"):
+            self.assertIn(
+                PermissionKey(
+                    verb,
+                    group="apps",
+                    resource="deployments",
+                    subresource="scale",
+                    namespace="policy-system",
+                    name="guard-controller",
+                ),
+                risks,
+            )
 
     def test_constrained_impersonation_is_conditional_and_impact_aware(self):
         cases = (

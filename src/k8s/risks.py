@@ -384,13 +384,14 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
             "node authorization path support it; no portable privilege path is assumed.",
         )
     if resource == "networkpolicies" and _group_is(group, "networking.k8s.io") and verb in {
+        "create",
         "update",
         "patch",
         "delete",
         "deletecollection",
         "*",
     }:
-        return "high", "Can weaken or redirect an enforced workload network boundary."
+        return "high", "Can add an allow policy or weaken an enforced workload network boundary."
     if resource in {"services", "endpoints"} and group in CORE_GROUPS and verb in {
         "create",
         "update",

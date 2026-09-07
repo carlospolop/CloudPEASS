@@ -163,6 +163,7 @@ def analyze_admission_read_only(
                     }
                 )
 
+    _enrich_fail_open_webhook_targets(client, findings, unavailable)
     _enrich_validating_parameter_targets(client, findings, resources, unavailable)
     findings.extend(
         _collect_third_party_policy_objects(
@@ -211,6 +212,38 @@ def admission_sensitive_permissions(
                         "policy or webhook."
                     )
 
+        for target in configuration.get("failOpenTargets") or []:
+            if not isinstance(target, dict) or target.get("exists") is not True:
+                continue
+            key = PermissionKey(
+                verb="delete",
+                resource="services",
+                namespace=str(target.get("namespace") or ""),
+                name=str(target.get("name") or ""),
+            )
+            result[key] = (
+                f"Service {key.namespace}/{key.name} is the observed endpoint of a "
+                f"failurePolicy=Ignore webhook in {item.get('name')!r}; deleting the "
+                "Service makes webhook connection failures fail open."
+            )
+            backend = target.get("singleReadyDeployment") or {}
+            if isinstance(backend, dict) and backend.get("name"):
+                for verb in ("patch", "update"):
+                    scale_key = PermissionKey(
+                        verb=verb,
+                        group="apps",
+                        resource="deployments",
+                        subresource="scale",
+                        namespace=str(backend.get("namespace") or ""),
+                        name=str(backend.get("name") or ""),
+                    )
+                    result[scale_key] = (
+                        f"Deployment {scale_key.namespace}/{scale_key.name} is the "
+                        "only observed ready backend for a failurePolicy=Ignore "
+                        f"webhook in {item.get('name')!r}; scaling it to zero makes "
+                        "webhook connection failures fail open."
+                    )
+
         target = configuration.get("parameterTarget") or {}
         if not isinstance(target, dict) or target.get("exists") not in {True, False}:
             continue
@@ -237,6 +270,142 @@ def admission_sensitive_permissions(
                 "and alter whether matching requests are admitted."
             )
     return result
+
+
+def _enrich_fail_open_webhook_targets(
+    client: K8sClient,
+    findings: list[dict[str, Any]],
+    unavailable: list[str],
+) -> None:
+    """Correlate fail-open webhooks with existing Services and sole backends."""
+    for item in findings:
+        if item.get("type") not in {"mutating webhooks", "validating webhooks"}:
+            continue
+        configuration = item.get("configuration") or {}
+        targets: list[dict[str, Any]] = []
+        for webhook in configuration.get("webhooks") or []:
+            if not isinstance(webhook, dict) or webhook.get("failurePolicy") != "Ignore":
+                continue
+            service_ref = (webhook.get("clientConfig") or {}).get("service") or {}
+            namespace = str(service_ref.get("namespace") or "")
+            name = str(service_ref.get("name") or "")
+            if not is_valid_namespace_name(namespace) or not is_valid_namespace_name(name):
+                continue
+            try:
+                service = client.get(f"/api/v1/namespaces/{namespace}/services/{name}")
+            except APIError as exc:
+                if exc.status != 404:
+                    unavailable.append(f"fail-open webhook Service {namespace}/{name}: {exc}")
+                continue
+            target: dict[str, Any] = {
+                "namespace": namespace,
+                "name": name,
+                "exists": True,
+                "webhook": str(webhook.get("name") or ""),
+            }
+            backend = _single_ready_deployment_backend(client, namespace, name, service)
+            if backend:
+                target["singleReadyDeployment"] = backend
+            targets.append(target)
+        if targets:
+            configuration["failOpenTargets"] = targets
+
+
+def _single_ready_deployment_backend(
+    client: K8sClient,
+    namespace: str,
+    service_name: str,
+    service: dict[str, Any],
+) -> dict[str, str] | None:
+    selector = (service.get("spec") or {}).get("selector") or {}
+    if not isinstance(selector, dict) or not selector:
+        return None
+    try:
+        slices = client.list_items(
+            f"/apis/discovery.k8s.io/v1/namespaces/{namespace}/endpointslices"
+        )
+        pods = client.list_items(f"/api/v1/namespaces/{namespace}/pods")
+        replicasets = client.list_items(
+            f"/apis/apps/v1/namespaces/{namespace}/replicasets"
+        )
+        deployments = client.list_items(
+            f"/apis/apps/v1/namespaces/{namespace}/deployments"
+        )
+    except APIError:
+        return None
+
+    ready_names: set[str] = set()
+    for endpoint_slice in slices:
+        labels = (endpoint_slice.get("metadata") or {}).get("labels") or {}
+        if labels.get("kubernetes.io/service-name") != service_name:
+            continue
+        for endpoint in endpoint_slice.get("endpoints") or []:
+            if (endpoint.get("conditions") or {}).get("ready") is False:
+                continue
+            ref = endpoint.get("targetRef") or {}
+            if ref.get("kind") != "Pod" or ref.get("namespace", namespace) != namespace:
+                return None
+            ready_names.add(str(ref.get("name") or ""))
+    if not ready_names or "" in ready_names:
+        return None
+
+    pod_by_name = {
+        str((pod.get("metadata") or {}).get("name") or ""): pod for pod in pods
+    }
+    rs_by_name = {
+        str((rs.get("metadata") or {}).get("name") or ""): rs for rs in replicasets
+    }
+    deployment_owners_seen: set[tuple[str, str]] = set()
+    for pod_name in ready_names:
+        pod = pod_by_name.get(pod_name)
+        labels = ((pod or {}).get("metadata") or {}).get("labels") or {}
+        if pod is None or any(labels.get(key) != value for key, value in selector.items()):
+            return None
+        owners = (pod.get("metadata") or {}).get("ownerReferences") or []
+        rs_owners = [
+            owner
+            for owner in owners
+            if owner.get("kind") == "ReplicaSet" and owner.get("controller")
+        ]
+        if len(rs_owners) != 1:
+            return None
+        replica_set = rs_by_name.get(str(rs_owners[0].get("name") or ""))
+        rs_metadata = (replica_set or {}).get("metadata") or {}
+        if replica_set is None or str(rs_owners[0].get("uid") or "") != str(
+            rs_metadata.get("uid") or ""
+        ):
+            return None
+        deployment_owners = [
+            owner
+            for owner in (rs_metadata.get("ownerReferences") or [])
+            if owner.get("kind") == "Deployment" and owner.get("controller")
+        ]
+        if len(deployment_owners) != 1:
+            return None
+        deployment_owners_seen.add(
+            (
+                str(deployment_owners[0].get("name") or ""),
+                str(deployment_owners[0].get("uid") or ""),
+            )
+        )
+    if len(deployment_owners_seen) != 1:
+        return None
+    deployment_name, deployment_uid = next(iter(deployment_owners_seen))
+    deployment = next(
+        (
+            value
+            for value in deployments
+            if str((value.get("metadata") or {}).get("name") or "") == deployment_name
+        ),
+        None,
+    )
+    if (
+        deployment is None
+        or str((deployment.get("metadata") or {}).get("uid") or "") != deployment_uid
+        or int((deployment.get("spec") or {}).get("replicas") or 0) < 1
+    ):
+        return None
+    return {"namespace": namespace, "name": deployment_name}
 
 
 def _enrich_validating_parameter_targets(
