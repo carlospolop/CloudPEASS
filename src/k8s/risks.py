@@ -408,7 +408,7 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
     if (
         resource == "ingresses"
         and _group_is(group, "networking.k8s.io", "extensions")
-        and verb in CHANGE_VERBS
+        and verb in {"create", "patch", "*"}
     ):
         return (
             "high",
@@ -418,7 +418,7 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
     if (
         resource == "httproutes"
         and _group_is(group, "gateway.networking.k8s.io")
-        and verb in CHANGE_VERBS
+        and verb in {"create", "patch", "*"}
     ):
         return (
             "high",

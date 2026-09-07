@@ -638,6 +638,16 @@ class PermissionModelTests(unittest.TestCase):
                 severity, _ = classify_permission(key)
                 self.assertEqual(severity, "high")
 
+    def test_untested_route_update_verb_is_not_promoted_to_high(self):
+        for group, resource in (
+            ("networking.k8s.io", "ingresses"),
+            ("gateway.networking.k8s.io", "httproutes"),
+        ):
+            severity, _ = classify_permission(
+                PermissionKey("update", group=group, resource=resource)
+            )
+            self.assertEqual(severity, "medium")
+
     def test_controller_subresources_are_not_controller_template_writes(self):
         for subresource in ("status", "scale"):
             severity, _ = classify_permission(
