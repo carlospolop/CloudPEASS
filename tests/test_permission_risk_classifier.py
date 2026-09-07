@@ -182,6 +182,20 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             self.classify("Microsoft.Search/searchServices/listQueryKeys/action"),
             "high",
         )
+        tested_sensitive_data_credentials = {
+            "Microsoft.Search/searchServices/createQueryKey/action": "high",
+            "Microsoft.Search/searchServices/regenerateAdminKey/action": "critical",
+            "Microsoft.DocumentDB/databaseAccounts/readonlykeys/action": "high",
+            "Microsoft.DocumentDB/databaseAccounts/readonlykeys/read": "high",
+            "Microsoft.Logic/workflows/triggers/listCallbackUrl/action": "high",
+            "Microsoft.Logic/workflows/versions/triggers/listCallbackUrl/action": "high",
+            "Microsoft.Logic/workflows/triggers/run/action": "high",
+            "Microsoft.Logic/workflows/triggers/histories/resubmit/action": "high",
+            "Microsoft.DataFactory/factories/pipelines/createRun/action": "high",
+        }
+        for permission, expected in tested_sensitive_data_credentials.items():
+            with self.subTest(permission=permission):
+                self.assertEqual(self.classify(permission), expected)
         self.assertEqual(
             self.classify("Microsoft.Compute/virtualMachines/runCommands/write"),
             "critical",

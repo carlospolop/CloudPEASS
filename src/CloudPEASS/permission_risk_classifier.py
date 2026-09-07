@@ -264,6 +264,8 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.web/sites/publishxml/action",
         "microsoft.storage/storageaccounts/listaccountsas/action",
         "microsoft.storage/storageaccounts/listservicesas/action",
+        # Regenerated admin keys permit full Search data-plane reads and writes.
+        "microsoft.search/searchservices/regenerateadminkey/action",
         # Default Notification Hubs management rules expose device registration
         # data and permit arbitrary notification delivery.
         "microsoft.notificationhubs/namespaces/authorizationrules/listkeys/action",
@@ -311,8 +313,20 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.hybridcontainerservice/provisionedclusters/listclusterusercredential/action",
         "microsoft.kubernetes/connectedclusters/listclusterusercredential/action",
         "microsoft.kubernetes/connectedclusters/listclusterusercredentials/action",
+        # These credentials provide account-wide or service-wide read access
+        # to potentially sensitive data but do not authorize data writes.
         "microsoft.search/searchservices/createquerykey/action",
         "microsoft.search/searchservices/listquerykeys/action",
+        "microsoft.documentdb/databaseaccounts/readonlykeys/action",
+        "microsoft.documentdb/databaseaccounts/readonlykeys/read",
+        # These operations execute an existing workflow or pipeline. Their
+        # impact depends on the stored actions and identities, but can include
+        # privileged side effects and access to sensitive downstream data.
+        "microsoft.logic/workflows/triggers/listcallbackurl/action",
+        "microsoft.logic/workflows/versions/triggers/listcallbackurl/action",
+        "microsoft.logic/workflows/triggers/run/action",
+        "microsoft.logic/workflows/triggers/histories/resubmit/action",
+        "microsoft.datafactory/factories/pipelines/createrun/action",
         "microsoft.managedidentity/userassignedidentities/assign/action",
         "microsoft.app/containerapps/getauthtoken/action",
         "microsoft.resources/deploymentscripts/write",
