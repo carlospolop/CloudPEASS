@@ -36,6 +36,7 @@ critical_exact:
   - iam.serviceAccounts.setIamPolicy
   - iam.serviceAccounts.signBlob
   - iam.serviceAccounts.signJwt
+  - iam.googleapis.com/workloadIdentityPoolProviders.update
   - osconfig.patchJobs.exec
   - resourcemanager.folders.setIamPolicy
   - resourcemanager.organizations.setIamPolicy

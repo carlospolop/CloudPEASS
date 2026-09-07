@@ -21,6 +21,7 @@ from src.sensitive_permissions.gcp import (
         "iam.serviceAccounts.getAccessToken",
         "iam.serviceAccounts.signBlob",
         "iam.serviceAccounts.signJwt",
+        "iam.googleapis.com/workloadIdentityPoolProviders.update",
         "container.pods.exec",
         "container.nodes.proxy",
         "container.serviceAccounts.createToken",

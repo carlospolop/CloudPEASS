@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import threading
@@ -43,6 +44,7 @@ CATALOG_URL = (
     "refs/heads/main/gcp/permissions.json"
 )
 TEST_CHUNK_SIZE = 100
+MAX_DIRECT_GROUP_QUERIES = 1000
 
 # The normal paths below obtain a current catalog from Google or the public
 # iam-dataset. This deliberately compact set keeps every supported modern
@@ -148,6 +150,7 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
         "iam.serviceAccounts.setIamPolicy",
         "iam.serviceAccounts.signBlob",
         "iam.serviceAccounts.signJwt",
+        "iam.googleapis.com/workloadIdentityPoolProviders.update",
         "pubsub.snapshots.create",
         "pubsub.snapshots.delete",
         "pubsub.snapshots.get",
@@ -1737,6 +1740,17 @@ class GCPPEASS(CloudPEASS):
                 "authoritative public zone for a Workspace primary domain, also assess the "
                 "administrator-recovery pivot. Preserve the existing policy etag and bindings."
             )
+        if "iam.googleapis.com/workloadIdentityPoolProviders.update" in permission_set:
+            notes.append(
+                "Critical federation privilege escalation: this permission can change an existing "
+                "Workload Identity Federation provider's trust configuration. For a SAML provider, "
+                "an attacker can add a controlled signing certificate alongside a currently trusted "
+                "certificate, forge a subject or mapped attribute that already has IAM access, and "
+                "exchange the assertion at Google STS. Google requires a non-expired certificate to "
+                "overlap during metadata rotation, so replacing every existing certificate at once "
+                "is not required and is rejected. The reachable privileges depend on existing "
+                "principal/principalSet IAM bindings for that pool."
+            )
         return notes
 
     def _enumerate_bigquery_dataset(self, target: dict) -> CloudResource:
@@ -1995,7 +2009,7 @@ class GCPPEASS(CloudPEASS):
     # Principal information --------------------------------------------
 
     def get_user_groups(self) -> List[str]:
-        """Try direct transitive group lookup; testIamPermissions is the fallback."""
+        """Find visible direct and nested groups without requiring a premium SKU."""
         if not self.email or self.is_sa:
             return []
         groups: Set[str] = set()
@@ -2015,8 +2029,61 @@ class GCPPEASS(CloudPEASS):
                     group_key = membership.get("groupKey") or {}
                     if group_key.get("id"):
                         groups.add(group_key["id"])
+            return sorted(groups)
         except GCPApiError as exc:
-            self._record_failure("Cloud Identity group lookup", "global", exc)
+            transitive_error = exc
+
+        # searchTransitiveGroups requires particular Workspace/Cloud Identity
+        # editions. searchDirectGroups is broadly available and can be walked
+        # recursively by treating each discovered group address as a member.
+        # The API silently omits groups whose membership the caller cannot see,
+        # so this remains best-effort rather than proof of non-membership.
+        pending = [self.email]
+        queried = {self.email.lower()}
+        nested_error = None
+        position = 0
+        while position < len(pending) and position < MAX_DIRECT_GROUP_QUERIES:
+            member_key = pending[position]
+            position += 1
+            try:
+                for page in self.client.iter_pages(
+                    "GET",
+                    "https://cloudidentity.googleapis.com/v1/groups/-/memberships:searchDirectGroups",
+                    params={
+                        # JSON string escaping is also valid CEL string escaping
+                        # for email-like entity keys, including apostrophes.
+                        "query": f"member_key_id == {json.dumps(member_key)}",
+                        "pageSize": 1000,
+                    },
+                ):
+                    for membership in page.get("memberships", []):
+                        group_key = membership.get("groupKey") or {}
+                        group_email = group_key.get("id")
+                        if not group_email:
+                            continue
+                        groups.add(group_email)
+                        normalized = group_email.lower()
+                        if normalized not in queried:
+                            queried.add(normalized)
+                            pending.append(group_email)
+            except GCPApiError as exc:
+                if member_key == self.email:
+                    self._record_failure("Cloud Identity group lookup", "global", exc)
+                    return []
+                nested_error = nested_error or exc
+
+        if nested_error is not None:
+            self._record_failure("Cloud Identity nested group lookup", "global", nested_error)
+        if position >= MAX_DIRECT_GROUP_QUERIES and position < len(pending) and self.debug:
+            print(
+                f"{Fore.YELLOW}Stopped the direct-group fallback after "
+                f"{MAX_DIRECT_GROUP_QUERIES} member lookups. Results are partial."
+            )
+        if not groups and self.debug:
+            print(
+                f"{Fore.YELLOW}Transitive group lookup was unavailable "
+                f"({transitive_error.category}); the direct-group fallback returned no visible groups."
+            )
         return sorted(groups)
 
     def _inspect_token(self, token: str) -> dict:
@@ -2076,7 +2143,10 @@ class GCPPEASS(CloudPEASS):
             print(f"{Fore.BLUE}Current principal: {Fore.WHITE}{self.email} {Fore.CYAN}({kind})")
             self.groups = self.get_user_groups()
             if self.groups:
-                print(f"{Fore.BLUE}Known transitive groups: {Fore.WHITE}{', '.join(self.groups)}")
+                print(
+                    f"{Fore.BLUE}Known direct/transitive groups (best effort): "
+                    f"{Fore.WHITE}{', '.join(self.groups)}"
+                )
         elif not use_extra:
             print(
                 f"{Fore.YELLOW}The token did not expose an email. Effective permissions will still be "

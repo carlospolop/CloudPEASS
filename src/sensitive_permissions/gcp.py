@@ -18,6 +18,7 @@ very_sensitive_combinations = [
     ["iam.serviceAccounts.signBlob"],
     ["iam.serviceAccounts.signJwt"],
     ["iam.serviceAccountKeys.create"],
+    ["iam.googleapis.com/workloadIdentityPoolProviders.update"],
     ["iam.roles.update"],
 
     # Credential, secret, and decryption material.
@@ -223,6 +224,10 @@ risk_documentation = (
     (
         "resourcemanager.organizations.setIamPolicy",
         "gcp-to-workspace-pivoting/README.md",
+    ),
+    (
+        "iam.googleapis.com/workloadIdentityPoolProviders.update",
+        "gcp-privilege-escalation/gcp-workload-identity-federation-privesc.md",
     ),
     ("*.setIamPolicy", "gcp-privilege-escalation/gcp-misc-perms-privesc.md"),
     ("cloudbuild.builds.approve", "gcp-post-exploitation/gcp-cloud-build-post-exploitation.md"),

@@ -165,6 +165,82 @@ def test_member_matching_is_exact_and_supports_common_principals():
     assert not peass._member_applies("user:alice@example.com.attacker")
 
 
+def test_group_lookup_uses_transitive_api_when_available():
+    peass = bare_peass()
+    calls = []
+
+    def iter_pages(method, url, params=None, **kwargs):
+        calls.append((url, dict(params or {})))
+        return iter(
+            [
+                {
+                    "memberships": [
+                        {"groupKey": {"id": "parent@example.com"}},
+                        {"groupKey": {"id": "direct@example.com"}},
+                    ]
+                }
+            ]
+        )
+
+    peass.client = SimpleNamespace(iter_pages=iter_pages)
+    assert peass.get_user_groups() == ["direct@example.com", "parent@example.com"]
+    assert len(calls) == 1
+    assert calls[0][0].endswith(":searchTransitiveGroups")
+
+
+def test_group_lookup_falls_back_to_direct_and_walks_visible_parents():
+    peass = bare_peass()
+    calls = []
+
+    def iter_pages(method, url, params=None, **kwargs):
+        params = dict(params or {})
+        calls.append((url, params))
+        if url.endswith(":searchTransitiveGroups"):
+            raise GCPApiError(403, "Premium feature unavailable", url, "PERMISSION_DENIED")
+        query = params["query"]
+        if query == 'member_key_id == "alice@example.com"':
+            return iter(
+                [
+                    {
+                        "memberships": [
+                            {"groupKey": {"id": "direct@example.com"}},
+                            {"groupKey": {"id": "external@other.example"}},
+                        ]
+                    }
+                ]
+            )
+        if query == 'member_key_id == "direct@example.com"':
+            return iter(
+                [{"memberships": [{"groupKey": {"id": "parent@example.com"}}]}]
+            )
+        return iter([{}])
+
+    peass.client = SimpleNamespace(iter_pages=iter_pages)
+    assert peass.get_user_groups() == [
+        "direct@example.com",
+        "external@other.example",
+        "parent@example.com",
+    ]
+    direct_calls = [call for call in calls if call[0].endswith(":searchDirectGroups")]
+    assert len(direct_calls) == 4
+    assert all("labels" not in call[1]["query"] for call in direct_calls)
+    assert peass._failures == {}
+
+
+def test_group_lookup_reports_failure_only_when_both_paths_are_unavailable():
+    peass = bare_peass()
+
+    def unavailable(method, url, **kwargs):
+        raise GCPApiError(403, "API disabled or caller denied", url, "PERMISSION_DENIED")
+
+    peass.client = SimpleNamespace(iter_pages=unavailable)
+    assert peass.get_user_groups() == []
+    assert list(peass._failures) == ["global"]
+    operation, error = peass._failures["global"][0]
+    assert operation == "Cloud Identity group lookup"
+    assert error.status == 403
+
+
 def test_policy_parser_skips_conditions_instead_of_overstating_access():
     peass = bare_peass()
     policy = {
@@ -501,6 +577,14 @@ def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
     assert peass._cross_cloud_pivot_notes(
         project, ["iam.serviceAccounts.signJwt"]
     ) == []
+
+    federation_notes = peass._cross_cloud_pivot_notes(
+        project, ["iam.googleapis.com/workloadIdentityPoolProviders.update"]
+    )
+    assert len(federation_notes) == 1
+    assert "Critical federation privilege escalation" in federation_notes[0]
+    assert "overlap" in federation_notes[0]
+    assert "Google STS" in federation_notes[0]
 
     organization = peass.normalize_resource("organizations/123456789")
     organization_notes = peass._cross_cloud_pivot_notes(
