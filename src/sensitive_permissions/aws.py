@@ -1,18 +1,17 @@
 
 
 very_sensitive_combinations = [
-    ["\\*"],
+    ["[*]"],
     ["iam:PassRole"],
 
-    ["codebuild:StartBuild", "codebuild:StartBuildBatch"],
+    ["codebuild:StartBuild"],
+    ["codebuild:StartBuildBatch"],
 
-    ["cognito-identity:update-identity-pool"],
+    ["cognito-identity:UpdateIdentityPool"],
     ["cognito-idp:AdminAddUserToGroup"],
     ["cognito-idp:AdminConfirmSignUp"],
     ["cognito-idp:AdminCreateUser"],
     ["cognito-idp:AdminSetUserPassword"],
-    ["cognito-idp:AdminSetUserSettings"],
-    ["cognito-idp:SetUserMFAPreference"],
     ["cognito-idp:SetUserPoolMfaConfig"],
     ["cognito-idp:UpdateUserPool"],
     ["cognito-idp:AdminUpdateUserAttributes"],
@@ -100,7 +99,7 @@ very_sensitive_combinations = [
     ["mq:UpdateUser"],
     ["mq:UpdateBroker"],
 
-    ["msk:UpdateSecurity"],
+    ["kafka:UpdateSecurity"],
 
     ["rds:ModifyDBInstance"],
 
@@ -119,7 +118,6 @@ very_sensitive_combinations = [
     ["sso:AttachManagedPolicyToPermissionSet", "sso:ProvisionPermissionSet"],
     ["sso:AttachCustomerManagedPolicyReferenceToPermissionSet", "sso:ProvisionPermissionSet"],
     ["sso:CreateAccountAssignment"],
-    ["sso:GetRoleCredentials"],
 
     ["s3:PutBucketPolicy"],
     ["s3:PutBucketAcl"],
@@ -140,23 +138,16 @@ very_sensitive_combinations = [
     ["sts:AssumeRole"],
     ["sts:GetFederationToken"],
     ["sts:AssumeRoleWithSAML"],
-    ["sts:AssumeRoleWithWebIdentity"]
+    ["sts:AssumeRoleWithWebIdentity"],
+    ["codeartifact:GetAuthorizationToken", "sts:GetServiceBearerToken"]
 ]
 
 sensitive_combinations = [
     ["apigateway:POST"],
     ["apigateway:GET"],
-    ["apigateway:UpdateRestApiPolicy", "apigateway:PATCH"],
-    ["apigateway:PutIntegration"],
-    ["apigateway:CreateDeployment"],
-    ["apigateway:UpdateAuthorizer"],
-    ["apigateway:UpdateVpcLink"],
-    ["apigateway:UpdateGatewayResponse"],
-    ["apigateway:UpdateStage"],
-    ["apigateway:PutMethodResponse"],
-    ["apigateway:UpdateRestApi"],
-    ["apigateway:CreateApiKey"],
-    ["apigateway:UpdateApiKey"],
+    ["apigateway:PUT"],
+    ["apigateway:PATCH"],
+    ["apigateway:UpdateRestApiPolicy"],
 
     ["chime:CreateApiKey"],
 
@@ -167,10 +158,9 @@ sensitive_combinations = [
     ["s3:PutObject"],
 
     ["codepipeline:CreatePipeline", "codebuild:CreateProject", "codepipeline:StartPipelineExecution"],
-    ["codepipeline:pollforjobs"],
+    ["codepipeline:PollForJobs"],
 
     ["codestar:CreateProject"],
-    ["codestar:CreateProjectFromTemplate"],
 
     ["cloudformation:CreateStack"],
     ["cloudformation:UpdateStack"],
@@ -206,7 +196,7 @@ sensitive_combinations = [
     ["ec2:AssociateIamInstanceProfile", "ec2:DisassociateIamInstanceProfile"],
     ["ec2:ReplaceIamInstanceProfileAssociation"],
     ["autoscaling:CreateLaunchConfiguration", "autoscaling:CreateAutoScalingGroup"],
-    ["ec2:describe-launch-templates", "ec2:describe-launch-template-versions"],
+    ["ec2:DescribeLaunchTemplates", "ec2:DescribeLaunchTemplateVersions"],
     ["ec2:DescribeInstances", "ec2:RunInstances", "ec2:CreateSecurityGroup", "ec2:AuthorizeSecurityGroupIngress", "ec2:CreateTrafficMirrorTarget", "ec2:CreateTrafficMirrorSession", "ec2:CreateTrafficMirrorFilter", "ec2:CreateTrafficMirrorFilterRule"],
 
     ["ecr:GetAuthorizationToken", "ecr:BatchGetImage"],
@@ -259,14 +249,13 @@ sensitive_combinations = [
     ["sns:Unsubscribe"],
     
     ["sqs:SendMessage"],
-    ["sqs:SendMessageBatch"],
     ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility"],
     ["sqs:PurgeQueue"],
 
     ["sso:DetachManagedPolicyFromPermissionSet"],
     ["sso:DetachCustomerManagedPolicyReferenceFromPermissionSet"],
     ["sso:DeleteInlinePolicyFromPermissionSet"],
-    ["sso:DeletePermissionBoundaryFromPermissionSet"],
+    ["sso:DeletePermissionsBoundaryFromPermissionSet"],
 
     ["s3:PutBucketNotification"],
     ["s3:PutObject"],
@@ -299,5 +288,5 @@ sensitive_combinations = [
     ["workdocs:AddResourcePermissions"],
     ["workdocs:AddUserToGroup"],
 
-    ["DLM:CreateLifeCyclePolicy"]
+    ["dlm:CreateLifecyclePolicy"]
 ]

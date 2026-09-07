@@ -1,0 +1,311 @@
+## Rule schema version (used by humans; runtime currently expects v1)
+version: 1
+
+## Cloud provider these rules apply to
+provider: aws
+
+# NOTE: This file is the source of truth for regex/exact-based risk classification.
+# The full per-permission categorized YAML lists (aws_permissions_cat.yaml, etc) are kept for reference
+# but should not be used by runtime code.
+
+## =====================
+## CRITICAL RULES
+## =====================
+
+## Exact action names that must always be classified as `critical`.
+## Matching is case-insensitive in the classifier.
+critical_exact:
+  - codeartifact:GetAuthorizationToken
+  - connect:GetFederationToken
+  - ec2:AssociateIamInstanceProfile
+  - ec2:GetPasswordData
+  - ec2:ReplaceIamInstanceProfileAssociation
+  - ecr-public:GetAuthorizationToken
+  - ecr:GetAuthorizationToken
+  - ecs:ExecuteCommand
+  - events:RetrieveConnectionCredentials
+  - iam:PassRole
+  - kms:CreateGrant
+  - kms:Decrypt
+  - kms:PutKeyPolicy
+  - lambda:UpdateFunctionCode
+  - lambda:UpdateFunctionConfiguration
+  - s3:PutBucketPolicy
+  # S3 boundary-changing ACL operations (treat as critical via exact match)
+  - s3:PutBucketAcl
+  - s3:PutObjectAcl
+  - s3:PutObjectVersionAcl
+  - sagemaker:CreatePresignedNotebookInstanceUrl
+  - secretsmanager:GetSecretValue
+  - ssm:GetParameter
+  - ssm:GetParameters
+  - ssm:GetParametersByPath
+  - ssm:ResumeSession
+  - ssm:SendCommand
+  - ssm:StartSession
+  - sts:GetDelegatedAccessToken
+  - sts:GetFederationToken
+  - sts:GetServiceBearerToken
+
+## =====================
+## EVIDENCE-BACKED DOWNGRADES
+## =====================
+
+## Upstream critical entries that have no supported caller-facing attack API.
+medium_override_exact:
+  - events:RetrieveConnectionCredentials
+
+## =====================
+## HIGH RULES
+## =====================
+
+## Exact action names that must always be classified as `high`.
+high_exact:
+  - secretsmanager:PutSecretValue
+  - secretsmanager:UpdateSecret
+
+## Evidence-backed downgrades for upstream entries that require an additional
+## capability or return encrypted data rather than directly usable credentials.
+## These deliberately take precedence over critical_exact during classification.
+high_override_exact:
+  - codeartifact:GetAuthorizationToken
+  - ec2:GetPasswordData
+  - sts:GetDelegatedAccessToken
+  - sts:GetServiceBearerToken
+
+## =====================
+## MEDIUM RULES
+## =====================
+
+## Regex patterns (case-insensitive) for "benign writes" that should be `medium`.
+## Used to downgrade operational write actions (metrics/telemetry/etc.) from the default `high`.
+benign_write_medium_action_regex:
+  # X-Ray: telemetry/logging ingestion is not a direct privilege boundary.
+  - ^xray:PutTraceSegments$
+  - ^xray:PutTelemetryRecords$
+  # CloudWatch Logs: retention configuration is operational, not a privilege boundary.
+  - ^logs:PutRetentionPolicy$
+  - ^cloudwatch:PutMetricData$
+  - ^cloudwatch:PutMetricAlarm$
+  - ^cloudwatch:PutCompositeAlarm$
+  - ^cloudwatch:PutAnomalyDetector$
+  - ^cloudwatch:PutInsightRule$
+  - ^cloudwatch:PutDashboard$
+  - ^cloudwatch:SetAlarmState$
+  - ^cloudwatch:PutManagedInsightRules$
+  - ^cloudwatch:CreateServiceLevelObjective$
+  - ^cloudwatch:UpdateServiceLevelObjective$
+  - ^[^:]+:PutMetricData$
+  - ^logs:PutMetricFilter$
+  - ^s3:PutMetricsConfiguration$
+  - ^mediastore:PutMetricPolicy$
+  - ^autoscaling:PutScalingPolicy$
+  - ^[^:]+:PutScalingPolicy$
+  - ^autoscaling:PutScheduledUpdateGroupAction$
+  - ^autoscaling:BatchPutScheduledUpdateGroupAction$
+  - ^autoscaling:PutNotificationConfiguration$
+  - ^autoscaling:PutLifecycleHook$
+  - ^autoscaling:PutWarmPool$
+  - ^application-autoscaling:PutScalingPolicy$
+  - ^application-autoscaling:PutScheduledAction$
+  - ^application-autoscaling:RegisterScalableTarget$
+  - ^application-autoscaling:DeregisterScalableTarget$
+  - ^autoscaling-plans:CreateScalingPlan$
+  - ^cur:PutReportDefinition$
+  - ^cur:ModifyReportDefinition$
+  - ^cur:PutClassicReportPreferences$
+  - ^cur:ValidateReportDestination$
+  - ^aps:PutAnomalyDetector$
+  - ^[^:]+:PutAlarm$
+
+## =====================
+## LOW RULES
+## =====================
+
+## Exact action names that must always be classified as `low`.
+## Useful for overriding generic heuristics.
+low_exact:
+  # Explicit overrides for read-only permissions that otherwise match
+  # generic sensitive-read substrings (e.g. "Configuration", "Authorization")
+  # or fall through to the unknown-default (e.g. BatchGet* verbs).
+  - aoss:BatchGetCollection
+  - amplifybackend:GetToken
+  - aoss:BatchGetLifecyclePolicy
+  - appconfig:GetHostedConfigurationVersion
+  - appconfig:ListConfigurationProfiles
+  - appconfig:ListHostedConfigurationVersions
+  - appfabric:GetAppAuthorization
+  - appfabric:ListAppAuthorizations
+  - cognito-idp:GetSigningCertificate
+  - cognito-identity:GetOpenIdToken
+  - dynamodb:DescribeEndpoints
+  - elasticbeanstalk:DescribeApplicationVersions
+  - elasticbeanstalk:DescribeApplications
+  - elasticbeanstalk:DescribeEnvironments
+  - elasticbeanstalk:DescribeEvents
+  - elasticbeanstalk:ListAvailableSolutionStacks
+  - elasticbeanstalk:ListPlatformVersions
+  - kinesisvideo:GetDASHStreamingSessionURL
+  - kinesisvideo:GetHLSStreamingSessionURL
+  - kinesisvideo:GetIceServerConfig
+  - kinesisvideo:ListFragments
+  - logs:CreateLogGroup
+  - logs:CreateLogStream
+  - logs:PutLogEvents
+  - logs:FilterLogEvents
+  - route53:GetGeoLocation
+  - route53:ListGeoLocations
+  - sts:GetCallerIdentity
+  - sts:GetSessionToken
+
+## =====================
+## HEURISTICS / SUPPORTING LISTS
+## =====================
+
+## Global heuristic for write-like actions:
+## - If the verb is "write-like" AND does NOT match `dangerous_write_regex`, it will be downgraded to `medium`.
+## - Dangerous writes stay `high` (or `critical` if they match the critical rules above).
+## Case-insensitive.
+
+## Regex that defines which verbs count as "write-like".
+write_like_prefix_regex: "^(Put|Create|Update|Modify|Delete|Set|Enable|Disable|Generate|Start|Stop|Cancel|Associate|Disassociate|Register|Deregister|Attach|Detach|Add|Remove|Reset|Run|Invoke|Import|Export|Upload|Download|Connect|Login|Reset|Rotate)"
+
+## If this regex matches the verb, the write is considered dangerous and is NOT downgraded.
+dangerous_write_regex: "(Policy|ResourcePolicy|RepositoryPolicy|BucketPolicy|RegistryPolicy|AccessPointPolicy|Role|User|Group|Permission|PassRole|Assume|Secret|Credential|Password|Token|Authorization|AccessKey|KeyPolicy|Decrypt|Encrypt|Grant|LoginProfile|SSHPublicKey|SigningCertificate|InstanceProfile|LaunchConfiguration|LaunchTemplate|UserData|Destination|Subscription|Target|Endpoint|Rule|Terminate|\\bKey\\b|Bucket|Object|Repository|Code)"
+
+## Substrings (case-insensitive) that indicate a read action is likely to expose secrets/data.
+## If a read verb contains any of these, it is upgraded from `low` to `high`.
+sensitive_read_substrings:
+  - Secret
+  - Password
+  - Credential
+  - AccessKey
+  - Token
+  - PrivateKey
+  - Certificate
+  - Decrypt
+  - Plaintext
+  - GetAuthorizationToken
+  - GetSecretValue
+  - GetParameters
+  - GetParameter
+  - GetRepositoryPolicy
+  - UserData
+  - DistributionConfig
+
+## A public certificate is metadata rather than secret key material. Specific
+## certificate/private-key retrieval APIs can still be listed explicitly.
+ignored_sensitive_read_substrings:
+  - Certificate
+
+## IAM verbs that represent privilege escalation / boundary changes and should be `critical`.
+## IAM actions not matched here are typically `high` unless they're read-only.
+iam_critical_verbs:
+  - AddRoleToInstanceProfile
+  - AddUserToGroup
+  - AttachGroupPolicy
+  - AttachRolePolicy
+  - AttachUserPolicy
+  - CreateAccessKey
+  - CreateLoginProfile
+  - CreatePolicyVersion
+  - CreateServiceSpecificCredential
+  - DeleteRolePermissionsBoundary
+  - DeleteUserPermissionsBoundary
+  - DetachGroupPolicy
+  - DetachRolePolicy
+  - DetachUserPolicy
+  - PutGroupPolicy
+  - PutRolePermissionsBoundary
+  - PutRolePolicy
+  - PutUserPermissionsBoundary
+  - PutUserPolicy
+  - ResetServiceSpecificCredential
+  - SetDefaultPolicyVersion
+  - UpdateAccessKey
+  - UpdateAssumeRolePolicy
+  - UpdateLoginProfile
+
+## Verb prefixes treated as read-only (`low`) by default.
+## Case-insensitive.
+## NOTE: `BatchGet*` is already treated as read in code, so keeping `BatchGet` here is redundant.
+read_prefixes: [Get, List, Describe, View, BatchList, BatchGet, Head]
+
+## Verb prefixes treated as `medium` by default.
+## Case-insensitive.
+medium_prefixes:
+  - Delete
+  - BatchDelete
+  - Remove
+  - Destroy
+  - Terminate
+  - Suspend
+  - Pause
+  - Start
+  - Stop
+  - Cancel
+  - Request
+  - Reboot
+  - Restart
+  - Resume
+  - Enable
+  - Disable
+  - Register
+  - Unassign
+  - Deregister
+  - Open
+  - Validate
+  - Acknowledge
+  - Fail
+  - AssignPrivate
+  - Abort
+
+## Verb prefixes treated as `high` by default.
+## Case-insensitive.
+high_prefixes:
+  - Put
+  - Create
+  - Update
+  - Write
+  - Run
+  - Invoke
+  - Attach
+  - Detach
+  - Modify
+  - Associate
+  - Disassociate
+  - Authorize
+  - Revoke
+  - Upload
+  - Download
+  - Import
+  - Export
+  - Connect
+  - Login
+  - Reset
+  - Rotate
+  - Generate
+  - Assume
+  - Tag
+  - Untag
+
+## Verbs that directly set/attach resource policies (always `critical`).
+resource_policy_verbs:
+  - PutBucketPolicy
+  - PutAccessPointPolicy
+  - PutMultiRegionAccessPointPolicy
+  - SetRepositoryPolicy
+  - PutRepositoryPolicy
+  - PutRegistryPolicy
+  - PutResourcePolicy
+
+## Suffixes that indicate policy-changing verbs (combined with prefixes below) => `critical`.
+resource_policy_suffixes:
+  - ResourcePolicy
+  - RepositoryPolicy
+  - BucketPolicy
+  - RegistryPolicy
+  - AccessPointPolicy
+
+## Prefixes that, together with the suffix list above, imply a policy change => `critical`.
+resource_policy_prefixes: [Put, Set]

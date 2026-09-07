@@ -1,7 +1,7 @@
 """
 Permission risk classifier for AWS, Azure, and GCP.
 Adapted from Blue-PEASS for CloudPEASS integration.
-Downloads risk_rules YAML files from Blue-CloudPEASS repo at runtime.
+Loads bundled risk rules and refreshes them from Blue-CloudPEASS when possible.
 
 Note: The Blue-CloudPEASS repository must be publicly accessible at:
 https://github.com/peass-ng/Blue-CloudPEASS
@@ -9,6 +9,7 @@ https://github.com/peass-ng/Blue-CloudPEASS
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 import time
@@ -32,6 +33,24 @@ RISK_RULES_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 def _cache_dir() -> Path:
     """Get cache directory for risk rules."""
     return Path.home() / ".cache" / "cloudpeass" / "risk_rules"
+
+
+def _bundled_rules_path(provider: str) -> Path:
+    """Return the permissionless/offline baseline shipped with CloudPEASS."""
+    return Path(__file__).resolve().parent / "risk_rules" / f"{provider}.yaml"
+
+
+def _parse_rules_yaml(yaml_text: Optional[str], provider: str, source: str) -> dict:
+    if not yaml_text:
+        return {}
+    try:
+        data = yaml.safe_load(yaml_text) or {}
+    except Exception as e:
+        print(f"Warning: Couldn't parse {source} risk rules for {provider}: {e}")
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return data
 
 
 def _should_refresh_cache(path: Path) -> bool:
@@ -61,16 +80,25 @@ def _download_risk_rules(provider: str) -> Optional[str]:
 
 
 def _load_yaml(provider: str) -> dict:
-    """Load YAML rules from cache or download from Blue-PEASS."""
+    """Load rules from the network/cache plus the bundled offline baseline."""
     cache_path = _cache_dir() / f"{provider}.yaml"
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # Read-only homes/containers must still be able to use bundled rules.
+        pass
 
     yaml_text = None
+    downloaded_data = {}
     
     # Download if cache is stale
     if _should_refresh_cache(cache_path):
-        yaml_text = _download_risk_rules(provider)
-        if yaml_text:
+        downloaded_text = _download_risk_rules(provider)
+        downloaded_data = _parse_rules_yaml(
+            downloaded_text, provider, "downloaded"
+        )
+        if downloaded_data:
+            yaml_text = downloaded_text
             try:
                 cache_path.write_text(yaml_text, encoding="utf-8")
             except OSError:
@@ -83,19 +111,48 @@ def _load_yaml(provider: str) -> dict:
         except OSError:
             pass
 
-    if not yaml_text:
-        return {}
-
+    bundled_path = _bundled_rules_path(provider)
     try:
-        data = yaml.safe_load(yaml_text) or {}
-    except Exception as e:
-        print(f"Warning: Couldn't parse risk rules YAML for {provider}: {e}")
-        return {}
+        bundled_text = bundled_path.read_text(encoding="utf-8")
+    except OSError:
+        bundled_text = None
 
-    if not isinstance(data, dict):
-        return {}
-    
-    return data
+    bundled_data = _parse_rules_yaml(bundled_text, provider, "bundled")
+    external_data = downloaded_data or _parse_rules_yaml(
+        yaml_text, provider, "cached"
+    )
+    if not bundled_data:
+        return external_data
+    if not external_data:
+        return bundled_data
+
+    # Remote rules can tune scalar heuristics, while bundled list entries remain
+    # a minimum safety baseline if a remote revision accidentally omits one.
+    merged = dict(bundled_data)
+    for key, value in external_data.items():
+        if key in {
+            "write_like_prefix_regex",
+            "bulk_medium_write_prefix_regex",
+            "dangerous_write_regex",
+            "service_medium_dangerous_regex",
+        }:
+            try:
+                re.compile(str(value))
+            except re.error as exc:
+                print(
+                    f"Warning: Ignoring invalid downloaded risk regex "
+                    f"{key}={value!r}: {exc}"
+                )
+                continue
+        if isinstance(value, list) and isinstance(merged.get(key), list):
+            combined = list(merged[key])
+            for item in value:
+                if item not in combined:
+                    combined.append(item)
+            merged[key] = combined
+        else:
+            merged[key] = value
+    return merged
 
 
 @dataclass(frozen=True)
@@ -103,15 +160,20 @@ class AwsRules:
     critical_exact: set[str]
     low_exact: set[str]
     high_exact: set[str]
+    medium_override_exact: set[str]
+    high_override_exact: set[str]
     critical_exact_lower: set[str]
     low_exact_lower: set[str]
     high_exact_lower: set[str]
+    medium_override_exact_lower: set[str]
+    high_override_exact_lower: set[str]
     benign_write_medium_action_re: tuple[re.Pattern[str], ...]
     write_like_prefix_re: re.Pattern[str]
     dangerous_write_re: re.Pattern[str]
     sensitive_read_substrings: tuple[str, ...]
     sensitive_read_substrings_lower: tuple[str, ...]
     iam_critical_verbs: set[str]
+    iam_critical_verbs_lower: set[str]
     read_prefixes: tuple[str, ...]
     medium_prefixes: tuple[str, ...]
     high_prefixes: tuple[str, ...]
@@ -181,7 +243,17 @@ def load_rules(provider: str):
         critical_exact = set(data.get("critical_exact") or [])
         low_exact = set(data.get("low_exact") or [])
         high_exact = set(data.get("high_exact") or [])
-        sensitive_read_substrings = tuple(data.get("sensitive_read_substrings") or [])
+        medium_override_exact = set(data.get("medium_override_exact") or [])
+        high_override_exact = set(data.get("high_override_exact") or [])
+        ignored_sensitive_read_substrings = {
+            str(value).casefold()
+            for value in (data.get("ignored_sensitive_read_substrings") or [])
+        }
+        sensitive_read_substrings = tuple(
+            value
+            for value in (data.get("sensitive_read_substrings") or [])
+            if str(value).casefold() not in ignored_sensitive_read_substrings
+        )
         read_prefixes = tuple(data.get("read_prefixes") or [])
         medium_prefixes = tuple(data.get("medium_prefixes") or [])
         high_prefixes = tuple(data.get("high_prefixes") or [])
@@ -196,17 +268,28 @@ def load_rules(provider: str):
             critical_exact=critical_exact,
             low_exact=low_exact,
             high_exact=high_exact,
+            medium_override_exact=medium_override_exact,
+            high_override_exact=high_override_exact,
             critical_exact_lower={x.lower() for x in critical_exact},
             low_exact_lower={x.lower() for x in low_exact},
             high_exact_lower={x.lower() for x in high_exact},
-            benign_write_medium_action_re=tuple(
-                re.compile(p, re.IGNORECASE) for p in (data.get("benign_write_medium_action_regex") or [])
+            medium_override_exact_lower={x.lower() for x in medium_override_exact},
+            high_override_exact_lower={x.lower() for x in high_override_exact},
+            benign_write_medium_action_re=_compile_regex_list(
+                data.get("benign_write_medium_action_regex") or []
             ),
-            write_like_prefix_re=re.compile(write_like_prefix_regex, re.IGNORECASE),
-            dangerous_write_re=re.compile(dangerous_write_regex, re.IGNORECASE),
+            write_like_prefix_re=_compile_regex(
+                write_like_prefix_regex,
+                r"^$",
+            ),
+            dangerous_write_re=_compile_regex(
+                dangerous_write_regex,
+                r"$^",
+            ),
             sensitive_read_substrings=sensitive_read_substrings,
             sensitive_read_substrings_lower=tuple(s.lower() for s in sensitive_read_substrings),
             iam_critical_verbs=set(data.get("iam_critical_verbs") or []),
+            iam_critical_verbs_lower={str(v).lower() for v in (data.get("iam_critical_verbs") or [])},
             read_prefixes=read_prefixes,
             medium_prefixes=medium_prefixes,
             high_prefixes=high_prefixes,
@@ -296,6 +379,26 @@ def _startswith_any_ci(text: str, prefixes_lower: tuple[str, ...]) -> bool:
     return t.startswith(prefixes_lower)
 
 
+def _compile_regex(pattern: object, fallback: str) -> re.Pattern[str]:
+    try:
+        return re.compile(str(pattern), re.IGNORECASE)
+    except re.error as exc:
+        print(f"Warning: Ignoring invalid permission-risk regex {pattern!r}: {exc}")
+        return re.compile(fallback, re.IGNORECASE)
+
+
+def _compile_regex_list(patterns: object) -> tuple[re.Pattern[str], ...]:
+    compiled = []
+    if not isinstance(patterns, (list, tuple)):
+        return ()
+    for pattern in patterns:
+        try:
+            compiled.append(re.compile(str(pattern), re.IGNORECASE))
+        except re.error as exc:
+            print(f"Warning: Ignoring invalid permission-risk regex {pattern!r}: {exc}")
+    return tuple(compiled)
+
+
 def aws_override_level(action: str, rules: AwsRules) -> Optional[str]:
     action = action.strip()
     if not action:
@@ -305,6 +408,12 @@ def aws_override_level(action: str, rules: AwsRules) -> Optional[str]:
 
     if action_lower in rules.low_exact_lower:
         return "low"
+    if action_lower in rules.medium_override_exact_lower:
+        return "medium"
+    # Local evidence-backed corrections can deliberately lower an overly broad
+    # upstream critical entry to context-dependent high.
+    if action_lower in rules.high_override_exact_lower:
+        return "high"
     if action_lower in rules.critical_exact_lower:
         return "critical"
     if action_lower in rules.high_exact_lower:
@@ -320,13 +429,91 @@ def aws_override_level(action: str, rules: AwsRules) -> Optional[str]:
     return None
 
 
+def _aws_pattern_matches(pattern: str, candidate: str) -> bool:
+    """AWS IAM action matching is case-insensitive and supports * and ?."""
+    return fnmatch.fnmatchcase(candidate.casefold(), pattern.casefold())
+
+
+def _aws_wildcard_level(action: str, rules: AwsRules) -> Optional[str]:
+    """Classify an IAM Action pattern by the most dangerous action it implies."""
+    if not any(char in action for char in "*?"):
+        return None
+
+    action = action.strip()
+    if action in {"*", "*:*"}:
+        return "critical"
+    if ":" not in action:
+        return "critical"
+
+    service, verb = action.split(":", 1)
+    service_lower = service.casefold().strip()
+    verb_lower = verb.casefold().strip()
+    if service_lower == "*" or verb_lower == "*":
+        return "critical"
+
+    critical_candidates = (
+        set(rules.critical_exact_lower)
+        - rules.low_exact_lower
+        - rules.medium_override_exact_lower
+        - rules.high_override_exact_lower
+    )
+    critical_candidates.update(f"iam:{verb}" for verb in rules.iam_critical_verbs_lower)
+    if any(_aws_pattern_matches(action, candidate) for candidate in critical_candidates):
+        return "critical"
+    high_candidates = rules.high_exact_lower | rules.high_override_exact_lower
+    if any(_aws_pattern_matches(action, candidate) for candidate in high_candidates):
+        return "high"
+
+    # A wildcard can imply one of these well-known escalation/data actions even
+    # when the exact action is supplied by the legacy sensitive-combination list.
+    critical_examples = (
+        "iam:PassRole",
+        "sts:AssumeRole",
+        "sts:AssumeRoleWithSAML",
+        "sts:AssumeRoleWithWebIdentity",
+        "s3:PutBucketPolicy",
+        "secretsmanager:GetSecretValue",
+        "ssm:StartSession",
+        "ssm:SendCommand",
+    )
+    if any(_aws_pattern_matches(action, candidate) for candidate in critical_examples):
+        return "critical"
+
+    high_examples = (
+        "s3:GetObject",
+        "s3:PutObject",
+        "lambda:InvokeFunction",
+        "ec2:RunInstances",
+        "ecs:RunTask",
+        "codebuild:StartBuild",
+    )
+    if any(_aws_pattern_matches(action, candidate) for candidate in high_examples):
+        return "high"
+
+    # Broad Get patterns may include credentials, secrets, tokens, or object
+    # contents. Describe/List/View/Head patterns remain ordinary discovery.
+    if verb_lower.startswith(("describe", "list", "view", "head", "batchlist")):
+        return "low"
+    if verb_lower.startswith(("get", "batchget")):
+        return "high"
+    if verb_lower.startswith(rules.medium_prefixes_lower):
+        return "medium"
+    if verb_lower.startswith(rules.high_prefixes_lower):
+        return "high"
+
+    # An unknown partial action pattern grants more than one operation; avoid
+    # understating it as a single unknown medium action.
+    return "high"
+
+
 def aws_regex_classify(action: str, rules: AwsRules) -> Optional[str]:
     action = action.strip()
     if not action:
         return None
 
-    if action == "*" or action.endswith(":*"):
-        return "critical"
+    wildcard_level = _aws_wildcard_level(action, rules)
+    if wildcard_level is not None:
+        return wildcard_level
 
     override = aws_override_level(action, rules)
     if override is not None:
@@ -343,9 +530,9 @@ def aws_regex_classify(action: str, rules: AwsRules) -> Optional[str]:
     if service == "iam":
         if _startswith_any_ci(verb, rules.read_prefixes_lower):
             return "low"
-        if verb in rules.iam_critical_verbs or verb_lower == "passrole":
+        if verb_lower in rules.iam_critical_verbs_lower or verb_lower == "passrole":
             return "critical"
-        return "high"
+        return "medium"
 
     if service == "sts" and verb_lower.startswith("assumerole"):
         return "critical"
@@ -353,7 +540,7 @@ def aws_regex_classify(action: str, rules: AwsRules) -> Optional[str]:
     if verb_lower in rules.resource_policy_verbs_lower or (
         verb_lower.endswith(rules.resource_policy_suffixes_lower) and verb_lower.startswith(rules.resource_policy_prefixes_lower)
     ):
-        return "critical"
+        return "high"
 
     # S3 is special: only object content read/write are treated as high by default.
     if service == "s3":
@@ -376,7 +563,7 @@ def aws_regex_classify(action: str, rules: AwsRules) -> Optional[str]:
         return "low"
 
     if verb_lower.startswith(rules.high_prefixes_lower):
-        return "high"
+        return "medium"
 
     return None
 

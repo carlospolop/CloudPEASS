@@ -166,14 +166,13 @@ class CloudPEASS:
         found_sensitive = set()
 
         def permission_matches(permission, pattern):
-            # ARM operation names are case-insensitive and Azure itself returns
-            # inconsistent casing across role definitions/provider metadata.
-            # Keep the original behavior for providers whose identifiers are
-            # case-sensitive.
-            if self.cloud_provider.lower().strip() == "azure":
+            # AWS IAM action matching and ARM operation names are
+            # case-insensitive. Both providers can return inconsistent casing
+            # in policy documents or provider metadata.
+            if self.cloud_provider.lower().strip() in {"aws", "azure"}:
                 permission = str(permission).casefold()
                 pattern = str(pattern).casefold()
-            return fnmatch.fnmatch(permission, pattern) or fnmatch.fnmatch(
+            return fnmatch.fnmatchcase(permission, pattern) or fnmatch.fnmatchcase(
                 pattern, permission
             )
 
@@ -217,7 +216,7 @@ class CloudPEASS:
     def categorize_permissions_from_catalog(self, permissions):
         """
         Categorize permissions using the Blue-PEASS risk classifier.
-        Downloads risk_rules YAML patterns from Blue-PEASS repo at runtime.
+        Uses bundled rules and refreshes them from Blue-PEASS when available.
         """
         cloud_id = self.cloud_provider.lower().strip()
         if cloud_id not in {"aws", "azure", "gcp"}:

@@ -1,8 +1,17 @@
 import re
 import unittest
+from pathlib import Path
 from typing import Optional
 
-from CloudPEASS.permission_risk_classifier import AzureRules, azure_regex_classify
+import CloudPEASS.permission_risk_classifier as risk_classifier
+from CloudPEASS.cloudpeass import CloudPEASS, CloudResource
+from CloudPEASS.permission_risk_classifier import (
+    AzureRules,
+    azure_regex_classify,
+    classify_all,
+    classify_permission,
+)
+from sensitive_permissions.aws import sensitive_combinations, very_sensitive_combinations
 
 
 def azure_rules() -> AzureRules:
@@ -120,6 +129,167 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         self.assertEqual(self.classify("Microsoft.Authorization/roleDefinitions/*"), "critical")
         self.assertEqual(self.classify("Microsoft.ManagedIdentity/userAssignedIdentities/*"), "critical")
         self.assertEqual(self.classify("Microsoft.Storage/storageAccounts/*"), "critical")
+
+
+class AwsRiskClassificationTest(unittest.TestCase):
+    def test_admin_and_privilege_escalation_patterns_are_critical(self) -> None:
+        for permission in (
+            "*",
+            "*:*",
+            "iam:*",
+            "iam:Create*",
+            "iam:create*",
+            "sts:Assume*",
+            "*:Get*",
+        ):
+            with self.subTest(permission=permission):
+                self.assertEqual(
+                    classify_permission("aws", permission, unknown_default="medium"),
+                    "critical",
+                )
+
+    def test_sensitive_and_discovery_wildcards_use_maximum_implied_risk(self) -> None:
+        expected = {
+            "s3:Get*": "high",
+            "s3:GetObject*": "high",
+            "lambda:Invoke*": "high",
+            "ec2:Run*": "high",
+            "codebuild:Start*": "high",
+            "ec2:Describe*": "low",
+            "s3:List*": "low",
+            "madeup:Unknown*": "high",
+        }
+        for permission, level in expected.items():
+            with self.subTest(permission=permission):
+                self.assertEqual(
+                    classify_permission("aws", permission, unknown_default="medium"),
+                    level,
+                )
+
+    def test_exact_benign_and_sensitive_actions_keep_expected_risk(self) -> None:
+        expected = {
+            "iam:GetUser": "low",
+            "iam:CreateUser": "medium",
+            "logs:PutLogEvents": "low",
+            "amplifybackend:GetToken": "low",
+            "cognito-identity:GetOpenIdToken": "low",
+            "codeartifact:GetAuthorizationToken": "high",
+            "ec2:GetPasswordData": "high",
+            "events:RetrieveConnectionCredentials": "medium",
+            "sts:GetDelegatedAccessToken": "high",
+            "sts:GetServiceBearerToken": "high",
+            "appsync:PutResourcePolicy": "high",
+            "acm:DescribeCertificate": "low",
+            "s3:GetObject": "high",
+            "kms:Decrypt": "critical",
+            "secretsmanager:GetSecretValue": "critical",
+            "ssm:GetParameter": "critical",
+            "madeup:UnknownAction": "medium",
+        }
+        for permission, level in expected.items():
+            with self.subTest(permission=permission):
+                self.assertEqual(
+                    classify_permission("aws", permission, unknown_default="medium"),
+                    level,
+                )
+
+    def test_every_permission_is_in_exactly_one_category(self) -> None:
+        permissions = [
+            "*",
+            "iam:GetUser",
+            "s3:Get*",
+            "ec2:RunInstances",
+            "madeup:UnknownAction",
+            "s3:Get*",
+        ]
+        categories = classify_all("aws", permissions, unknown_default="medium")
+        flattened = [permission for values in categories.values() for permission in values]
+        self.assertEqual(len(flattened), len(set(flattened)))
+        self.assertEqual(set(flattened), set(permissions))
+
+    def test_legacy_sensitive_actions_upgrade_catalog_levels(self) -> None:
+        instance = CloudPEASS(
+            very_sensitive_combinations,
+            sensitive_combinations,
+            "AWS",
+            1,
+        )
+        permissions = {
+            "codebuild:StartBuild",
+            "CODEBUILD:startbuildbatch",
+            "lambda:InvokeFunction",
+            "ec2:RunInstances",
+            "codeartifact:GetAuthorizationToken",
+            "sts:GetServiceBearerToken",
+            "iam:GetUser",
+        }
+        result = instance.analyze_group(
+            frozenset(permissions),
+            [CloudResource("account", "account", "account", list(permissions))],
+        )
+        categories = result["permissions_cat"]
+        self.assertIn("codebuild:StartBuild", categories["critical"])
+        self.assertIn("CODEBUILD:startbuildbatch", categories["critical"])
+        self.assertIn("lambda:InvokeFunction", categories["high"])
+        self.assertIn("ec2:RunInstances", categories["high"])
+        self.assertIn("codeartifact:GetAuthorizationToken", categories["critical"])
+        self.assertIn("sts:GetServiceBearerToken", categories["critical"])
+        self.assertIn("iam:GetUser", categories["low"])
+        flattened = [permission for values in categories.values() for permission in values]
+        self.assertEqual(len(flattened), len(set(flattened)))
+
+
+def test_aws_rules_have_a_bundled_permissionless_fallback(monkeypatch, tmp_path):
+    monkeypatch.setattr(risk_classifier, "_cache_dir", lambda: tmp_path / "empty-cache")
+    monkeypatch.setattr(risk_classifier, "_download_risk_rules", lambda provider: None)
+
+    data = risk_classifier._load_yaml("aws")
+
+    assert "iam:PassRole" in data["critical_exact"]
+    assert "Get" in data["read_prefixes"]
+    assert data["provider"] == "aws"
+
+
+def test_malformed_download_uses_bundled_aws_rules(monkeypatch, tmp_path):
+    monkeypatch.setattr(risk_classifier, "_cache_dir", lambda: tmp_path / "bad-cache")
+    monkeypatch.setattr(risk_classifier, "_download_risk_rules", lambda provider: "[")
+
+    data = risk_classifier._load_yaml("aws")
+
+    assert "kms:Decrypt" in data["critical_exact"]
+
+
+def test_unwritable_cache_still_uses_bundled_aws_rules(monkeypatch, tmp_path):
+    monkeypatch.setattr(risk_classifier, "_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setattr(risk_classifier, "_download_risk_rules", lambda provider: None)
+
+    original_mkdir = Path.mkdir
+
+    def fail_for_cache(path, *args, **kwargs):
+        if path == tmp_path / "cache":
+            raise PermissionError("read-only cache")
+        return original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", fail_for_cache)
+
+    data = risk_classifier._load_yaml("aws")
+
+    assert "iam:PassRole" in data["critical_exact"]
+
+
+def test_invalid_downloaded_aws_regex_cannot_replace_bundled_baseline(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(risk_classifier, "_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setattr(
+        risk_classifier,
+        "_download_risk_rules",
+        lambda provider: "provider: aws\nwrite_like_prefix_regex: '['\n",
+    )
+
+    data = risk_classifier._load_yaml("aws")
+
+    assert data["write_like_prefix_regex"].startswith("^(Put|")
 
 
 if __name__ == "__main__":
