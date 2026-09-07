@@ -11,148 +11,58 @@ This toolkit leverages advanced techniques to enumerate your permissions (it use
 <details>
 <summary><h2>AzurePEAS 💼🖥️</h2></summary>
 
-**AzurePEAS** is dedicated to **enumerating the principals permissions** within your **Azure** and **Entra ID** environments, with a special focus on detecting **privilege escalation pathways** and identifying **potential security risks**. It can also **enumerate several Microsoft 365** services for a quick recon. Here are the key features and requirements:
+**AzurePEAS** enumerates the effective permissions of a compromised user, service principal, or managed identity in Azure Resource Manager and Microsoft Entra ID. It performs no Azure write/delete operations and never executes commands inside workloads.
 
-- **Comprehensive Permissions Check**  
-  AzurePEAS finds all resources accessible to the principal and the permissions he has over them. It retrieves permissions for both **Azure (ARM API)** and **Entra ID (Graph API)**, ensuring a thorough analysis of your cloud permissions.
+### Enumeration order and fallbacks
 
-- **Authentication Requirements**  
-  AzurePEAS supports multiple authentication methods:
-  - **Device Code Flow (Default):** Simply run without parameters for interactive browser-based authentication (supports MFA) 🔐
-  - **Pre-existing Tokens:** Provide **ARM** and/or **Graph** tokens directly
-  - **Username/Password:** Use `--use-username-password` flag for automation (non-MFA accounts only)
-  - **FOCI Refresh Token:** Generate tokens and access M365 services
-  
-  **Note:** Most permissions can be collected without needing extra enumeration privileges. However, some specific operations might need additional scopes.
+1. **Token claims (no directory permissions required):** identifies the principal and records Graph `scp`, `roles`, and `wids` claims. These are useful even when every Graph enumeration endpoint returns `403`.
+2. **Effective ARM permissions:** asks Azure's permissions endpoint at every discovered subscription, resource group, resource, management group, and explicitly supplied scope. This does not require permission to list IAM role assignments.
+3. **IAM reconstruction:** when allowed, lists transitive ARM/Entra assignments, role definitions, conditions, and PIM-eligible roles. Failure here does not stop other methods.
+4. **Resource discovery evidence:** successful read-only subscription, resource-group, and resource calls are reported even when IAM cannot be read.
+5. **Azure CLI fallback:** when `--use-az-cli` is used and ARM returns no permissions, AzurePEAS can probe Azure CLI commands that are demonstrably read-only and require no arguments. It uses no shell, disables dynamic extension installation and prompts, and skips unknown or potentially state-changing commands. Use `--azure-services` to make this faster or `--skip-az-cli-fallback` to disable it.
 
-- **Microsoft 365 Enumeration (M356)**  
-  If you provide AzurePEAS with a **FOCI refresh token** or valid **credentials (username and password)**, it extends its scanning capabilities to enumerate various **Microsoft 365** services, including:
-  - **SharePoint** 📂
-  - **OneDrive** ☁️
-  - **Outlook** 📧
-  - **Teams** 💬
-  - **OneNote** 📝
-  - **Contacts** 👥
-  - **Tasks** ✅
+If resource listing is denied but you know an ARM resource ID from a VM's metadata, logs, scripts, or a previous foothold, pass it with `--scopes`. AzurePEAS will query that scope directly. This is the most reliable low-permission fallback.
 
-  This additional enumeration is intended to indicate whether any data exists in these services, enabling further manual investigation if needed. The process is not exhaustive but serves as a useful preliminary check.
+### Authentication
 
-### AzurePEAS Help
+- Reuse an existing Azure CLI login: `--use-az-cli` (recommended when available).
+- Supply ARM/Graph access tokens with arguments or `AZURE_ARM_TOKEN` / `AZURE_GRAPH_TOKEN`.
+- Use device code with MFA by running without credentials.
+- Use username/password or service-principal credentials with `--use-username-password` (legacy; no MFA).
+- Supply an existing FOCI refresh token with `--foci-refresh-token` to try the optional M365 checks.
 
-To see the complete list of options, run:
+Tokens are never printed. Prefer environment variables over command-line arguments because command-line values may be visible in process listings. `AZURE_PASSWORD` and `AZURE_FOCI_REFRESH_TOKEN` are supported.
 
-```bash
-python3 ./AzurePEAS.py --help
+Known ARM and Microsoft Graph audiences for Azure public, US Government/DoD, and China clouds (plus legacy Germany ARM) are routed only to their matching trusted API host. Azure CLI authentication follows the cloud configured in `az`; optional FOCI/M365 features still depend on service availability in that cloud.
 
-usage: AzurePEAS.py [-h] [--tenant-id TENANT_ID] [--arm-token ARM_TOKEN] [--graph-token GRAPH_TOKEN] [--foci-refresh-token FOCI_REFRESH_TOKEN] [--not-enumerate-m365] [--skip-entraid]
-                    [--username USERNAME] [--password PASSWORD] [--use-username-password] [--check-only-these-subs CHECK_ONLY_THESE_SUBS] [--out-json-path OUT_JSON_PATH]
-                    [--threads THREADS]
+### Microsoft 365 quick checks
 
-Run AzurePEASS to find all your current privileges in Azure and EntraID and check for potential privilege escalation attacks. To check for Azure permissions an ARM token is needed.
-To check for Entra ID permissions a Graph token is needed.
+With a usable FOCI refresh token, AzurePEAS performs bounded, read-only checks for SharePoint, OneDrive, Outlook, Teams, OneNote, contacts, and tasks. Use `--not-enumerate-m365` to omit them. These checks indicate accessible data; they are not intended to download a complete tenant.
 
-options:
-  -h, --help            show this help message and exit
-  --tenant-id TENANT_ID
-                        Indicate the tenant id
-  --arm-token ARM_TOKEN
-                        Azure Management authentication token
-  --graph-token GRAPH_TOKEN
-                        Azure Graph authentication token
-  --foci-refresh-token FOCI_REFRESH_TOKEN
-                        FOCI Refresh Token
-  --not-enumerate-m365  Don't enumerate M365 permissions
-  --skip-entraid        Skip EntraID permissions enumeration and only focus on Azure subscriptions
-  --username USERNAME   Username for authentication (used with --use-username-password)
-  --password PASSWORD   Password for authentication (used with --use-username-password)
-  --use-username-password
-                        Use username/password flow instead of device code flow (only works without MFA)
-  --check-only-these-subs CHECK_ONLY_THESE_SUBS
-                        In case you just want to check specific subscriptions, provide a comma-separated list of subscription IDs (e.g. 'sub1,sub2')
-  --out-json-path OUT_JSON_PATH
-                        Output JSON file path (e.g. /tmp/azure_results.json)
-  --threads THREADS     Number of threads to use
-```
-
-### AzurePEAS Usage Examples
-
-**1. Simple Interactive Authentication (Recommended)** �
-
-Just run with no parameters for device code flow (works with MFA):
+### Examples
 
 ```bash
-# Simplest - prompts for tenant or uses 'organizations'
-python3 AzurePEAS.py
+# Reuse the current az login and enumerate one subscription
+python3 AzurePEAS.py --use-az-cli --check-only-these-subs <SUBSCRIPTION_ID>
 
-# With tenant auto-discovery from email domain
-python3 AzurePEAS.py --username user@domain.com
-```
+# Tokens from the environment
+export AZURE_ARM_TOKEN="<ARM_TOKEN>"
+export AZURE_GRAPH_TOKEN="<GRAPH_TOKEN>"
+python3 AzurePEAS.py --no-ask
 
-**2. Obtaining Tokens Manually** 🔑
+# Resource-list fallback: check exact known scopes directly
+python3 AzurePEAS.py --arm-token "<TOKEN>" \
+  --check-only-these-subs <SUBSCRIPTION_ID> \
+  --scopes "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RG>/providers/Microsoft.KeyVault/vaults/<VAULT>"
 
-If you prefer to generate tokens beforehand:
+# Limit the last-resort CLI probes
+python3 AzurePEAS.py --use-az-cli --azure-services vm,keyvault,storage
 
-```bash
-# Get Azure ARM token
-export AZURE_ARM_TOKEN=$(az account get-access-token --resource-type arm | jq -r .accessToken)
+# ARM only, JSON report
+python3 AzurePEAS.py --use-az-cli --skip-entraid --out-json-path azure-results.json
 
-# Get Azure Graph token
-export AZURE_GRAPH_TOKEN=$(az account get-access-token --resource-type ms-graph | jq -r .accessToken)
-
-# Get Graph Token with enough scopes (use powershell)
-Connect-MgGraph -Scopes "RoleAssignmentSchedule.Read.Directory"
-$Parameters = @{
-    Method     = "GET"
-    Uri        = "/v1.0/me"
-    OutputType = "HttpResponseMessage"
-}
-$Response = Invoke-MgGraphRequest @Parameters
-$Headers = $Response.RequestMessage.Headers
-$Headers.Authorization.Parameter
-```
-
-**3. Running AzurePEAS Using Pre-existing Tokens**
-
-Provide tokens via command line or environment variables:
-
-```bash
-python3 AzurePEAS.py --arm-token <TOKEN> --graph-token <TOKEN>
-# or use environment variables
-export AZURE_ARM_TOKEN=<TOKEN>
-export AZURE_GRAPH_TOKEN=<TOKEN>
-python3 AzurePEAS.py
-```
-
-**4. Username/Password Authentication (Non-MFA or Service Principals)** ⚠️
-
-For automation scripts with non-MFA accounts:
-
-```bash
-python3 AzurePEAS.py --use-username-password --username <USERNAME> --password <PASSWORD>
-```
-
-**5. Using FOCI Refresh Token**
-
-For M365 enumeration capabilities:
-
-```bash
-python3 AzurePEAS.py --tenant-id <TENANT_ID> --foci-refresh-token <TOKEN>
-```
-
-**6. Focus on Azure Subscriptions Only**
-
-Skip EntraID and M365 enumeration to only check Azure subscription permissions:
-
-```bash
-python3 AzurePEAS.py --skip-entraid
-```
-
-**7. Check Specific Subscriptions Only**
-
-Limit enumeration to specific subscriptions:
-
-```bash
-python3 AzurePEAS.py --check-only-these-subs <SUB_ID1>,<SUB_ID2>
+# Full option reference
+python3 AzurePEAS.py --help
 ```
 
 </details>

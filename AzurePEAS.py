@@ -5,11 +5,14 @@ import requests
 import jwt
 import time
 import os
-from concurrent.futures import ThreadPoolExecutor
+import shutil
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from colorama import Fore, Style, init, Back
 import msal
 import re
+from urllib.parse import urlparse
 
 init(autoreset=True)
 logging.getLogger('msal').setLevel(logging.ERROR)
@@ -17,15 +20,22 @@ logging.getLogger('msal').setLevel(logging.ERROR)
 from src.CloudPEASS.cloudpeass import CloudPEASS, CloudResource
 from src.sensitive_permissions.azure import very_sensitive_combinations, sensitive_combinations
 from src.azure.entraid import EntraIDPEASS
+from src.azure.arm import AzureARMEnumerator, scope_kind, scope_name
+from src.azure.azcli import AzureCLIReadProbe
 from src.azure.definitions import SHAREPOINT_FOCI_APPS, ONEDRIVE_FOCI_APPS, EMAIL_FOCI_APPS, TEAMS_FOCI_APPS_GRAPH, TEAMS_FOCI_APPS_SKYPE, ONENOTE_FOCI_APPS, CONTACTS_FOCI_APPS, TASKS_FOCI_APPS, FOCI_APPS
 
 class AzurePEASS(CloudPEASS):
-    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, num_threads, not_enumerate_m365, skip_entraid, out_path=None, check_only_subs=[], no_ask=False):
+    def __init__(self, arm_token, graph_token, foci_refresh_token, tenant_id, very_sensitive_combos, sensitive_combos, num_threads, not_enumerate_m365, skip_entraid, out_path=None, check_only_subs=None, no_ask=False, known_scopes=None, use_az_cli=False, skip_az_cli_fallback=False, azure_services=None, debug=False):
         self.foci_refresh_token = foci_refresh_token
         self.tenant_id = tenant_id
         self.not_enumerate_m365 = not_enumerate_m365
         self.skip_entraid = skip_entraid
         self.no_ask = no_ask
+        self.known_scopes = list(known_scopes or [])
+        self.use_az_cli = use_az_cli
+        self.skip_az_cli_fallback = skip_az_cli_fallback
+        self.azure_services = list(azure_services or [])
+        self.debug = debug
 
         if self.foci_refresh_token:
             if not self.tenant_id:
@@ -38,9 +48,11 @@ class AzurePEASS(CloudPEASS):
         self.arm_token= arm_token
         self.graph_token = graph_token
         self.EntraIDPEASS = EntraIDPEASS(graph_token, num_threads)
+        self.graph_base = self.EntraIDPEASS.graph
+        self.arm = AzureARMEnumerator(arm_token) if arm_token else None
         self.sharepoint_followed_sites_ids = []
         self.initial_subscriptions = []
-        self.check_only_subs = check_only_subs
+        self.check_only_subs = list(check_only_subs or [])
         super().__init__(very_sensitive_combos, sensitive_combos, "Azure", num_threads, out_path)
 
         if not self.arm_token and not self.graph_token:
@@ -54,16 +66,47 @@ class AzurePEASS(CloudPEASS):
             print(f"{Fore.RED}ARM token not provided. Skipping Azure permissions analysis")
         
         if not self.graph_token and not self.skip_entraid:
-            print(f"{Fore.RED}Graph token not provided. Skipping EntraID permissions analysis. If App creds, it might have Entra ID roles or API permissions of type 'application' that I cannot list.")
+            print(f"{Fore.YELLOW}Graph token not provided. Skipping Entra ID analysis; ARM enumeration will continue.")
         
         if self.skip_entraid:
             print(f"{Fore.YELLOW}Skipping EntraID enumeration (--skip-entraid flag set)")
 
         if self.arm_token:
-            self.check_jwt_token(self.arm_token, ["https://management.azure.com/", "https://management.core.windows.net/", "https://management.azure.com"])
+            self.check_jwt_token(self.arm_token, [
+                "https://management.azure.com/",
+                "https://management.core.windows.net/",
+                "https://management.usgovcloudapi.net/",
+                "https://management.core.usgovcloudapi.net/",
+                "https://management.chinacloudapi.cn/",
+                "https://management.core.chinacloudapi.cn/",
+                "https://management.microsoftazure.de/",
+                "https://management.core.cloudapi.de/",
+            ])
 
-        if self.graph_token:
-            self.check_jwt_token(self.graph_token, ["https://graph.microsoft.com/", "00000003-0000-0000-c000-000000000000", "https://graph.microsoft.com"])
+        if self.graph_token and not self.skip_entraid:
+            self.check_jwt_token(self.graph_token, [
+                "https://graph.microsoft.com/",
+                "00000003-0000-0000-c000-000000000000",
+                "https://graph.microsoft.us/",
+                "https://dod-graph.microsoft.us/",
+                "https://microsoftgraph.chinacloudapi.cn/",
+            ])
+
+        if self.arm_token and self.graph_token and not self.skip_entraid:
+            arm_claims = self._decode_claims(self.arm_token)
+            graph_claims = self._decode_claims(self.graph_token)
+            mismatches = [
+                claim
+                for claim in ("tid", "oid")
+                if arm_claims.get(claim)
+                and graph_claims.get(claim)
+                and arm_claims[claim] != graph_claims[claim]
+            ]
+            if mismatches:
+                print(
+                    f"{Fore.RED}[!] ARM and Graph tokens have different {', '.join(mismatches)} claims. "
+                    "Results describe different identities and must not be treated as one principal."
+                )
 
     
     def check_jwt_token(self, token, expected_audiences):
@@ -71,8 +114,13 @@ class AzurePEASS(CloudPEASS):
             # Decode the token without verifying the signature
             decoded = jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
 
-            # Check if "aud" matches
-            if decoded.get("aud") not in expected_audiences:
+            # Azure emits equivalent URI audiences with and without a trailing
+            # slash depending on token version and cloud.
+            audience = str(decoded.get("aud") or "").rstrip("/").casefold()
+            normalized_expected = {
+                str(value).rstrip("/").casefold() for value in expected_audiences
+            }
+            if audience not in normalized_expected:
                 raise ValueError(f"Invalid audience. Expected '{expected_audiences}', got '{decoded.get('aud')}'")
 
             # Check if token has expired
@@ -85,108 +133,50 @@ class AzurePEASS(CloudPEASS):
         except jwt.DecodeError:
             raise ValueError("Token is invalid or badly formatted")
 
+    def _graph_get_json(self, url, headers, label="Graph API"):
+        """Return a Graph JSON object or an empty object without aborting the run."""
+        try:
+            response = self.EntraIDPEASS.http.get(url, headers=headers)
+        except Exception as exc:
+            print(f"{Fore.YELLOW}[!] {label} request failed: {str(exc)[:300]}")
+            return {}
+        if response.status_code != 200:
+            print(
+                f"{Fore.YELLOW}[!] {label} unavailable ({response.status_code}): "
+                f"{self.EntraIDPEASS._error_text(response)}"
+            )
+            return {}
+        try:
+            return response.json()
+        except ValueError:
+            print(f"{Fore.YELLOW}[!] {label} returned a non-JSON response.")
+            return {}
+
 
     def list_subscriptions(self):
         if self.check_only_subs:
             # If check_only_subs is provided, return only those subscriptions
             return self.check_only_subs
         
-        url = "https://management.azure.com/subscriptions?api-version=2020-01-01"
-        resp = requests.get(url, headers={"Authorization": f"Bearer {self.arm_token}"})
-        subs = [sub["subscriptionId"] for sub in resp.json().get("value", [])]
+        subscriptions, status, error = self.arm.list_subscriptions()
+        if status != 200:
+            print(f"{Fore.YELLOW}[!] Subscription discovery failed ({status}): {error}")
+            print(f"{Fore.CYAN}    Fallback: pass known IDs with --check-only-these-subs.")
+        subs = [sub.get("subscriptionId") for sub in subscriptions if sub.get("subscriptionId")]
         for sub in self.initial_subscriptions:
             if sub not in subs:
                 subs.append(sub)
         return subs
 
     def list_resources_in_subscription(self, subscription_id):
-        resources = []
-        url = f"https://management.azure.com/subscriptions/{subscription_id}/resources?api-version=2021-04-01"
-        resp = requests.get(url, headers={"Authorization": f"Bearer {self.arm_token}"})
-        if resp.status_code != 200:
-            return resources
-        data = resp.json()
-        resources.extend(data.get("value", []))
-        cont = 0
-        while "nextLink" in data and cont <= 30:  # Limit to 30 pages to avoid infinite loops
-            next_url = data["nextLink"]
-            resp = requests.get(next_url, headers={"Authorization": f"Bearer {self.arm_token}"})
-            data = resp.json()
-            resources.extend(data.get("value", []))
-            cont += 1
-        
-        if cont > 30:
-            print(f"{Fore.RED}Warning: More than 30 pages of resources found in subscription {subscription_id}. Stopping enumeration to avoid too long enumeration but some permissions will be missed!")
-        
+        resources, status, error = self.arm.list_resources(subscription_id)
+        if status != 200 and self.debug:
+            print(f"{Fore.YELLOW}[debug] Resource discovery failed for {subscription_id}: {status} {error}")
         return resources
 
     def get_permissions_for_resource(self, resource_id, cont=0):
-        perms = set()
-
-        # Retrieve active permissions
-        permissions_url = f"https://management.azure.com{resource_id}/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
-        resp = requests.get(permissions_url, headers={"Authorization": f"Bearer {self.arm_token}"})
-        if resp.status_code == 429:
-            if cont > 5:
-                print(f"{Fore.RED}Rate limit exceeded while fetching permissions for {resource_id}. Exiting after 5 retries.")
-                return []
-            
-            print(f"{Fore.RED}Rate limit exceeded while fetching permissions for {resource_id}. Retrying after 30 seconds...")
-            time.sleep(30)
-            return self.get_permissions_for_resource(resource_id, cont + 1)
-        
-        if resp.status_code != 200:
-            if resp.status_code == 403:
-                # If 403, the user doesn't have IAM permissions inside the subscription
-                # The error message might say something like: does not have authorization to perform action \'Microsoft.Authorization/permissions/read\' over scope \'/subscriptions/6414b7ad-ea28-41d3-901e-3132c02d7b0a\' or the scope is invalid
-                # But actually that permission shouldn't be needed (or maybe is granted if you have some permissions inside the subscription)
-                # So we will just put that the permissions are empty
-                perm_data = []
-            else:
-                raise Exception(f"Failed fetching permissions: {resp.text}")
-
-        else:
-            perm_data = resp.json().get('value', [])
-        
-        for perm_block in perm_data:
-            actions = set(perm_block.get("actions", []))
-            data_actions = set(perm_block.get("dataActions", []))
-            not_actions = set(perm_block.get("notActions", []))
-            not_data_actions = set(perm_block.get("notDataActions", []))
-
-            perms.update(actions - not_actions)
-            perms.update(data_actions - not_data_actions)
-
-        # Retrieve eligible roles for the resource
-        eligible_roles_url = f"https://management.azure.com{resource_id}/providers/Microsoft.Authorization/roleEligibilitySchedules?api-version=2020-10-01&$filter=asTarget()"
-        resp_eligible = requests.get(eligible_roles_url, headers={"Authorization": f"Bearer {self.arm_token}"})
-
-        if resp_eligible.status_code == 200:
-            eligible_roles = resp_eligible.json().get('value', [])
-            for eligible in eligible_roles:
-                role_definition_id = eligible['properties']['roleDefinitionId']
-
-                # Fetch granular permissions for each eligible role
-                role_def_url = f"https://management.azure.com{role_definition_id}?api-version=2022-04-01"
-                resp_role = requests.get(role_def_url, headers={"Authorization": f"Bearer {self.arm_token}"})
-
-                if resp_role.status_code == 200:
-                    role_properties = resp_role.json().get("properties", {})
-                    role_permissions = role_properties.get("permissions", [])
-                    
-                    for perm_block in role_permissions:
-                        actions = set(perm_block.get("actions", []))
-                        data_actions = set(perm_block.get("dataActions", []))
-                        not_actions = set(perm_block.get("notActions", []))
-                        not_data_actions = set(perm_block.get("notDataActions", []))
-
-                        perms.update(actions - not_actions)
-                        perms.update(data_actions - not_data_actions)
-
-        else:
-            print(f"Unable to retrieve eligible roles: {resp_eligible.status_code} {resp_eligible.text} ( This is common, you need an Azure permission to list eligible roles )")
-
-        return list(perms)
+        """Compatibility wrapper returning active effective permissions only."""
+        return self.arm.get_effective_permissions(resource_id).allowed
     
     def print_whoami_info(self):
         """
@@ -213,8 +203,12 @@ class AzurePEASS(CloudPEASS):
                     "appid": decoded.get("appid"),
                     "scp": decoded.get("scp"),
                     "roles": decoded.get("roles"),
+                    "idtyp": decoded.get("idtyp"),
+                    "xms_mirid": decoded.get("xms_mirid"),
                 }
                 print(f"{Fore.BLUE}Current Principal ID (ARM Token): {Fore.WHITE}{decoded.get('oid', 'Unknown')}")
+                principal_type = "application/managed identity" if decoded.get("idtyp") == "app" or (decoded.get("appid") and not decoded.get("upn")) else "user"
+                print(f"{Fore.BLUE}Principal Type (ARM Token): {Fore.WHITE}{principal_type}")
                 print(f"{Fore.BLUE}Current Audience (ARM Token): {Fore.WHITE}{decoded.get('aud', 'Unknown')}")
                 if 'upn' in decoded:
                     print(f"{Fore.BLUE}User Principal Name (UPN) (ARM Token): {Fore.WHITE}{decoded.get('upn', 'Unknown')}")
@@ -228,13 +222,17 @@ class AzurePEASS(CloudPEASS):
                     print(f"{Fore.BLUE}Token Expiration Time (ARM Token): {Fore.WHITE}{expiration_time}")
                 # Use a regex to find subscriptions IDs from the token
                 self.initial_subscriptions = list(set(re.findall(r"subscriptions/([a-z0-9-]+)", str(decoded))))
+                managed_identity_resource = decoded.get("xms_mirid")
+                if managed_identity_resource and managed_identity_resource not in self.known_scopes:
+                    self.known_scopes.append(managed_identity_resource)
+                    print(f"{Fore.BLUE}Managed Identity Resource: {Fore.WHITE}{managed_identity_resource}")
                 if self.initial_subscriptions:
                     print(f"{Fore.BLUE}Initial Subscriptions: {Fore.WHITE}{', '.join(self.initial_subscriptions)}")
                 print()
             except Exception as e:
                 print(f"{Fore.RED}Failed to decode ARM token: {str(e)}")
         
-        if self.graph_token:
+        if self.graph_token and not self.skip_entraid:
             try:
                 # Decode the Graph token to get the current principal information
                 decoded = jwt.decode(self.graph_token, options={"verify_signature": False, "verify_aud": False})
@@ -247,8 +245,12 @@ class AzurePEASS(CloudPEASS):
                     "appid": decoded.get("appid"),
                     "scp": decoded.get("scp"),
                     "roles": decoded.get("roles"),
+                    "wids": decoded.get("wids"),
+                    "idtyp": decoded.get("idtyp"),
                 }
                 print(f"{Fore.BLUE}Current Principal ID (Graph Token): {Fore.WHITE}{decoded.get('oid', 'Unknown')}")
+                principal_type = "application" if decoded.get("idtyp") == "app" or (decoded.get("appid") and not decoded.get("scp")) else "user"
+                print(f"{Fore.BLUE}Principal Type (Graph Token): {Fore.WHITE}{principal_type}")
                 print(f"{Fore.BLUE}Current Audience (Graph Token): {Fore.WHITE}{decoded.get('aud', 'Unknown')}")
                 if 'upn' in decoded:
                     print(f"{Fore.BLUE}User Principal Name (UPN) (Graph Token): {Fore.WHITE}{decoded.get('upn', 'Unknown')}")
@@ -338,14 +340,11 @@ class AzurePEASS(CloudPEASS):
         """
 
         headers = {'Authorization': f'Bearer {graph_token}'}
-        url = 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies'
+        url = f'{self.graph_base}/v1.0/identity/conditionalAccess/policies'
         while url:
-            resp = requests.get(url, headers=headers)
-            if resp.status_code == 403 or resp.status_code == 401:
-                print(f"{Fore.RED}Your user doesn't have access to read the conditional access policies.")
+            data = self._graph_get_json(url, headers, "Conditional Access policies")
+            if not data:
                 break
-            
-            data = resp.json()
             for policy in data.get('value', []):
                 print(f"{Fore.CYAN}Policy: {Fore.WHITE}{policy.get('displayName')}")
                 print(f"{Fore.CYAN}State: {Fore.WHITE}{policy.get('state')}")
@@ -361,18 +360,18 @@ class AzurePEASS(CloudPEASS):
     
     def enumerate_tasks(self, tasks_token):
         headers = {'Authorization': f'Bearer {tasks_token}'}
-        lists_url = 'https://graph.microsoft.com/v1.0/me/todo/lists?$top=10'
+        lists_url = f'{self.graph_base}/v1.0/me/todo/lists?$top=10'
 
         while lists_url:
-            resp = requests.get(lists_url, headers=headers)
-            data = resp.json()
+            data = self._graph_get_json(lists_url, headers, "To-Do lists")
+            if not data:
+                break
             
             for todo_list in data.get('value', []):
                 print(f"{Fore.BLUE}- List: {Fore.WHITE}{todo_list['displayName']}")
                 # Enumerate tasks within the current To-Do list
-                tasks_url = f"https://graph.microsoft.com/v1.0/me/todo/lists/{todo_list['id']}/tasks?$top=10"
-                tasks_resp = requests.get(tasks_url, headers=headers)
-                tasks_data = tasks_resp.json()
+                tasks_url = f"{self.graph_base}/v1.0/me/todo/lists/{todo_list['id']}/tasks?$top=10"
+                tasks_data = self._graph_get_json(tasks_url, headers, "To-Do tasks")
                 
                 for task in tasks_data.get('value', []):
                     title = task.get('title', 'No Title')
@@ -397,15 +396,26 @@ class AzurePEASS(CloudPEASS):
     
     def enumerate_contacts(self, contacts_token):
         headers = {'Authorization': f'Bearer {contacts_token}'}
-        contacts_url = 'https://graph.microsoft.com/v1.0/me/contacts?$top=10'
+        contacts_url = f'{self.graph_base}/v1.0/me/contacts?$top=10'
         
         while contacts_url:
-            resp = requests.get(contacts_url, headers=headers)
-            data = resp.json()
+            data = self._graph_get_json(contacts_url, headers, "Contacts")
+            if not data:
+                break
             
             for contact in data.get('value', []):
                 name = contact.get('displayName', contact.get('givenName', 'No Name'))
-                phones = list(set(contact.get('homePhones', []) + [contact.get('mobilePhone', "")] + contact.get('businessPhones', [])))
+                phones = sorted(
+                    {
+                        phone
+                        for phone in (
+                            (contact.get('homePhones') or [])
+                            + [contact.get('mobilePhone')]
+                            + (contact.get('businessPhones') or [])
+                        )
+                        if phone
+                    }
+                )
                 emails = contact.get('emailAddresses', [])
                 print(f"{Fore.BLUE}Name: {Fore.WHITE}{str(name)}")
                 print(f"{Fore.BLUE}Phones: {Fore.WHITE}{str(phones)}")
@@ -426,28 +436,36 @@ class AzurePEASS(CloudPEASS):
     
     def enumerate_onenote_content(self, onenote_token):
         headers = {'Authorization': f'Bearer {onenote_token}'}
-        notebooks_url = 'https://graph.microsoft.com/v1.0/me/onenote/notebooks?$top=10'
+        notebooks_url = f'{self.graph_base}/v1.0/me/onenote/notebooks?$top=10'
         
         # Loop through notebooks pages if paginated
         while notebooks_url:
-            resp = requests.get(notebooks_url, headers=headers)
-            data = resp.json()
+            data = self._graph_get_json(notebooks_url, headers, "OneNote notebooks")
+            if not data:
+                break
             
             for notebook in data.get('value', []):
-                print(f"{Fore.BLUE}Notebook: {Fore.WHITE}{notebook['displayName']}")
-                print(f"{Fore.BLUE}Role: {Fore.WHITE}{notebook['userRole']}")
-                print(f"{Fore.BLUE}Is Shared?: {Fore.WHITE}{notebook['isShared']}")
-                print(f"{Fore.BLUE}Last Modified: {Fore.WHITE}{notebook['lastModifiedDateTime']}")
-                print(f"{Fore.BLUE}Created by: {Fore.WHITE}{notebook['createdBy']['user']['displayName']}")
+                print(f"{Fore.BLUE}Notebook: {Fore.WHITE}{notebook.get('displayName', 'Unnamed')}")
+                print(f"{Fore.BLUE}Role: {Fore.WHITE}{notebook.get('userRole', 'Unknown')}")
+                print(f"{Fore.BLUE}Is Shared?: {Fore.WHITE}{notebook.get('isShared', 'Unknown')}")
+                print(f"{Fore.BLUE}Last Modified: {Fore.WHITE}{notebook.get('lastModifiedDateTime', 'Unknown')}")
+                creator = (
+                    notebook.get('createdBy', {}).get('user', {}).get('displayName')
+                    or notebook.get('createdBy', {}).get('application', {}).get('displayName')
+                    or 'Unknown'
+                )
+                print(f"{Fore.BLUE}Created by: {Fore.WHITE}{creator}")
                 print("-" * 50)
                 
                 # Enumerate Sections within each Notebook
-                sections_url = f"https://graph.microsoft.com/v1.0/me/onenote/notebooks/{notebook['id']}/sections"
-                sections_resp = requests.get(sections_url, headers=headers)
-                sections_data = sections_resp.json()
+                sections_url = f"{self.graph_base}/v1.0/me/onenote/notebooks/{notebook['id']}/sections"
+                sections_data = self._graph_get_json(sections_url, headers, "OneNote sections")
                 
                 for section in sections_data.get('value', []):
-                    print(f"    {Fore.BLUE}- Section: {section['displayName']} (ID: {section['id']})")
+                    print(
+                        f"    {Fore.BLUE}- Section: {section.get('displayName', 'Unnamed')} "
+                        f"(ID: {section.get('id', 'Unknown')})"
+                    )
             
             # Check if there's more data to paginate
             if '@odata.nextLink' in data:
@@ -466,8 +484,9 @@ class AzurePEASS(CloudPEASS):
         headers = {'Authorization': f'Bearer {token}'}
         items = []
         while url:
-            response = requests.get(url, headers=headers)
-            data = response.json()
+            data = self._graph_get_json(url, headers, "Paginated Graph data")
+            if not data:
+                break
             items.extend(data.get("value", []))
             url = data.get('@odata.nextLink') or data.get('nextLink')
         return items
@@ -481,8 +500,10 @@ class AzurePEASS(CloudPEASS):
         print(f"{indent}- {Fore.YELLOW}Site:{Fore.RESET} {name} | {Fore.BLUE}{web_url}")
         self.sharepoint_list_documents(site_id, token, indent + "  ")
 
-    def sharepoint_enumerate_followed_sites(self, token, depth=1, max_depth=3, url="https://graph.microsoft.com/v1.0/me/followedSites"):
+    def sharepoint_enumerate_followed_sites(self, token, depth=1, max_depth=3, url=None):
         """Recursively enumerate followed sites."""
+
+        url = url or f"{self.graph_base}/v1.0/me/followedSites"
 
         if depth == 1:
             print(f"\n{Fore.CYAN}Followed Sites:{Fore.RESET}")
@@ -490,53 +511,70 @@ class AzurePEASS(CloudPEASS):
         indent = "  " * (depth - 1)
         
         while url:
-            response = requests.get(url, headers=headers)
-            data = response.json()
+            data = self._graph_get_json(url, headers, "SharePoint followed sites")
+            if not data:
+                break
             for site in data.get("value", []):
                 self.sharepoint_followed_sites_ids.append(site.get("id"))
                 self.enumerate_site(site, token, indent)
                 if depth < max_depth:
-                    subsites_url = f"https://graph.microsoft.com/v1.0/sites/{site.get('id')}/sites?$top=10"
+                    subsites_url = f"{self.graph_base}/v1.0/sites/{site.get('id')}/sites?$top=10"
                     self.sharepoint_enumerate_followed_sites(token, depth + 1, max_depth, subsites_url)
             url = data.get('@odata.nextLink') or data.get('nextLink')
 
     def sharepoint_list_documents(self, site_id, token, indent="", depth=1, max_depth=3):
         """List documents in the default document library of a site."""
         headers = {'Authorization': f'Bearer {token}'}
-        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/children?$top=10"
+        url = f"{self.graph_base}/v1.0/sites/{site_id}/drive/root/children?$top=10"
         print(f"{indent}Documents:")
         while url:
-            response = requests.get(url, headers=headers)
-            data = response.json()
+            data = self._graph_get_json(url, headers, "SharePoint documents")
+            if not data:
+                break
             for item in data.get("value", []):
                 item_name = item.get("name", "Unnamed item")
                 if "folder" in item:
                     print(f"{indent}  - {Fore.MAGENTA}Folder: {Fore.RESET}{item_name}")
                     if depth < max_depth:
                         self.sharepoint_list_folder_contents(
-                        site_id,
-                        token,
-                        item.get("id"),
-                        indent + "    "
-                    )
+                            site_id,
+                            token,
+                            item.get("id"),
+                            indent + "    ",
+                            depth=depth + 1,
+                            max_depth=max_depth,
+                        )
                 else:
                     size = item.get("size", "Unknown")
                     last_modified = item.get("lastModifiedDateTime", "Unknown")
                     print(f"{indent}- {Fore.GREEN}File: {Fore.RESET}{item_name} | {Fore.CYAN}Size:{Fore.RESET} {size} bytes | {Fore.CYAN}Last Modified:{Fore.RESET} {last_modified}")
             url = data.get('@odata.nextLink') or data.get('nextLink')
 
-    def sharepoint_list_folder_contents(self, site_id, token, folder_id, indent=""):
+    def sharepoint_list_folder_contents(
+        self, site_id, token, folder_id, indent="", depth=2, max_depth=3
+    ):
         """Recursively list folder contents."""
+        if not folder_id or depth > max_depth:
+            return
         headers = {'Authorization': f'Bearer {token}'}
-        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/items/{folder_id}/children?$top=10"
+        url = f"{self.graph_base}/v1.0/sites/{site_id}/drive/items/{folder_id}/children?$top=10"
         while url:
-            response = requests.get(url, headers=headers)
-            data = response.json()
+            data = self._graph_get_json(url, headers, "SharePoint folder contents")
+            if not data:
+                break
             for item in data.get("value", []):
                 item_name = item.get("name", "Unnamed item")
                 if "folder" in item:
                     print(f"{indent}- {Fore.BLUE}Folder: {Fore.RESET}{item_name}")
-                    self.sharepoint_list_folder_contents(site_id, token, item.get("id"), indent + "  ")
+                    if depth < max_depth:
+                        self.sharepoint_list_folder_contents(
+                            site_id,
+                            token,
+                            item.get("id"),
+                            indent + "  ",
+                            depth=depth + 1,
+                            max_depth=max_depth,
+                        )
                 else:
                     size = item.get("size", "Unknown")
                     last_modified = item.get("lastModifiedDateTime", "Unknown")
@@ -545,11 +583,12 @@ class AzurePEASS(CloudPEASS):
 
     def sharepoint_enumerate_public_sites(self, token):
         """Enumerate public sites not already followed by the current user."""
-        url = "https://graph.microsoft.com/v1.0/sites?search=*"
+        url = f"{self.graph_base}/v1.0/sites?search=*"
         print(f"\n{Fore.CYAN}Public Sites:{Fore.RESET}")
         while url:
-            response = requests.get(url, headers={'Authorization': f'Bearer {token}'})
-            data = response.json()
+            data = self._graph_get_json(url, {'Authorization': f'Bearer {token}'}, "SharePoint public sites")
+            if not data:
+                break
             for site in data.get("value", []):
                 if site.get("id") in self.sharepoint_followed_sites_ids:
                     continue
@@ -558,11 +597,12 @@ class AzurePEASS(CloudPEASS):
 
     def enumerate_emails(self, outlook_token):
         headers = {'Authorization': f'Bearer {outlook_token}'}
-        mail_url = 'https://graph.microsoft.com/v1.0/me/messages?$top=10'
+        mail_url = f'{self.graph_base}/v1.0/me/messages?$top=10'
 
         while mail_url:
-            resp = requests.get(mail_url, headers=headers)
-            data = resp.json()
+            data = self._graph_get_json(mail_url, headers, "Mail")
+            if not data:
+                break
             
             for message in data.get('value', []):
                 subject = message.get('subject', 'N/A')
@@ -595,38 +635,66 @@ class AzurePEASS(CloudPEASS):
         else:
             headers = {'Authorization': f'Bearer {teams_token_skype}'}
             url = "https://teams.microsoft.com/api/authsvc/v1.0/authz"
-            resp = requests.post(url, headers=headers)
-            data = resp.json()
+            try:
+                resp = requests.post(url, headers=headers, timeout=(10, 45))
+                data = resp.json() if resp.status_code == 200 else {}
+            except (requests.RequestException, ValueError) as exc:
+                print(f"{Fore.YELLOW}[!] Teams token exchange failed: {str(exc)[:300]}")
+                data = {}
             skype_token = data.get("tokens", {}).get("skypeToken")
             chat_service_uri = data.get("regionGtms", {}).get("chatService")
 
             if not chat_service_uri:
                 print(f"{Fore.RED}No access to chats.")
-                return
-            
-            # Get open conversations
-            headers = {"Authentication":f"skypetoken={skype_token}", 'Authorization': f'Bearer {teams_token_skype}'}
-            url = f"{chat_service_uri}/v1/users/ME/conversations?view=msnp24Equivalent&pageSize=500"
-            resp = requests.get(url, headers=headers)
-            data = resp.json()
-
-            if not data.get("conversations"):
-                print(f"{Fore.GREEN}No conversations found in Teams.{Fore.WHITE}")
             else:
-                print(f"{Fore.GREEN}Some conversations found in Teams:{Fore.WHITE}")
-                for conversation in data.get("conversations", []):
-                    conv_id = conversation.get("id")
-                    conv_role = conversation.get("memberProperties", {}).get("role")
-                    conv_type = conversation.get("type")
-                    last_message = conversation.get("lastMessage", {})
-                    last_message_content = last_message.get("content", "")
-                    last_message_from = last_message.get("fromDisplayNameInToken", "") if last_message.get("fromDisplayNameInToken", "") else last_message.get("imdisplayname", "Unkown")
-                    
-                    print(f"{Fore.BLUE}  Conversation ID: {Fore.WHITE}{conv_id}")
-                    print(f"{Fore.BLUE}  Role: {Fore.WHITE}{conv_role}")
-                    print(f"{Fore.BLUE}  Type: {Fore.WHITE}{conv_type}")
-                    print(f"{Fore.BLUE}  Last Message {Fore.GREEN}(from {last_message_from}): {Fore.WHITE}{last_message_content}")
-                    print()
+                parsed_chat_uri = urlparse(chat_service_uri)
+                chat_host = (parsed_chat_uri.hostname or "").lower()
+                if parsed_chat_uri.scheme != "https" or not (
+                    chat_host == "teams.microsoft.com"
+                    or chat_host.endswith(".teams.microsoft.com")
+                    or chat_host.endswith(".skype.com")
+                ):
+                    print(f"{Fore.RED}[!] Refusing unexpected Teams chat endpoint: {chat_host or 'invalid URL'}")
+                else:
+                    # Get open conversations
+                    headers = {
+                        "Authentication": f"skypetoken={skype_token}",
+                        'Authorization': f'Bearer {teams_token_skype}',
+                    }
+                    url = f"{chat_service_uri.rstrip('/')}/v1/users/ME/conversations?view=msnp24Equivalent&pageSize=500"
+                    try:
+                        resp = requests.get(
+                            url,
+                            headers=headers,
+                            timeout=(10, 45),
+                            allow_redirects=False,
+                        )
+                        data = resp.json() if resp.status_code == 200 else {}
+                    except (requests.RequestException, ValueError) as exc:
+                        print(f"{Fore.YELLOW}[!] Teams conversations read failed: {str(exc)[:300]}")
+                        data = {}
+
+                    if not data.get("conversations"):
+                        print(f"{Fore.GREEN}No conversations found in Teams.{Fore.WHITE}")
+                    else:
+                        print(f"{Fore.GREEN}Some conversations found in Teams:{Fore.WHITE}")
+                        for conversation in data.get("conversations", []):
+                            conv_id = conversation.get("id")
+                            conv_role = conversation.get("memberProperties", {}).get("role")
+                            conv_type = conversation.get("type")
+                            last_message = conversation.get("lastMessage") or {}
+                            last_message_content = last_message.get("content", "")
+                            last_message_from = (
+                                last_message.get("fromDisplayNameInToken")
+                                or last_message.get("imdisplayname")
+                                or "Unknown"
+                            )
+
+                            print(f"{Fore.BLUE}  Conversation ID: {Fore.WHITE}{conv_id}")
+                            print(f"{Fore.BLUE}  Role: {Fore.WHITE}{conv_role}")
+                            print(f"{Fore.BLUE}  Type: {Fore.WHITE}{conv_type}")
+                            print(f"{Fore.BLUE}  Last Message {Fore.GREEN}(from {last_message_from}): {Fore.WHITE}{last_message_content}")
+                            print()
 
         # Enumerate Joined Teams (Groups)
         if not teams_token_graph:
@@ -634,10 +702,11 @@ class AzurePEASS(CloudPEASS):
         
         else:
             headers = {'Authorization': f'Bearer {teams_token_graph}'}
-            teams_url = 'https://graph.microsoft.com/v1.0/me/joinedTeams'
+            teams_url = f'{self.graph_base}/v1.0/me/joinedTeams'
             while teams_url:
-                resp = requests.get(teams_url, headers=headers)
-                data = resp.json()
+                data = self._graph_get_json(teams_url, headers, "Joined Teams")
+                if not data:
+                    break
                 if data.get('value', []):
                     print(f"{Fore.GREEN}Some teams found in Teams:{Fore.WHITE}")
                     for team in data.get('value', []):
@@ -661,7 +730,7 @@ class AzurePEASS(CloudPEASS):
 
     def enumerate_onedrive(self, onedrive_token, max_depth=3):
         # Root URL to list items in the root folder
-        root_url = "https://graph.microsoft.com/v1.0/me/drive/root/children?$top=10"
+        root_url = f"{self.graph_base}/v1.0/me/drive/root/children?$top=10"
         self._list_items(root_url, onedrive_token, depth=1, max_depth=max_depth)
 
     def _list_items(self, url, token, depth, max_depth):
@@ -669,8 +738,9 @@ class AzurePEASS(CloudPEASS):
         # Indentation for hierarchical display
         indent = "  " * (depth - 1)
         while url:
-            response = requests.get(url, headers=headers)
-            data = response.json()
+            data = self._graph_get_json(url, headers, "OneDrive items")
+            if not data:
+                break
             for item in data.get('value', []):
                 name = item.get('name', 'Unnamed')
                 last_modified = item.get('lastModifiedDateTime', 'Unknown')
@@ -687,7 +757,7 @@ class AzurePEASS(CloudPEASS):
                     
                     # Recursive call for folder contents if max_depth is not reached
                     if depth < max_depth:
-                        folder_children_url = f"https://graph.microsoft.com/v1.0/me/drive/items/{item['id']}/children?$top=50"
+                        folder_children_url = f"{self.graph_base}/v1.0/me/drive/items/{item['id']}/children?$top=50"
                         self._list_items(folder_children_url, token, depth + 1, max_depth)
                 
                 else:
@@ -701,78 +771,287 @@ class AzurePEASS(CloudPEASS):
             else:
                 break
 
+    @staticmethod
+    def _decode_claims(token):
+        if not token:
+            return {}
+        try:
+            return jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _subscription_from_scope(scope):
+        match = re.match(r"^/subscriptions/([0-9a-fA-F-]{36})(?:/|$)", scope or "", re.I)
+        return match.group(1) if match else None
+
+    @staticmethod
+    def _scope_resource(scope, permissions, excluded=None, **extra):
+        return CloudResource(
+            resource_id=scope,
+            name=extra.pop("name", scope_name(scope)),
+            resource_type=extra.pop("resource_type", scope_kind(scope)),
+            permissions=permissions,
+            deny_perms=excluded or [],
+            is_admin=extra.pop("is_admin", False),
+            **extra,
+        )
+
+    def _role_assignment_resource(self, assignment, assignment_type="Assigned"):
+        properties = assignment.get("properties", {})
+        role_definition_id = properties.get("roleDefinitionId")
+        result = self.arm.permissions_for_role(role_definition_id)
+        if not result.succeeded:
+            return None
+        role = self.arm.get_role_definition(role_definition_id) or {}
+        role_name = role.get("properties", {}).get("roleName") or role_definition_id
+        condition = properties.get("condition")
+        if condition:
+            role_name = f"{role_name} (conditional assignment)"
+        scope = properties.get("scope") or assignment.get("id") or "unknown-scope"
+        resource_id = scope
+        if assignment_type.lower() == "eligible":
+            resource_id = f"{scope}#eligible-role:{role_definition_id.rsplit('/', 1)[-1]}"
+        elif condition:
+            assignment_id = (assignment.get("name") or assignment.get("id") or "conditional").rsplit("/", 1)[-1]
+            resource_id = f"{scope}#conditional-role-assignment:{assignment_id}"
+        return self._scope_resource(
+            resource_id,
+            result.allowed,
+            result.excluded,
+            name=role_name,
+            assignmentType=assignment_type,
+            condition=condition,
+            conditionVersion=properties.get("conditionVersion"),
+        )
+
+    def _run_cli_fallback(self, subscription_id):
+        if not self.use_az_cli or self.skip_az_cli_fallback:
+            return []
+        print(
+            f"{Fore.CYAN}[i] ARM permission APIs returned no permissions for {subscription_id}. "
+            "Trying safe read-only Azure CLI commands as a fallback."
+        )
+        probe = AzureCLIReadProbe(
+            subscription_id,
+            services=self.azure_services,
+            threads=self.num_threads,
+            debug=self.debug,
+        )
+        if not probe.executable:
+            print(f"{Fore.YELLOW}[!] Azure CLI is not installed; skipping CLI fallback.")
+            return []
+        commands = probe.discover_commands()
+        if not commands:
+            print(f"{Fore.YELLOW}[!] No safe Azure CLI read commands were discovered.")
+            return []
+
+        found = []
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            futures = {executor.submit(probe.probe, command): command for command in commands}
+            for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="Read-only Azure CLI fallback",
+                leave=False,
+            ):
+                result = future.result()
+                if result.succeeded:
+                    command_text = "az " + " ".join(result.command)
+                    found.append(
+                        CloudResource(
+                            resource_id=f"/subscriptions/{subscription_id}/providers/CloudPEASS/cliRead/{'-'.join(result.command)}",
+                            name=command_text,
+                            resource_type="read-only-cli-evidence",
+                            permissions=[result.permission_label],
+                            deny_perms=[],
+                            evidence=result.status,
+                        )
+                    )
+                    print(f"{Fore.GREEN}[+] Read access confirmed: {Fore.WHITE}{command_text}")
+                elif self.debug and result.detail:
+                    print(f"{Fore.YELLOW}[debug] {' '.join(result.command)}: {result.status}: {result.detail}")
+        print(f"{Fore.CYAN}[i] CLI fallback confirmed {len(found)} read commands.")
+        return found
+
     def get_resources_and_permissions(self):
         resources_data = []
 
         if self.arm_token:
-            subs = self.list_subscriptions()
-
-            def process_subscription(sub_id):
-                sub_resources = []
-                raw_resources = self.list_resources_in_subscription(sub_id)
-
-                # Add subscription permissions
-                perms = self.get_permissions_for_resource(f"/subscriptions/{sub_id}")
-                if perms:
-                    # Check if user is admin/owner on this subscription
-                    is_admin = self._is_admin_azure(perms)
-                    if is_admin:
-                        print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
-                        print(f"{Fore.RED}{Back.YELLOW}  ADMINISTRATOR ACCESS DETECTED - Skipping enumeration                           {Style.RESET_ALL}")
-                        print(f"{Fore.RED}{Back.YELLOW}  Principal has Owner/Admin access on subscription {sub_id[:20]}...{' '*(21)}{Style.RESET_ALL}")
-                        print(f"{Fore.RED}{Back.YELLOW}{'='*80}{Style.RESET_ALL}")
-                        
-                        # Return only the subscription resource, skip enumeration
-                        return [CloudResource(
-                            resource_id=f"/subscriptions/{sub_id}",
-                            name=sub_id,
-                            resource_type="subscription",
-                            permissions=perms,
-                            deny_perms=[],
-                            is_admin=True
-                        )]
-                    
-                    sub_resources.append(CloudResource(
-                        resource_id=f"/subscriptions/{sub_id}",
-                        name=sub_id,
-                        resource_type="subscription",
-                        permissions=perms,
+            print(
+                f"{Fore.CYAN}[i] A permission prefixed with '-' is an Azure role NotAction/"
+                "NotDataAction exclusion, not a deny assignment."
+            )
+            arm_claims = self._decode_claims(self.arm_token)
+            principal_id = arm_claims.get("oid")
+            management_groups, mg_status, mg_error = self.arm.list_management_groups()
+            mg_scopes = {
+                item.get("id"): item
+                for item in management_groups
+                if item.get("id")
+            }
+            for scope in self.known_scopes:
+                if scope.lower().startswith("/providers/microsoft.management/managementgroups/"):
+                    mg_scopes.setdefault(scope, {"id": scope, "name": scope_name(scope)})
+            for mg_scope, metadata in mg_scopes.items():
+                result = self.arm.get_effective_permissions(mg_scope)
+                if result.allowed or result.excluded:
+                    resources_data.append(
+                        self._scope_resource(
+                            mg_scope,
+                            result.allowed,
+                            result.excluded,
+                            name=metadata.get("name") or scope_name(mg_scope),
+                            resource_type="management_group",
+                            is_admin=self._is_admin_azure(result.allowed),
+                            evidence="effective-permissions-api",
+                        )
+                    )
+                if principal_id:
+                    assignments, status, error = self.arm.list_assignments_for_principal(mg_scope, principal_id)
+                    if status == 200:
+                        for assignment in assignments:
+                            resource = self._role_assignment_resource(assignment)
+                            if resource:
+                                resources_data.append(resource)
+            if mg_status == 200 and management_groups:
+                resources_data.append(
+                    CloudResource(
+                        resource_id="#azure:management-groups",
+                        name="Management groups visible to the principal",
+                        resource_type="management_group_discovery",
+                        permissions=["Microsoft.Management/managementGroups/read"],
                         deny_perms=[],
-                        is_admin=is_admin
-                    ))
+                        evidence="successful-read-only-api-call",
+                    )
+                )
+            elif self.debug:
+                print(f"{Fore.YELLOW}[debug] Management group discovery unavailable: {mg_error}")
+            if self.check_only_subs:
+                subs = list(self.check_only_subs)
+                subscription_list_status = None
+            else:
+                subscriptions, subscription_list_status, error = self.arm.list_subscriptions()
+                subs = [
+                    sub.get("subscriptionId")
+                    for sub in subscriptions
+                    if sub.get("subscriptionId")
+                ]
+                if subscription_list_status != 200:
+                    print(f"{Fore.YELLOW}[!] Could not list subscriptions: {error}")
+                    print(f"{Fore.CYAN}    Fallback: use --check-only-these-subs with any known subscription IDs.")
 
-                # Process resources in parallel with progress bar
-                def get_resource_permissions(res):
-                    res_id = res.get("id")
-                    res_name = res.get("name")
-                    res_type = res.get("type")
-                    perms = self.get_permissions_for_resource(res_id)
-                    return CloudResource(
-                        resource_id=res_id,
-                        name=res_name,
-                        resource_type=res_type,
-                        permissions=perms,
-                        deny_perms=[]
+            for sub_id in self.initial_subscriptions:
+                if sub_id not in subs:
+                    subs.append(sub_id)
+            for scope in self.known_scopes:
+                sub_id = self._subscription_from_scope(scope)
+                if sub_id and sub_id not in subs:
+                    subs.append(sub_id)
+
+            if not subs:
+                print(f"{Fore.YELLOW}[!] No subscriptions were discovered.")
+                print(f"{Fore.CYAN}    Token-only identity information is still shown above.")
+                print(f"{Fore.CYAN}    Fallback: supply --check-only-these-subs or --scopes with known ARM IDs.")
+
+            for sub_id in tqdm(subs, desc="Processing subscriptions"):
+                sub_resources = []
+                sub_scope = f"/subscriptions/{sub_id}"
+                resource_groups, rg_status, rg_error = self.arm.list_resource_groups(sub_id)
+                raw_resources, resource_status, resource_error = self.arm.list_resources(sub_id)
+                if rg_status != 200:
+                    print(f"{Fore.YELLOW}[!] Resource groups not listable in {sub_id}; continuing with known scopes.")
+                if resource_status != 200:
+                    print(f"{Fore.YELLOW}[!] Resources not listable in {sub_id}; direct-scope checks still run.")
+                    if self.debug:
+                        print(f"{Fore.YELLOW}[debug] {resource_error or rg_error}")
+
+                scope_metadata = {
+                    sub_scope.lower(): {"id": sub_scope, "name": sub_id, "type": "subscription"}
+                }
+                for group in resource_groups:
+                    if group.get("id"):
+                        scope_metadata[group["id"].lower()] = group
+                for resource in raw_resources:
+                    if resource.get("id"):
+                        scope_metadata[resource["id"].lower()] = resource
+                for scope in self.known_scopes:
+                    if self._subscription_from_scope(scope) == sub_id:
+                        scope_metadata.setdefault(scope.lower(), {"id": scope})
+
+                permission_success = False
+                with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                    futures = {
+                        executor.submit(self.arm.get_effective_permissions, metadata["id"]): metadata
+                        for metadata in scope_metadata.values()
+                    }
+                    for future in tqdm(
+                        as_completed(futures),
+                        total=len(futures),
+                        desc=f"Effective permissions {sub_id[:8]}",
+                        leave=False,
+                    ):
+                        metadata = futures[future]
+                        result = future.result()
+                        if result.succeeded:
+                            permission_success = permission_success or bool(result.allowed or result.excluded)
+                            if result.allowed or result.excluded:
+                                is_admin = self._is_admin_azure(result.allowed)
+                                sub_resources.append(
+                                    self._scope_resource(
+                                        metadata["id"],
+                                        result.allowed,
+                                        result.excluded,
+                                        name=metadata.get("name") or scope_name(metadata["id"]),
+                                        resource_type=metadata.get("type") or scope_kind(metadata["id"]),
+                                        is_admin=is_admin,
+                                        evidence="effective-permissions-api",
+                                    )
+                                )
+                                if is_admin and metadata["id"].lower() == sub_scope.lower():
+                                    print(f"{Fore.RED}{Back.YELLOW} ADMIN-LIKE ARM ACCESS: {sub_id} {Style.RESET_ALL}")
+                        elif self.debug:
+                            print(f"{Fore.YELLOW}[debug] Permissions unavailable for {metadata['id']}: {result.status_code} {result.error}")
+
+                observed = []
+                if subscription_list_status == 200:
+                    observed.append("Microsoft.Resources/subscriptions/read")
+                if rg_status == 200:
+                    observed.append("Microsoft.Resources/subscriptions/resourceGroups/read")
+                if resource_status == 200:
+                    observed.append("Microsoft.Resources/subscriptions/resources/read")
+                if observed:
+                    sub_resources.append(
+                        self._scope_resource(
+                            sub_scope,
+                            observed,
+                            name=f"{sub_id} (confirmed read API calls)",
+                            evidence="successful-read-only-api-call",
+                        )
                     )
 
-                if raw_resources:
-                    # Use 3 threads for permission fetching per subscription
-                    with ThreadPoolExecutor(max_workers=min(3, max(1, len(raw_resources) // 10))) as resource_executor:
-                        resource_results = list(tqdm(
-                            resource_executor.map(get_resource_permissions, raw_resources),
-                            total=len(raw_resources),
-                            desc=f"Checking resources in {sub_id[:20]}...",
-                            leave=False
-                        ))
-                    sub_resources.extend(resource_results)
+                if principal_id:
+                    assignments, assignment_status, assignment_error = self.arm.list_assignments_for_principal(sub_scope, principal_id)
+                    if assignment_status == 200:
+                        for assignment in assignments:
+                            resource = self._role_assignment_resource(assignment)
+                            if resource:
+                                sub_resources.append(resource)
+                    elif self.debug:
+                        print(f"{Fore.YELLOW}[debug] IAM assignment fallback unavailable: {assignment_error}")
 
-                return sub_resources
+                eligible, eligible_status, eligible_error = self.arm.list_eligible_assignments(sub_scope)
+                if eligible_status == 200:
+                    for assignment in eligible:
+                        resource = self._role_assignment_resource(assignment, "Eligible")
+                        if resource:
+                            sub_resources.append(resource)
+                elif self.debug:
+                    print(f"{Fore.YELLOW}[debug] PIM eligibility unavailable: {eligible_error}")
 
-            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-                results = list(tqdm(executor.map(process_subscription, subs), total=len(subs), desc="Processing Subscriptions"))
-
-            for sub_result in results:
-                resources_data.extend(sub_result)
+                if not permission_success:
+                    sub_resources.extend(self._run_cli_fallback(sub_id))
+                resources_data.extend(sub_resources)
 
         if self.graph_token and not self.skip_entraid:
             print(f"{Fore.MAGENTA}Getting Permissions from EntraID...")
@@ -793,16 +1072,14 @@ class AzurePEASS(CloudPEASS):
                 # Service Principal or Managed Identity - use SP-specific methods
                 sp_id = self.EntraIDPEASS.get_sp_principal_id()
                 if sp_id:
-                    # Cursory check to see if SP has any EntraID roles/permissions
-                    if self.EntraIDPEASS.check_sp_has_entraid_permissions(sp_id):
-                        print(f"{Fore.CYAN}Service Principal/Managed Identity has EntraID role assignments. Enumerating...{Style.RESET_ALL}")
-                        resources_data += self.EntraIDPEASS.get_sp_directory_role_assignments(sp_id)
-                        resources_data += self.EntraIDPEASS.get_sp_group_memberships(sp_id)
-                        resources_data += self.EntraIDPEASS.get_sp_app_role_assignments(sp_id)
-                        resources_data += self.EntraIDPEASS.get_sp_eligible_roles(sp_id)
-                        resources_data += self.EntraIDPEASS.get_sp_owned_objects(sp_id)
-                    else:
-                        print(f"{Fore.YELLOW}Service Principal/Managed Identity has no EntraID directory role assignments or insufficient permissions to check.{Style.RESET_ALL}")
+                    print(f"{Fore.CYAN}Checking independent Entra fallbacks for this application identity...{Style.RESET_ALL}")
+                    # Never gate all methods on one permission check: each endpoint has
+                    # different least-privileged access requirements.
+                    resources_data += self.EntraIDPEASS.get_sp_directory_role_assignments(sp_id)
+                    resources_data += self.EntraIDPEASS.get_sp_group_memberships(sp_id)
+                    resources_data += self.EntraIDPEASS.get_sp_app_role_assignments(sp_id)
+                    resources_data += self.EntraIDPEASS.get_sp_eligible_roles(sp_id)
+                    resources_data += self.EntraIDPEASS.get_sp_owned_objects(sp_id)
 
         return resources_data
     
@@ -836,7 +1113,7 @@ class AzurePEASS(CloudPEASS):
             )
         for attempt in range(3):
             try:
-                return app.acquire_token_by_refresh_token(foci_refresh_token, scopes=scopes)
+                return app.acquire_token_by_refresh_token(self.foci_refresh_token, scopes=scopes)
             except json.JSONDecodeError:
                 if attempt < 2:
                     print(f"{Fore.YELLOW}Rate limited on token acquisition, retrying in 30s...{Fore.WHITE}")
@@ -845,12 +1122,12 @@ class AzurePEASS(CloudPEASS):
                     print(f"{Fore.RED}Rate limited on token acquisition after 3 attempts, skipping.{Fore.WHITE}")
         return {}
 
-    def get_tokens_from_foci_with_scope(self, scope_app_ids={}):
+    def get_tokens_from_foci_with_scope(self, scope_app_ids=None):
         """
         Get a token using FOCI apps for the required resource/scopes.
         """
 
-        for scope, app_id in scope_app_ids.items():
+        for scope, app_id in (scope_app_ids or {}).items():
             token = self.get_tokens_from_foci(
                 [scope],
                 app_ids=app_id
@@ -860,12 +1137,14 @@ class AzurePEASS(CloudPEASS):
         
         return None
     
-    def get_tokens_from_foci(self, scopes, app_ids=[]):
+    def get_tokens_from_foci(self, scopes, app_ids=None):
         """
         Get a token using FOCI apps for the required resource/scopes.
         """
 
         app_ids = app_ids if app_ids else FOCI_APPS
+        if isinstance(app_ids, str):
+            app_ids = [app_ids]
         for app_id in app_ids:
             token = (self.get_accesstoken_from_foci(
                 app_id,
@@ -885,7 +1164,7 @@ def discover_tenant_from_domain(domain):
     try:
         # Try to get tenant info from the OpenID configuration endpoint
         url = f"https://login.microsoftonline.com/{domain}/v2.0/.well-known/openid-configuration"
-        resp = requests.get(url)
+        resp = requests.get(url, timeout=(10, 30), allow_redirects=False)
         if resp.status_code == 200:
             data = resp.json()
             # Extract tenant ID from the issuer URL
@@ -897,6 +1176,62 @@ def discover_tenant_from_domain(domain):
     except Exception as e:
         pass
     return None
+
+
+def get_tokens_from_az_cli(subscription_id=None):
+    """Reuse the current Azure CLI session without changing its active context."""
+    executable = shutil.which("az")
+    if not executable:
+        raise RuntimeError("Azure CLI was not found on PATH")
+
+    env = os.environ.copy()
+    env.update({
+        "AZURE_CORE_COLLECT_TELEMETRY": "no",
+        "AZURE_CORE_DISABLE_CONFIRM_PROMPT": "yes",
+        "AZURE_CORE_NO_COLOR": "yes",
+        "AZURE_CORE_ONLY_SHOW_ERRORS": "yes",
+        "AZURE_EXTENSION_USE_DYNAMIC_INSTALL": "no",
+    })
+
+    def acquire(resource_type):
+        command = [
+            executable,
+            "account",
+            "get-access-token",
+            "--resource-type",
+            resource_type,
+            "--output",
+            "json",
+            "--only-show-errors",
+        ]
+        if subscription_id:
+            command.extend(["--subscription", subscription_id])
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            env=env,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(re.sub(r"\s+", " ", result.stderr).strip()[:500])
+        data = json.loads(result.stdout)
+        token = data.get("accessToken") or data.get("access_token")
+        if not token:
+            raise RuntimeError(f"Azure CLI returned no {resource_type} access token")
+        return token, data.get("tenant") or data.get("tenantId")
+
+    arm_token, tenant_id = acquire("arm")
+    try:
+        graph_token, graph_tenant = acquire("ms-graph")
+        tenant_id = tenant_id or graph_tenant
+    except Exception as exc:
+        print(f"{Fore.YELLOW}[!] Could not obtain a Graph token from Azure CLI: {exc}")
+        graph_token = None
+    return arm_token, graph_token, tenant_id
 
 
 def authenticate_with_device_code(tenant_id, scope="https://management.azure.com/.default"):
@@ -938,12 +1273,19 @@ def authenticate_with_device_code(tenant_id, scope="https://management.azure.com
         # Wait for the user to complete the flow
         token_response = app.acquire_token_by_device_flow(flow)
         
-        if "refresh_token" in token_response:
+        if "access_token" in token_response:
             print(f"{Fore.GREEN}Authentication successful!")
-            return token_response["refresh_token"]
-        elif "access_token" in token_response:
-            print(f"{Fore.GREEN}Authentication successful!")
-            return token_response["access_token"]
+            tokens = {"arm_token": token_response["access_token"], "graph_token": None}
+            accounts = app.get_accounts()
+            if accounts:
+                graph_response = app.acquire_token_silent(
+                    ["https://graph.microsoft.com/.default"], account=accounts[0]
+                )
+                if graph_response and "access_token" in graph_response:
+                    tokens["graph_token"] = graph_response["access_token"]
+                else:
+                    print(f"{Fore.YELLOW}Graph token was not available from the device-code session; ARM enumeration will continue.")
+            return tokens
         else:
             print(f"{Fore.RED}Authentication failed:", token_response.get("error_description"))
             continue
@@ -954,14 +1296,12 @@ def authenticate_with_device_code(tenant_id, scope="https://management.azure.com
 
 def generate_foci_token(username, password, tenant_id, scope="https://management.azure.com/.default", allow_mfa_fallback=True):
     """
-    Generate a FOCI refresh token using Azure AD API via MSAL.
+    Generate an access token using Microsoft Entra ID via MSAL.
     
     This function authenticates using the provided username and password
     with the Azure AD application identified by client_id in the given tenant_id.
     
     It then retrieves an access token for Microsoft Management (scope: https://management.azure.com/.default).
-    
-    The returned token is used as the FOCI refresh token.
     
     If MFA is required and allow_mfa_fallback is True, it will automatically use device code flow for authentication.
     """
@@ -1017,8 +1357,8 @@ def generate_foci_token(username, password, tenant_id, scope="https://management
             except Exception as e:
                 continue
         
-            if "refresh_token" in token_response:
-                return token_response["refresh_token"]
+            if "access_token" in token_response:
+                return token_response["access_token"]
             
             elif "error_codes" in token_response and 50126 in token_response["error_codes"]:
                 print(f"{Fore.RED}Invalid credentials given. Exiting")
@@ -1055,9 +1395,9 @@ def generate_foci_token(username, password, tenant_id, scope="https://management
                 # Wait for the user to complete the flow
                 token_response = app.acquire_token_by_device_flow(flow)
                 
-                if "refresh_token" in token_response:
+                if "access_token" in token_response:
                     print(f"{Fore.GREEN}MFA authentication successful!")
-                    return token_response["refresh_token"]
+                    return token_response["access_token"]
                 else:
                     print(f"{Fore.RED}MFA authentication failed:", token_response.get("error_description"))
                     continue
@@ -1085,24 +1425,47 @@ if __name__ == "__main__":
     parser.add_argument('--username', help="Username for authentication (used with --use-username-password)")
     parser.add_argument('--password', help="Password for authentication (used with --use-username-password)")
     parser.add_argument('--use-username-password', action="store_true", default=False, help="Use username/password flow instead of device code flow (only works without MFA)")
+    parser.add_argument('--use-az-cli', action="store_true", help="Reuse the current Azure CLI session (recommended when az is already logged in)")
     
     parser.add_argument('--check-only-these-subs', default="", help="In case you just want to check specific subscriptions, provide a comma-separated list of subscription IDs (e.g. 'sub1,sub2')")
+    parser.add_argument('--scopes', default="", help="Known ARM resource IDs to check, comma-separated (works when resource listing is denied)")
+    parser.add_argument('--azure-services', default="", help="Limit the Azure CLI read-only fallback to comma-separated top-level groups (for example: vm,keyvault,storage)")
+    parser.add_argument('--skip-az-cli-fallback', action="store_true", help="Do not probe safe read-only az commands when ARM permission enumeration returns nothing")
     parser.add_argument('--out-json-path', default=None, help="Output JSON file path (e.g. /tmp/azure_results.json)")
     parser.add_argument('--threads', default=5, type=int, help="Number of threads to use")
     parser.add_argument('--no-ask', action="store_true", default=False, help="Do not ask for user input during execution, use defaults instead")
+    parser.add_argument('--debug', action="store_true", help="Show failed fallback and API diagnostics")
     
     args = parser.parse_args()
     
+    if args.threads < 1:
+        parser.error("--threads must be at least 1")
+
+    uuid_re = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    check_only_subs = [sub.strip() for sub in args.check_only_these_subs.split(",") if sub.strip()]
+    if not all(uuid_re.fullmatch(sub) for sub in check_only_subs):
+        parser.error("invalid subscription ID in --check-only-these-subs")
+
+    known_scopes = [scope.strip() for scope in args.scopes.split(",") if scope.strip()]
+    for scope in known_scopes:
+        if not re.match(r"^/(subscriptions/[0-9a-fA-F-]{36}|providers/Microsoft\.Management/managementGroups/)[^?#]*$", scope, re.I):
+            parser.error(f"invalid ARM resource ID in --scopes: {scope}")
+    azure_services = [service.strip().lower() for service in args.azure_services.split(",") if service.strip()]
+
     tenant_id = args.tenant_id
 
     # Get tokens from environment variables if not supplied as arguments
     arm_token = args.arm_token or os.getenv("AZURE_ARM_TOKEN")
     graph_token = args.graph_token or os.getenv("AZURE_GRAPH_TOKEN")
-    foci_refresh_token = args.foci_refresh_token
+    foci_refresh_token = args.foci_refresh_token or os.getenv("AZURE_FOCI_REFRESH_TOKEN")
+    password = args.password or os.getenv("AZURE_PASSWORD")
+
+    if args.use_az_cli and any((arm_token, graph_token, foci_refresh_token, args.use_username_password)):
+        parser.error("--use-az-cli cannot be combined with token or username/password authentication")
 
     # Validation for username/password flow
     if args.use_username_password:
-        if not args.username or not args.password:
+        if not args.username or not password:
             print(f"{Fore.RED}Username and password are required when using --use-username-password. Exiting.")
             exit(1)
     
@@ -1121,9 +1484,18 @@ if __name__ == "__main__":
 
     # If no tokens are provided, use authentication flow
     if not arm_token and not graph_token and not foci_refresh_token:
-        if args.use_username_password:
+        if args.use_az_cli:
+            print(f"{Fore.CYAN}Reusing the current Azure CLI login (no active subscription will be changed).")
+            try:
+                token_sub = check_only_subs[0] if check_only_subs else None
+                arm_token, graph_token, cli_tenant = get_tokens_from_az_cli(token_sub)
+                tenant_id = tenant_id or cli_tenant
+            except Exception as exc:
+                print(f"{Fore.RED}Could not reuse the Azure CLI session: {exc}")
+                exit(1)
+        elif args.use_username_password:
             # Use username/password flow (only works without MFA)
-            if not args.username or not args.password:
+            if not args.username or not password:
                 print(f"{Fore.RED}Username and password are required for username/password authentication. Exiting.")
                 exit(1)
             
@@ -1132,22 +1504,11 @@ if __name__ == "__main__":
                 exit(1)
             
             print(f"{Fore.CYAN}Using username/password authentication (note: will fail if MFA is required)...")
-            foci_token = generate_foci_token(args.username, args.password, tenant_id, allow_mfa_fallback=False)
-            
-            # If username, we get a FOCI refresh token
-            if "@" in args.username:
-                foci_refresh_token = foci_token
-                print(f"{Fore.GREEN}Generated FOCI Refresh Token: {Fore.LIGHTBLUE_EX}{foci_refresh_token}")
-            
-            # If SP, we just get an access token for management
-            else:
-                arm_token = foci_token
-                print(f"{Fore.GREEN}Generated Management Access Token: {Fore.LIGHTBLUE_EX}{arm_token}")
-                try:
-                    graph_token = generate_foci_token(args.username, args.password, tenant_id, scope="https://graph.microsoft.com/.default", allow_mfa_fallback=False)
-                    print(f"{Fore.GREEN}Generated Graph Access Token: {Fore.LIGHTBLUE_EX}{graph_token}")
-                except Exception:
-                    print(f"{Fore.RED}Error generating Graph Access Token")
+            arm_token = generate_foci_token(args.username, password, tenant_id, allow_mfa_fallback=False)
+            try:
+                graph_token = generate_foci_token(args.username, password, tenant_id, scope="https://graph.microsoft.com/.default", allow_mfa_fallback=False)
+            except Exception:
+                print(f"{Fore.YELLOW}Graph token could not be acquired; ARM enumeration will continue.")
         
         else:
             # Use device code flow (default - works with and without MFA)
@@ -1167,18 +1528,9 @@ if __name__ == "__main__":
                         tenant_id = "organizations"
                         print(f"{Fore.GREEN}Using 'organizations' tenant (works for most Azure AD accounts)")
             
-            # Authenticate and get FOCI refresh token
-            foci_refresh_token = authenticate_with_device_code(tenant_id)
-            print(f"{Fore.GREEN}Generated FOCI Refresh Token: {Fore.LIGHTBLUE_EX}{foci_refresh_token}")
-    
-    check_only_subs = []
-    if args.check_only_these_subs:
-        # Split the provided subscription IDs and strip whitespace
-        check_only_subs = [sub.strip() for sub in args.check_only_these_subs.split(",") if sub.strip()]
-        # Check subscriptions are valid via regex
-        if not all(re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', sub) for sub in check_only_subs):
-            print(f"{Fore.RED}Invalid subscription ID format in --check-only-these-subs. Exiting.")
-            exit(1)
+            tokens = authenticate_with_device_code(tenant_id)
+            arm_token = tokens.get("arm_token")
+            graph_token = tokens.get("graph_token")
         
     
     # Initialize and run the AzurePEASS analysis
@@ -1194,6 +1546,11 @@ if __name__ == "__main__":
         skip_entraid=args.skip_entraid,
         out_path=args.out_json_path,
         check_only_subs=check_only_subs,
-        no_ask=args.no_ask
+        no_ask=args.no_ask,
+        known_scopes=known_scopes,
+        use_az_cli=args.use_az_cli,
+        skip_az_cli_fallback=args.skip_az_cli_fallback,
+        azure_services=azure_services,
+        debug=args.debug,
     )
     azure_peass.run_analysis()

@@ -165,21 +165,33 @@ class CloudPEASS:
         found_very_sensitive = set()
         found_sensitive = set()
 
+        def permission_matches(permission, pattern):
+            # ARM operation names are case-insensitive and Azure itself returns
+            # inconsistent casing across role definitions/provider metadata.
+            # Keep the original behavior for providers whose identifiers are
+            # case-sensitive.
+            if self.cloud_provider.lower().strip() == "azure":
+                permission = str(permission).casefold()
+                pattern = str(pattern).casefold()
+            return fnmatch.fnmatch(permission, pattern) or fnmatch.fnmatch(
+                pattern, permission
+            )
+
         # Check very sensitive combinations (with wildcard support)
         ## Wildcards can be used in the our ahrdcoded patterns or also in AWS permissions, so both are checked
         for combo in self.very_sensitive_combos:
-            if all(any(fnmatch.fnmatch(perm, pattern) or fnmatch.fnmatch(pattern, perm) for perm in permissions) for pattern in combo):
+            if all(any(permission_matches(perm, pattern) for perm in permissions) for pattern in combo):
                 for pattern in combo:
                     for perm in permissions:
-                        if fnmatch.fnmatch(perm, pattern):
+                        if permission_matches(perm, pattern):
                             found_very_sensitive.add(perm)
 
         # Check sensitive combinations (with wildcard support)
         for combo in self.sensitive_combos:
-            if all(any(fnmatch.fnmatch(perm, pattern) or fnmatch.fnmatch(pattern, perm) for perm in permissions) for pattern in combo):
+            if all(any(permission_matches(perm, pattern) for perm in permissions) for pattern in combo):
                 for pattern in combo:
                     for perm in permissions:
-                        if fnmatch.fnmatch(perm, pattern):
+                        if permission_matches(perm, pattern):
                             found_sensitive.add(perm)
 
         # Also use the new risk classifier from Blue-PEASS
