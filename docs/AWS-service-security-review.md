@@ -625,6 +625,23 @@ exact ACM, Route 53 record, and IAM inventories returned empty. A first harness 
 ACM `Value` field into Route 53's `ResourceRecords` shape, failed before DNS mutation, and was also
 fully cleaned; it did not count as a security result.
 
+### P0 prerequisite audit — 2026-09-08
+
+Read-only inventories resolved nine currently untestable P0 rows as `blocked`, not safe or
+negative. The organization has `ALL` features but contains only its management account, so AWS RAM
+cross-account sharing and Organizations delegation/SCP/account-movement hypotheses have no
+independent authorized consumer. No share or organization policy was changed. IAM Identity Center
+returned no instances, which also leaves Identity Store and SSO Directory without a target;
+Control Tower returned no landing zones. Enabling either organization-wide control plane solely
+for a test would exceed an isolated disposable fixture.
+
+Directory Service and registered WorkSpaces directory inventories were empty, as were WorkSpaces,
+Secure Browser portals, and Storage Gateways. WorkSpaces therefore lacks its directory prerequisite;
+Secure Browser lacks a configured portal and identity provider; Storage Gateway lacks an activated
+appliance and backing store. None of those services was created or mutated. Their tracker notes
+retain the exact missing prerequisite so a future authorized lab with the service already present
+can resume the security-impact test rather than infer a result from API documentation.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
