@@ -642,6 +642,27 @@ appliance and backing store. None of those services was created or mutated. Thei
 retain the exact missing prerequisite so a future authorized lab with the service already present
 can resume the security-impact test rather than infer a result from API documentation.
 
+### AWS Resource Groups (`resource-groups`) — 2026-09-08
+
+No new high-impact standalone technique was found. The `GroupResources` API is not a generic path
+for arbitrary groups: the installed current CLI documents support only EC2 HostManagement,
+CapacityReservationPool, and ResourceGroups ApplicationGroup types. Creating an empty group or a
+generic group for arbitrary manual membership was rejected. Even supported group membership is
+organizational metadata and does not grant access to the member resource.
+
+Two data-boundary tests used private S3 canaries. A tag-query group did not surface its newly tagged
+bucket to an identity with only `ListGroupResources`, because resolving that query also requires
+`tag:GetResources`. A deterministic CloudFormation-stack group produced the same explicit
+`Forbidden` result: that query type additionally requires `cloudformation:DescribeStacks`,
+`cloudformation:ListStackResources`, and `tag:GetResources`. The identities remained denied direct
+S3 reads, list operations, and the no-permission controls. The dependent read permissions can
+enumerate resource ARNs and types, but group membership itself does not authorize access, so no
+High/Critical finding or HackTricks attack entry was created.
+
+Both groups, both private buckets and objects, the CloudFormation stack, all four disposable users,
+every access key, and inline policies were deleted. Exact Resource Groups, CloudFormation, S3, and
+IAM prefix inventories returned empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
