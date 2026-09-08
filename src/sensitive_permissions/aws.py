@@ -527,6 +527,7 @@ live_validated_disclosure_documentation = {
     "chime:ListChannelMessages": "aws-services/aws-chime-sdk-enum.md",
     "connect:GetAttachedFile": "aws-services/aws-connect-enum.md",
     "connect:GetFederationToken": "aws-services/aws-connect-enum.md",
+    "cognito-identity:UpdateIdentityPool": "aws-services/aws-cognito-enum/cognito-identity-pools.md",
     "cognito-idp:AdminGetUser": "aws-services/aws-cognito-enum/cognito-user-pools.md",
     "cognito-idp:DescribeUserPoolClient": "aws-services/aws-cognito-enum/cognito-user-pools.md",
     "cognito-idp:DescribeIdentityProvider": "aws-services/aws-cognito-enum/cognito-user-pools.md",

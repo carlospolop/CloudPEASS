@@ -522,6 +522,27 @@ inline policy were deleted. Exact-prefix ALB, security-group, and IAM inventorie
 Two earlier harness-only failures—the CLI shorthand parser and a non-portable case-insensitive
 `awk` expression—also ran full cleanup and did not count as security results.
 
+### Amazon Cognito Identity (`cognito-identity`) — 2026-09-08
+
+Validated `cognito-identity:UpdateIdentityPool` as a public credential-enablement primitive. A
+synthetic identity pool had unauthenticated access disabled but already had an unauthenticated IAM
+role assigned. That role could read one exact private S3 canary. An unsigned `GetId` request failed
+before the change. The attacking user had only `UpdateIdentityPool` on the exact pool ARN, could
+not list identity pools, and a separate no-permission user was denied the update. The attacker
+enabled unauthenticated identities; an unsigned client then obtained an identity ID and temporary
+role credentials and used them to read the exact canary.
+
+This path requires the latent unauthenticated role assignment and its effective permissions. The
+attacker did not need `SetIdentityPoolRoles`, `iam:PassRole`, IAM read access, or any signed
+permission for the public `GetId`/`GetCredentialsForIdentity` calls. Cognito enhanced-flow
+scope-down policies still limit the resulting session. Identity-pool IDs and names are commonly
+public client configuration and can also be recovered from mobile/web bundles, environment
+variables, IaC, CI/CD output, logs, errors, and deep links when list access is denied.
+
+Cleanup deleted the identity pool, role and inline policy, S3 object and bucket, both users, every
+access key, and the candidate policy. Exact Cognito pool, IAM user/role, and S3 bucket inventories
+returned empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

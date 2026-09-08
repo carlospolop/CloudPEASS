@@ -500,6 +500,18 @@ def test_live_validated_elbv2_listener_redirect_takeover():
     )
 
 
+def test_live_validated_cognito_identity_public_role_credentials():
+    action = "cognito-identity:UpdateIdentityPool"
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert (action,) in critical
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "critical"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-cognito-enum/cognito-identity-pools.md"
+    )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}
