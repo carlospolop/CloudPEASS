@@ -666,8 +666,10 @@ class AwsRiskClassificationTest(unittest.TestCase):
                     level,
                 )
 
-    def test_live_validated_sensitive_reads_and_credentials_are_high(self) -> None:
+    def test_live_validated_high_impact_paths_have_evidence(self) -> None:
         expected = {
+            "iot:OpenTunnel": "critical",
+            "iot:Publish": "high",
             "lambda:GetFunction": "high",
             "route53domains:GetDomainDetail": "high",
             "sts:GetFederationToken": "high",
@@ -680,6 +682,25 @@ class AwsRiskClassificationTest(unittest.TestCase):
                     level,
                 )
                 self.assertTrue(tested_risk_documentation[permission].endswith(".md"))
+
+    def test_live_validated_iot_mqtt_read_requires_all_permissions(self) -> None:
+        combination = ["iot:Connect", "iot:Subscribe", "iot:Receive"]
+        self.assertIn(combination, sensitive_combinations)
+        for permission in combination:
+            self.assertNotIn([permission], sensitive_combinations)
+            self.assertEqual(
+                classify_permission("aws", permission, unknown_default="medium"),
+                "medium",
+            )
+
+        self.assertEqual(
+            classify_permission("aws", "iot:Publish", unknown_default="medium"),
+            "high",
+        )
+        self.assertEqual(
+            classify_permission("aws", "iot:OpenTunnel", unknown_default="medium"),
+            "critical",
+        )
 
     def test_every_permission_is_in_exactly_one_category(self) -> None:
         permissions = [

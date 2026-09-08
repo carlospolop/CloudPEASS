@@ -74,6 +74,8 @@ very_sensitive_combinations = [
     ["iam:UpdateSAMLProvider"],
     ["iam:UpdateOpenIDConnectProviderThumbprint"],
 
+    ["iot:OpenTunnel"],
+
     ["kms:PutKeyPolicy"],
     ["kms:CreateGrant"],
 
@@ -151,6 +153,7 @@ very_sensitive_combinations = [
 sensitive_combinations = [
     ["account:GetContactInformation"],
     ["amplify:GetApp"],
+    ["amplify:GetArtifactUrl"],
     ["amplify:GetJob"],
     ["appconfig:GetHostedConfigurationVersion"],
     ["appconfig:StartConfigurationSession", "appconfig:GetLatestConfiguration"],
@@ -205,6 +208,8 @@ sensitive_combinations = [
     ["greengrass:GetComponentVersionArtifact"],
     ["imagebuilder:GetComponent"],
     ["iot:GetThingShadow"],
+    ["iot:Publish"],
+    ["iot:Connect", "iot:Subscribe", "iot:Receive"],
     ["iotwireless:GetWirelessDevice"],
     ["kinesis:GetRecords"],
     ["kinesisanalytics:DescribeApplication"],
@@ -394,10 +399,12 @@ sensitive_combinations = [
 ]
 
 
-# Live-tested, non-mutating attack paths and their service-specific HackTricks
+# Live-tested high-impact attack paths and their service-specific HackTricks
 # evidence. Keep this deliberately narrow: documentation-only candidates do
 # not belong here.
 tested_risk_documentation = {
+    "iot:OpenTunnel": "aws-services/aws-iot-core-enum.md",
+    "iot:Publish": "aws-services/aws-iot-core-enum.md",
     "lambda:GetFunction": "aws-privilege-escalation/aws-lambda-privesc/README.md",
     "route53domains:GetDomainDetail": "aws-privilege-escalation/aws-route53-domains-privesc/README.md",
     "sts:GetFederationToken": "aws-privilege-escalation/aws-sts-privesc/README.md",
@@ -407,6 +414,7 @@ tested_risk_documentation = {
 live_validated_disclosure_documentation = {
     "account:GetContactInformation": "aws-services/aws-account-management-enum.md",
     "amplify:GetApp": "aws-privilege-escalation/aws-amplify-privesc/README.md",
+    "amplify:GetArtifactUrl": "aws-privilege-escalation/aws-amplify-privesc/README.md",
     "amplify:GetJob": "aws-privilege-escalation/aws-amplify-privesc/README.md",
     "apigateway:GET": "aws-services/aws-api-gateway-enum.md",
     "athena:GetQueryExecution": "aws-services/aws-s3-athena-and-glacier-enum.md",
@@ -467,7 +475,10 @@ live_validated_disclosure_documentation = {
     "glue:GetWorkflowRunProperties": "aws-post-exploitation/aws-glue-post-exploitation/README.md",
     "greengrass:GetComponentVersionArtifact": "aws-services/aws-greengrass-enum.md",
     "imagebuilder:GetComponent": "aws-services/aws-ec2-image-builder-enum.md",
+    "iot:Connect": "aws-services/aws-iot-core-enum.md",
     "iot:GetThingShadow": "aws-services/aws-iot-core-enum.md",
+    "iot:Receive": "aws-services/aws-iot-core-enum.md",
+    "iot:Subscribe": "aws-services/aws-iot-core-enum.md",
     "iotwireless:GetWirelessDevice": "aws-services/aws-iot-wireless-enum.md",
     "kinesis:GetRecords": "aws-services/aws-kinesis-data-streams-enum.md",
     "kinesisanalytics:DescribeApplication": "aws-services/aws-managed-flink-enum.md",

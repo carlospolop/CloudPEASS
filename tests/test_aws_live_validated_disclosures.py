@@ -9,6 +9,7 @@ from sensitive_permissions.aws import (
 LIVE_VALIDATED_HIGH_ACTIONS = {
     "account:GetContactInformation",
     "amplify:GetApp",
+    "amplify:GetArtifactUrl",
     "amplify:GetJob",
     "apigateway:GET",
     "athena:GetQueryExecution",
@@ -144,6 +145,17 @@ def test_live_validated_appconfig_data_disclosure_requires_both_actions():
     for action in combination:
         assert live_validated_disclosure_documentation[action] == (
             "aws-services/aws-appconfig-enum.md"
+        )
+
+
+def test_live_validated_iot_mqtt_read_requires_full_broker_path():
+    combination = ("iot:Connect", "iot:Subscribe", "iot:Receive")
+    combinations = {tuple(candidate) for candidate in sensitive_combinations}
+    assert combination in combinations
+    for action in combination:
+        assert (action,) not in combinations
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-iot-core-enum.md"
         )
 
 

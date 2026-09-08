@@ -24,6 +24,7 @@ critical_exact:
   - ecs:ExecuteCommand
   - events:RetrieveConnectionCredentials
   - iam:PassRole
+  - iot:OpenTunnel
   - kms:CreateGrant
   - kms:Decrypt
   - kms:PutKeyPolicy
@@ -61,6 +62,7 @@ medium_override_exact:
 high_exact:
   - account:GetContactInformation
   - amplify:GetApp
+  - amplify:GetArtifactUrl
   - amplify:GetJob
   - apigateway:GET
   - athena:GetQueryExecution
@@ -119,6 +121,7 @@ high_exact:
   - greengrass:GetComponentVersionArtifact
   - imagebuilder:GetComponent
   - iot:GetThingShadow
+  - iot:Publish
   - iotwireless:GetWirelessDevice
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
@@ -166,6 +169,7 @@ high_exact:
 high_override_exact:
   - account:GetContactInformation
   - amplify:GetApp
+  - amplify:GetArtifactUrl
   - amplify:GetJob
   - apigateway:GET
   - athena:GetQueryExecution
@@ -223,6 +227,7 @@ high_override_exact:
   - greengrass:GetComponentVersionArtifact
   - imagebuilder:GetComponent
   - iot:GetThingShadow
+  - iot:Publish
   - iotwireless:GetWirelessDevice
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
