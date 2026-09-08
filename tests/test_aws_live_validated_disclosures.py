@@ -236,6 +236,24 @@ def test_live_validated_iot_sitewise_disclosures():
         )
 
 
+def test_live_validated_iot_twinmaker_read_requires_metadata_prerequisites():
+    combination = (
+        "iottwinmaker:GetWorkspace",
+        "iottwinmaker:GetComponentType",
+        "iottwinmaker:GetPropertyValue",
+    )
+    combinations = {tuple(candidate) for candidate in sensitive_combinations}
+    assert combination in combinations
+    for action in combination:
+        assert (action,) not in combinations
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "low"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-iot-twinmaker-enum.md"
+        )
+
+
 def test_live_validated_simpledb_disclosures():
     actions = ("sdb:GetAttributes", "sdb:Select")
     for action in actions:

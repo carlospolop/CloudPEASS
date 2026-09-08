@@ -167,12 +167,20 @@ high_exact:
   - geo:GetDevicePositionHistory
   - greengrass:GetComponentVersionArtifact
   - healthlake:ReadResource
+  - healthlake:SearchEverything
   - healthlake:SearchWithGet
   - healthlake:SearchWithPost
   - imagebuilder:GetComponent
   - iot:GetThingShadow
   - iot:Publish
   - iotwireless:GetWirelessDevice
+  - iotsitewise:BatchGetAssetPropertyAggregates
+  - iotsitewise:BatchGetAssetPropertyValue
+  - iotsitewise:BatchGetAssetPropertyValueHistory
+  - iotsitewise:GetAssetPropertyAggregates
+  - iotsitewise:GetAssetPropertyValue
+  - iotsitewise:GetAssetPropertyValueHistory
+  - iotsitewise:GetInterpolatedAssetPropertyValues
   - ivschat:CreateChatToken
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
@@ -200,6 +208,8 @@ high_exact:
   - route53:ChangeResourceRecordSets
   - route53domains:GetDomainDetail
   - rum:GetAppMonitorData
+  - sdb:GetAttributes
+  - sdb:Select
   - s3:GetDataAccess
   - s3vectors:GetVectors
   - s3express:CreateSession
@@ -301,12 +311,20 @@ high_override_exact:
   - geo:GetDevicePositionHistory
   - greengrass:GetComponentVersionArtifact
   - healthlake:ReadResource
+  - healthlake:SearchEverything
   - healthlake:SearchWithGet
   - healthlake:SearchWithPost
   - imagebuilder:GetComponent
   - iot:GetThingShadow
   - iot:Publish
   - iotwireless:GetWirelessDevice
+  - iotsitewise:BatchGetAssetPropertyAggregates
+  - iotsitewise:BatchGetAssetPropertyValue
+  - iotsitewise:BatchGetAssetPropertyValueHistory
+  - iotsitewise:GetAssetPropertyAggregates
+  - iotsitewise:GetAssetPropertyValue
+  - iotsitewise:GetAssetPropertyValueHistory
+  - iotsitewise:GetInterpolatedAssetPropertyValues
   - ivschat:CreateChatToken
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
@@ -325,6 +343,8 @@ high_override_exact:
   - pipes:DescribePipe
   - profile:SearchProfiles
   - rum:GetAppMonitorData
+  - sdb:GetAttributes
+  - sdb:Select
   - s3:GetDataAccess
   - s3vectors:GetVectors
   - s3express:CreateSession
