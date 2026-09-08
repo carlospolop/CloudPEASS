@@ -33,6 +33,11 @@ very_sensitive_combinations = [
     
     ["Microsoft.Web/sites/publish/Action"],
     ["Microsoft.Web/sites/slots/publish/Action"],
+    # Live validated independently on production and a deployment slot: the
+    # exact action replaced the main SiteContainer image/startup arguments and
+    # the corresponding public endpoint served the injected canary.
+    ["Microsoft.Web/sites/sitecontainers/write"],
+    ["Microsoft.Web/sites/slots/sitecontainers/write"],
 
     ["Microsoft.Automation/automationAccounts/runbooks/draft/write", "Microsoft.Automation/automationAccounts/runbooks/draft/content/write", "Microsoft.Automation/automationAccounts/runbooks/draft/testJob/write"],
     ["Microsoft.Automation/automationAccounts/runbooks/draft/write", "Microsoft.Automation/automationAccounts/runbooks/draft/content/write", "Microsoft.Automation/automationAccounts/runbooks/publish/action", "Microsoft.Automation/automationAccounts/jobs/write"],

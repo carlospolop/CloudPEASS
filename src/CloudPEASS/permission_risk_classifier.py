@@ -270,6 +270,12 @@ _AZURE_CRITICAL_EXACT = frozenset(
         # canaries with exit code zero.
         "microsoft.web/sites/publish/action",
         "microsoft.web/sites/slots/publish/action",
+        # Exact-role live tests replaced the production/slot main container
+        # with a public HTTP echo image and each endpoint served its unique
+        # injected canary. This is direct workload execution in the app's
+        # identity, environment, filesystem, and network context.
+        "microsoft.web/sites/sitecontainers/write",
+        "microsoft.web/sites/slots/sitecontainers/write",
         "microsoft.web/sites/slots/publishxml/action",
         "microsoft.web/sites/slots/config/list/action",
         # Live validation confirmed that start/action accepts a per-execution
