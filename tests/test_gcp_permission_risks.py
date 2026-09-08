@@ -44,6 +44,8 @@ def test_direct_compromise_permissions_are_critical(permission):
     [
         "agentidentity.authProviders.retrieveCredentials",
         "agentidentity.authProviders.update",
+        "aiplatform.pipelineJobs.get",
+        "aiplatform.pipelineJobs.list",
         "appengine.versions.get",
         "appengine.versions.list",
         "bigquery.tables.getData",

@@ -114,6 +114,8 @@ sensitive_combinations = [
     # Credentials or identity-related changes that usually need more context.
     ["agentidentity.authProviders.retrieveCredentials"],
     ["agentidentity.authProviders.update"],
+    ["aiplatform.pipelineJobs.get"],
+    ["aiplatform.pipelineJobs.list"],
     ["integrations.integrations.invoke"],
     ["apikeys.keys.create"],
     ["appengine.versions.get"],
@@ -233,6 +235,14 @@ risk_documentation = (
     (
         "agentidentity.authProviders.update",
         "gcp-to-workspace-pivoting/gcp-agent-identity-auth-manager-privesc.md",
+    ),
+    (
+        "aiplatform.pipelineJobs.get",
+        "gcp-post-exploitation/gcp-vertex-ai-post-exploitation.md",
+    ),
+    (
+        "aiplatform.pipelineJobs.list",
+        "gcp-post-exploitation/gcp-vertex-ai-post-exploitation.md",
     ),
     (
         "iam.serviceAccounts.getAccessToken",

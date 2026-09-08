@@ -54,6 +54,8 @@ high_suffixes: []
 high_exact:
   - agentidentity.authProviders.retrieveCredentials
   - agentidentity.authProviders.update
+  - aiplatform.pipelineJobs.get
+  - aiplatform.pipelineJobs.list
   - apikeys.keys.create
   - appengine.versions.get
   - appengine.versions.list
