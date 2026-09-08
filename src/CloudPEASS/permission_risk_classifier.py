@@ -583,6 +583,9 @@ _AZURE_MEDIUM_EXACT = frozenset(
         # validated credential attack.
         "microsoft.machinelearningservices/workspaces/listnotebookaccesstoken/read",
         "microsoft.machinelearningservices/workspaces/listnotebookkeys/read",
+        # This writes a metadata secret object but does not read an existing
+        # value or make any workload consume the supplied value by itself.
+        "microsoft.machinelearningservices/workspaces/metadata/secrets/write",
     }
 )
 
@@ -1559,10 +1562,6 @@ def _azure_wildcard_level(permission: str, rules: AzureRules) -> Optional[str]:
             )
         ):
             return "high"
-        if lower.startswith("microsoft.machinelearningservices/") and any(
-            marker in lower for marker in ("/data/", "/datasets/")
-        ):
-            return "high"
         return "medium"
     if "*" in lower and lower.endswith("/delete"):
         return "medium"
@@ -1591,11 +1590,6 @@ def _azure_wildcard_level(permission: str, rules: AzureRules) -> Optional[str]:
     if lower_base.startswith("microsoft.storage/storageaccounts/") and any(
         marker in lower_base
         for marker in ("/blobservices", "/fileservices", "/queueservices", "/tableservices")
-    ):
-        return "high"
-
-    if lower_base.startswith("microsoft.machinelearningservices/") and any(
-        marker in lower_base for marker in ("/data", "/datasets")
     ):
         return "high"
 
@@ -1677,16 +1671,6 @@ def _azure_classify_non_wildcard(permission: str, rules: AzureRules) -> Optional
                 return "medium"
             if is_read or is_write or is_action:
                 return "high"
-
-    # Machine Learning data and dataset operations can expose or poison model
-    # inputs even though they use ARM-shaped operation names.
-    if lower.startswith("microsoft.machinelearningservices/") and any(
-        marker in lower for marker in ("/data/", "/datasets/")
-    ):
-        if is_delete or "/delete" in lower:
-            return "medium"
-        if is_read or is_write or is_action:
-            return "high"
 
     if is_delete or "/delete" in lower:
         return "medium"

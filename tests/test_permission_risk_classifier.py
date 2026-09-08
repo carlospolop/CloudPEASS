@@ -315,7 +315,33 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         )
         self.assertEqual(
             self.classify("Microsoft.MachineLearningServices/workspaces/data/write"),
-            "high",
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.MachineLearningServices/workspaces/data/read"),
+            "low",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.MachineLearningServices/workspaces/datasets/registered/preview/read"
+            ),
+            "low",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.MachineLearningServices/workspaces/datasets/registered/write"
+            ),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.MachineLearningServices/workspaces/metadata/secrets/write"
+            ),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.MachineLearningServices/workspaces/data/*"),
+            "medium",
         )
         self.assertEqual(
             self.classify("Microsoft.MachineLearningServices/workspaces/data/delete"),
