@@ -74,6 +74,9 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "geo:GetDevicePosition",
     "geo:GetDevicePositionHistory",
     "greengrass:GetComponentVersionArtifact",
+    "healthlake:ReadResource",
+    "healthlake:SearchWithGet",
+    "healthlake:SearchWithPost",
     "imagebuilder:GetComponent",
     "iot:GetThingShadow",
     "iotwireless:GetWirelessDevice",
@@ -84,6 +87,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "kinesisvideo:GetDASHStreamingSessionURL",
     "kinesisvideo:GetHLSStreamingSessionURL",
     "kinesisvideo:GetImages",
+    "kinesisvideo:GetMedia",
     "kinesisvideo:GetMediaForFragmentList",
     "lambda:GetFunctionConfiguration",
     "lambda:GetLayerVersion",
@@ -171,6 +175,7 @@ def test_live_validated_kinesis_video_disclosures():
         "kinesisvideo:GetDASHStreamingSessionURL",
         "kinesisvideo:GetHLSStreamingSessionURL",
         "kinesisvideo:GetImages",
+        "kinesisvideo:GetMedia",
         "kinesisvideo:GetMediaForFragmentList",
     )
     for action in actions:
@@ -179,6 +184,21 @@ def test_live_validated_kinesis_video_disclosures():
         ) == "high"
         assert live_validated_disclosure_documentation[action] == (
             "aws-services/aws-kinesis-video-streams-enum.md"
+        )
+
+
+def test_live_validated_healthlake_fhir_disclosures():
+    actions = (
+        "healthlake:ReadResource",
+        "healthlake:SearchWithGet",
+        "healthlake:SearchWithPost",
+    )
+    for action in actions:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "high"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-healthlake-enum.md"
         )
 
 

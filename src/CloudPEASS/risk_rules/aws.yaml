@@ -155,6 +155,9 @@ high_exact:
   - geo:GetDevicePosition
   - geo:GetDevicePositionHistory
   - greengrass:GetComponentVersionArtifact
+  - healthlake:ReadResource
+  - healthlake:SearchWithGet
+  - healthlake:SearchWithPost
   - imagebuilder:GetComponent
   - iot:GetThingShadow
   - iot:Publish
@@ -166,6 +169,7 @@ high_exact:
   - kinesisvideo:GetDASHStreamingSessionURL
   - kinesisvideo:GetHLSStreamingSessionURL
   - kinesisvideo:GetImages
+  - kinesisvideo:GetMedia
   - kinesisvideo:GetMediaForFragmentList
   - lambda:GetFunction
   - lambda:GetFunctionConfiguration
@@ -283,6 +287,9 @@ high_override_exact:
   - geo:GetDevicePosition
   - geo:GetDevicePositionHistory
   - greengrass:GetComponentVersionArtifact
+  - healthlake:ReadResource
+  - healthlake:SearchWithGet
+  - healthlake:SearchWithPost
   - imagebuilder:GetComponent
   - iot:GetThingShadow
   - iot:Publish
@@ -294,6 +301,7 @@ high_override_exact:
   - kinesisvideo:GetDASHStreamingSessionURL
   - kinesisvideo:GetHLSStreamingSessionURL
   - kinesisvideo:GetImages
+  - kinesisvideo:GetMedia
   - kinesisvideo:GetMediaForFragmentList
   - medical-imaging:GetImageFrame
   - medical-imaging:GetImageSetMetadata
