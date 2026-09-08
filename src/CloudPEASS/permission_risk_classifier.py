@@ -274,6 +274,11 @@ _AZURE_CRITICAL_EXACT = frozenset(
         # secrets during live validation.
         "microsoft.app/jobs/listsecrets/action",
         "microsoft.app/managedenvironments/daprcomponents/listsecrets/action",
+        # Live validation recovered the pool-wide MCP API key. Missing and
+        # incorrect keys received HTTP 401; the recovered key launched an
+        # isolated shell environment and executed a command that returned the
+        # exact canary through the MCP data plane.
+        "microsoft.app/sessionpools/fetchmcpservercredentials/action",
         "microsoft.devices/provisioningservices/listkeys/action",
         "microsoft.devices/provisioningservices/keys/listkeys/action",
         # Live validation recovered credentials and used them against the

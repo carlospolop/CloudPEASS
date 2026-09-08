@@ -50,6 +50,7 @@ very_sensitive_combinations = [
     ["Microsoft.App/jobs/start/action"],
     ["Microsoft.App/jobs/listSecrets/action"],
     ["Microsoft.App/managedEnvironments/daprComponents/listSecrets/action"],
+    ["Microsoft.App/sessionPools/fetchMCPServerCredentials/action"],
     ["Microsoft.Devices/provisioningServices/listkeys/action"],
     ["Microsoft.Devices/provisioningServices/keys/listkeys/action"],
     ["Microsoft.App/containerApps/getAuthToken/action", "Microsoft.App/containerApps/exec/action"],

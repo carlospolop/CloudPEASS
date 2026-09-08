@@ -249,6 +249,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.ContainerRegistry/registries/regenerateCredential/action": "critical",
             "Microsoft.ContainerRegistry/registries/generateCredentials/action": "critical",
             "Microsoft.App/containerApps/listSecrets/action": "critical",
+            "Microsoft.App/sessionPools/fetchMCPServerCredentials/action": "critical",
             "Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action": "critical",
             "Microsoft.ServiceBus/namespaces/authorizationRules/regenerateKeys/action": "critical",
             "Microsoft.ServiceBus/namespaces/queues/authorizationRules/listKeys/action": "critical",
@@ -324,6 +325,16 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         )
         self.assertEqual(
             self.classify("Microsoft.App/containerApps/getAuthToken/action"), "high"
+        )
+        self.assertEqual(
+            self.classify("Microsoft.App/sessionPools/regenerateCredentials/action"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.App/builds/listAuthToken/action"), "medium"
+        )
+        self.assertEqual(
+            self.classify("Microsoft.App/sessionPools/read"), "low"
         )
         self.assertEqual(
             self.classify("Microsoft.KeyVault/vaults/certificates/purge/action"),
