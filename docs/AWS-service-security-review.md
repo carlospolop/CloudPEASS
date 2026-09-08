@@ -679,6 +679,34 @@ service-bearer, delegated-token, and root-session paths remain governed by their
 provider/token, companion-permission, organization, and task-policy prerequisites; no unconditional
 impact is inferred from the STS action name alone.
 
+Concurrent live evidence for the `iotsitewise` asset-property read APIs and SimpleDB `GetAttributes`
+and `Select` arrived while the EKS review was running. Their dedicated regression tests and
+HackTricks document mappings were already committed, so the two P2 tracker rows were reconciled to
+`validated`; this reconciliation created no infrastructure and made no new severity decision.
+
+### Amazon EKS (`eks`) — 2026-09-08
+
+Validated the `eks:CreateAccessEntry` plus `eks:AssociateAccessPolicy` pair as direct Kubernetes
+cluster-admin escalation. A synthetic EKS control plane used API-and-ConfigMap authentication and
+no worker nodes. The attacking IAM user had only those two EKS actions, could not list clusters,
+and its signed Kubernetes token initially received `Unauthorized`; a separate no-permission user
+was denied access-entry creation. The attacker created a `STANDARD` entry for itself and associated
+`AmazonEKSClusterAdminPolicy` with cluster scope. A fresh token then made
+`kubectl auth can-i '*' '*' --all-namespaces` return `yes` against the real Kubernetes API.
+
+The proof needed no `DescribeCluster`, `iam:PassRole`, node role, managed node group, or workload.
+It does require a cluster authentication mode containing `API`, a known cluster name/endpoint/CA,
+and permission for both control-plane actions. When EKS reads are denied, those values can appear
+in kubeconfig files, IaC state, deployment output, CI/CD variables, CloudTrail, logs, errors,
+application configuration, and console URLs.
+
+An independent second cluster tested whether `CreateAccessEntry` alone could specify the built-in
+Kubernetes `system:masters` group. EKS rejected it with `InvalidParameterException` because group
+names cannot start with `system:`. The singleton was therefore not promoted; the two-action pair is
+the validated Critical result. Both access entries and clusters were deleted and polled absent,
+then their roles, users, every access key, policies, generated ENIs/security groups, and exact local
+kubeconfig files were removed. All exact-prefix inventories returned empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

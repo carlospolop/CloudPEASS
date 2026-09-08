@@ -77,11 +77,19 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "geo:GetDevicePositionHistory",
     "greengrass:GetComponentVersionArtifact",
     "healthlake:ReadResource",
+    "healthlake:SearchEverything",
     "healthlake:SearchWithGet",
     "healthlake:SearchWithPost",
     "imagebuilder:GetComponent",
     "iot:GetThingShadow",
     "iotwireless:GetWirelessDevice",
+    "iotsitewise:BatchGetAssetPropertyAggregates",
+    "iotsitewise:BatchGetAssetPropertyValue",
+    "iotsitewise:BatchGetAssetPropertyValueHistory",
+    "iotsitewise:GetAssetPropertyAggregates",
+    "iotsitewise:GetAssetPropertyValue",
+    "iotsitewise:GetAssetPropertyValueHistory",
+    "iotsitewise:GetInterpolatedAssetPropertyValues",
     "ivschat:CreateChatToken",
     "kinesis:GetRecords",
     "kinesisanalytics:DescribeApplication",
@@ -113,6 +121,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "profile:SearchProfiles",
     "rum:GetAppMonitorData",
     "route53domains:GetDomainDetail",
+    "sdb:GetAttributes",
+    "sdb:Select",
     "ses:GetSuppressedDestination",
     "ses:GetEmailTemplate",
     "ses:ListSuppressedDestinations",
@@ -194,6 +204,7 @@ def test_live_validated_kinesis_video_disclosures():
 def test_live_validated_healthlake_fhir_disclosures():
     actions = (
         "healthlake:ReadResource",
+        "healthlake:SearchEverything",
         "healthlake:SearchWithGet",
         "healthlake:SearchWithPost",
     )
@@ -203,6 +214,36 @@ def test_live_validated_healthlake_fhir_disclosures():
         ) == "high"
         assert live_validated_disclosure_documentation[action] == (
             "aws-services/aws-healthlake-enum.md"
+        )
+
+
+def test_live_validated_iot_sitewise_disclosures():
+    actions = (
+        "iotsitewise:BatchGetAssetPropertyAggregates",
+        "iotsitewise:BatchGetAssetPropertyValue",
+        "iotsitewise:BatchGetAssetPropertyValueHistory",
+        "iotsitewise:GetAssetPropertyAggregates",
+        "iotsitewise:GetAssetPropertyValue",
+        "iotsitewise:GetAssetPropertyValueHistory",
+        "iotsitewise:GetInterpolatedAssetPropertyValues",
+    )
+    for action in actions:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "high"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-iot-sitewise-enum.md"
+        )
+
+
+def test_live_validated_simpledb_disclosures():
+    actions = ("sdb:GetAttributes", "sdb:Select")
+    for action in actions:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "high"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-simpledb-enum.md"
         )
 
 
@@ -548,6 +589,16 @@ def test_live_validated_acm_private_key_export():
     assert live_validated_disclosure_documentation[action] == (
         "aws-services/aws-certificate-manager-acm-and-private-certificate-authority-pca.md"
     )
+
+
+def test_live_validated_eks_access_entry_cluster_admin_pair():
+    combination = ("eks:CreateAccessEntry", "eks:AssociateAccessPolicy")
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert combination in critical
+    for action in combination:
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-post-exploitation/aws-eks-post-exploitation/README.md"
+        )
 
 
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
