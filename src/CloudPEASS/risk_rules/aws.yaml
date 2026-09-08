@@ -171,6 +171,7 @@ high_exact:
   - pipes:DescribePipe
   - profile:SearchProfiles
   - route53domains:GetDomainDetail
+  - rum:GetAppMonitorData
   - s3:GetDataAccess
   - s3vectors:GetVectors
   - s3express:CreateSession
@@ -182,6 +183,7 @@ high_exact:
   - ses:ListSuppressedDestinations
   - secretsmanager:PutSecretValue
   - secretsmanager:UpdateSecret
+  - signer:StartSigningJob
   - sns:ListSubscriptions
   - sns:ListSubscriptionsByTopic
   - sqs:ReceiveMessage
@@ -282,6 +284,7 @@ high_override_exact:
   - invoicing:ListInvoiceSummaries
   - pipes:DescribePipe
   - profile:SearchProfiles
+  - rum:GetAppMonitorData
   - s3:GetDataAccess
   - s3vectors:GetVectors
   - s3express:CreateSession

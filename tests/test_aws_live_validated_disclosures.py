@@ -98,6 +98,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "scheduler:GetSchedule",
     "pipes:DescribePipe",
     "profile:SearchProfiles",
+    "rum:GetAppMonitorData",
     "ses:GetSuppressedDestination",
     "ses:GetEmailTemplate",
     "ses:ListSuppressedDestinations",
@@ -302,6 +303,21 @@ def test_live_validated_ssm_stored_automation_role_escalation():
     )
     assert live_validated_disclosure_documentation[action] == (
         "aws-privilege-escalation/aws-ssm-privesc/README.md"
+    )
+
+
+def test_live_validated_signer_lambda_code_signing_bypass():
+    action = "signer:StartSigningJob"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert tested_risk_documentation[action] == (
+        "aws-privilege-escalation/aws-lambda-privesc/README.md"
+    )
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-privilege-escalation/aws-lambda-privesc/README.md"
     )
 
 
