@@ -123,6 +123,7 @@ high_exact:
   - iot:GetThingShadow
   - iot:Publish
   - iotwireless:GetWirelessDevice
+  - ivschat:CreateChatToken
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
   - lambda:GetFunction
@@ -229,6 +230,7 @@ high_override_exact:
   - iot:GetThingShadow
   - iot:Publish
   - iotwireless:GetWirelessDevice
+  - ivschat:CreateChatToken
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
   - invoicing:BatchGetInvoiceProfile

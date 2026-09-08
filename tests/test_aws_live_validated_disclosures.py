@@ -69,6 +69,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "imagebuilder:GetComponent",
     "iot:GetThingShadow",
     "iotwireless:GetWirelessDevice",
+    "ivschat:CreateChatToken",
     "kinesis:GetRecords",
     "kinesisanalytics:DescribeApplication",
     "lambda:GetFunctionConfiguration",
