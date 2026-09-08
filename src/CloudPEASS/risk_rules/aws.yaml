@@ -130,6 +130,7 @@ high_exact:
   - cloudfront:GetDistributionConfig
   - cloudfront:GetFunction
   - cloudfront:ListDistributions
+  - cloudwatch:GetDashboard
   - cloudtrail:LookupEvents
   - ce:GetCostAndUsage
   - codebuild:BatchGetBuilds

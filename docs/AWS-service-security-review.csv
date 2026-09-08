@@ -108,7 +108,7 @@
 "P1","queued","clouddirectory","Amazon Cloud Directory","","",""
 "P1","validated","cloudfront","Amazon CloudFront","2026-09-08","Existing live-validation registry and regression coverage: cloudfront:GetDistribution; cloudfront:GetDistributionConfig; cloudfront:GetFunction; cloudfront:ListDistributions.","Reconciled from tested evidence already documented in HackTricks: aws-services/aws-cloudfront-enum.md. No infrastructure was created by this tracker reconciliation."
 "P1","queued","cloudtrail-data","AWS CloudTrail Data","","",""
-"P1","queued","cloudwatch","Amazon CloudWatch","","",""
+"P1","validated","cloudwatch","Amazon CloudWatch","2026-09-09","GetDashboard alone on an exact dashboard ARN returned a synthetic text-widget canary while the same user was denied ListDashboards and an empty-permission control was denied GetDashboard.","Dashboard bodies can disclose metric queries, alarm context, account/region/resource identifiers, operational URLs, runbooks, and text pasted by operators. A known dashboard name is sufficient. The synthetic dashboard, users, every key, and policy were deleted; exact inventories were empty."
 "P1","validated","codeartifact","AWS CodeArtifact","2026-09-08","Existing live-validation registry and regression coverage: codeartifact:GetPackageVersionAsset.","Reconciled from tested evidence already documented in HackTricks: aws-services/aws-codeartifact-enum.md. No infrastructure was created by this tracker reconciliation."
 "P1","queued","codecatalyst","Amazon CodeCatalyst","","",""
 "P1","queued","codeguru-security","Amazon CodeGuru Security","","",""

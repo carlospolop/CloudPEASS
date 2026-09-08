@@ -943,6 +943,14 @@ service actions alone do not expose the telemetry; underlying CloudWatch/X-Ray/o
 authority remains material. No standalone read was promoted, and every test user, key, and policy
 was removed.
 
+`cloudwatch:GetDashboard` was independently validated on an exact synthetic dashboard ARN. The
+candidate was denied `ListDashboards`, and an empty-permission control was denied the known-name
+read. The allowed response returned the exact text-widget canary from the nested dashboard body.
+Dashboard JSON can expose metric queries, alarm/resource identifiers, regions/accounts,
+operational links, runbooks, and operator-pasted text; the name can be recovered from IaC,
+deployment output, bookmarks, logs, errors, or console URLs without list permission. The
+dashboard, users, access keys, and policy were deleted and exact inventories were empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

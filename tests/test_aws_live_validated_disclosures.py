@@ -723,6 +723,18 @@ def test_live_validated_amp_workspace_policy_self_grant():
     )
 
 
+def test_live_validated_cloudwatch_dashboard_disclosure():
+    action = "cloudwatch:GetDashboard"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md"
+    )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}
