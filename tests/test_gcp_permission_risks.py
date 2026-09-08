@@ -50,6 +50,7 @@ def test_direct_compromise_permissions_are_critical(permission):
         "cloudscheduler.jobs.list",
         "cloudtasks.tasks.get",
         "cloudtasks.tasks.list",
+        "gsuiteaddons.deployments.update",
         "pubsub.subscriptions.consume",
         "run.routes.invoke",
         "secretmanager.versions.add",
@@ -153,6 +154,17 @@ def test_operational_or_unknown_permissions_are_medium(permission):
 )
 def test_metadata_reads_are_low(permission):
     assert classify_permission("gcp", permission) == "low"
+
+
+@pytest.mark.parametrize(
+    "permission",
+    [
+        "clientauthconfig.clients.getWithSecret",
+        "clientauthconfig.clients.listWithSecrets",
+    ],
+)
+def test_retired_iap_oauth_admin_secret_paths_are_not_reported_as_live_compromise(permission):
+    assert classify_permission("gcp", permission) == "medium"
 
 
 def test_every_permission_is_assigned_to_exactly_one_category():

@@ -14,8 +14,6 @@ critical_suffixes:
 critical_exact:
   - apikeys.keys.getKeyString
   - appengine.instances.enableDebug
-  - clientauthconfig.clients.getWithSecret
-  - clientauthconfig.clients.listWithSecrets
   - cloudbuild.builds.create
   - composer.environments.executeAirflowCommand
   - composer.environments.update
@@ -77,6 +75,7 @@ high_exact:
   - cloudscheduler.jobs.list
   - cloudtasks.tasks.get
   - cloudtasks.tasks.list
+  - gsuiteaddons.deployments.update
   - compute.instances.getSerialPortOutput
   - compute.instances.setServiceAccount
   - container.clusters.getCredentials
@@ -160,6 +159,11 @@ medium_exact:
   - chronicle.feeds.generateSecret
   - chronicle.instances.generateWorkspaceConnectionToken
   - clientauthconfig.clients.createSecret
+  # Google's IAP OAuth Admin API was permanently shut down on 2026-03-19.
+  # Keep these recognizable, but do not report a non-operational credential
+  # path as direct compromise solely because the legacy permission still exists.
+  - clientauthconfig.clients.getWithSecret
+  - clientauthconfig.clients.listWithSecrets
   - cloudasset.assets.exportAllAccessPolicy
   - cloudasset.assets.exportApikeysKeys
   - cloudasset.assets.exportCloudkmsCryptoKeyVersions

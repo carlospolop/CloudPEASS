@@ -136,6 +136,7 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
         "dns.resourceRecordSets.get",
         "dns.resourceRecordSets.list",
         "dns.resourceRecordSets.update",
+        "gsuiteaddons.deployments.update",
         "iam.serviceAccountKeys.create",
         "iam.serviceAccountKeys.delete",
         "iam.serviceAccountKeys.disable",
@@ -338,6 +339,7 @@ class GCPPEASS(CloudPEASS):
         skip_bruteforce=False,
         no_ask=False,
         resources=None,
+        groups=None,
         skip_asset_inventory=False,
         timeout=20,
         retries=3,
@@ -355,7 +357,8 @@ class GCPPEASS(CloudPEASS):
         self.billing_project = (billing_project or "").strip()
         self.email = ""
         self.is_sa = False
-        self.groups: List[str] = []
+        self.explicit_groups = _csv(groups)
+        self.groups: List[str] = list(self.explicit_groups)
         self.print_invalid_perms = print_invalid_perms
         self.dont_get_iam_policies = dont_get_iam_policies
         self.skip_bruteforce = skip_bruteforce
@@ -1437,6 +1440,39 @@ class GCPPEASS(CloudPEASS):
             permissions.update(self.get_permissions_from_role(role))
         return sorted(permissions), owner_role
 
+    def _group_trust_notes(self, policy: Optional[dict]) -> List[str]:
+        """Describe visible group IAM trust without assuming the group is joinable."""
+        grants: Set[Tuple[str, str, bool]] = set()
+        for binding in (policy or {}).get("bindings", []):
+            role = binding.get("role") or "unknown role"
+            conditional = bool(binding.get("condition"))
+            for member in binding.get("members", []):
+                normalized = (member or "").strip()
+                if normalized.lower().startswith("group:"):
+                    grants.add((normalized.split(":", 1)[1], role, conditional))
+        if not grants:
+            return []
+
+        known_groups = {group.lower() for group in self.groups}
+        rendered = []
+        for group, role, conditional in sorted(
+            grants, key=lambda item: (item[0].lower(), item[1])
+        ):
+            membership = "known member" if group.lower() in known_groups else "membership unknown"
+            condition = ", conditional" if conditional else ""
+            rendered.append(f"{group} -> {role} ({membership}{condition})")
+        shown = rendered[:8]
+        if len(rendered) > len(shown):
+            shown.append(f"+{len(rendered) - len(shown)} more")
+        return [
+            "Workspace/Cloud Identity group trust: "
+            + "; ".join(shown)
+            + ". A group email in IAM is not proof that it is joinable. Check Google Groups "
+            "'Who can join', external-member, pending-request, owner/manager, and nested-group "
+            "settings. If Cloud Identity hides a membership you already know, pass --group so "
+            "visible IAM-policy fallbacks can evaluate it without Cloud Identity permissions."
+        ]
+
     def _test_request(
         self, target: dict, permissions: Sequence[str]
     ) -> Tuple[str, str, dict, Optional[dict]]:
@@ -1597,8 +1633,10 @@ class GCPPEASS(CloudPEASS):
             return self._enumerate_bigquery_dataset(target)
         policy_permissions: List[str] = []
         owner_role = False
+        policy = None
         if not self.dont_get_iam_policies:
-            policy_permissions, owner_role = self._permissions_from_policy(self.get_iam_policy(target))
+            policy = self.get_iam_policy(target)
+            policy_permissions, owner_role = self._permissions_from_policy(policy)
 
         tested: Set[str] = set()
         completed_chunks = 0
@@ -1652,6 +1690,7 @@ class GCPPEASS(CloudPEASS):
                 "BigQuery documents that testIamPermissions can fail open; do not use this result "
                 "as an authorization decision."
             )
+        notes.extend(self._group_trust_notes(policy))
         notes.extend(self._cross_cloud_pivot_notes(target, permissions))
         return CloudResource(
             resource_id=target["id"],
@@ -1743,6 +1782,17 @@ class GCPPEASS(CloudPEASS):
                 "on the affected zone, yielding the record-write pair above. If this is the "
                 "authoritative public zone for a Workspace primary domain, also assess the "
                 "administrator-recovery pivot. Preserve the existing policy etag and bindings."
+            )
+        if "gsuiteaddons.deployments.update" in permission_set:
+            notes.append(
+                "High conditional GCP to Workspace pivot: gsuiteaddons.deployments.update can "
+                "replace the HTTP endpoint of an existing Workspace add-on deployment. This was "
+                "live-tested with an update-only principal that was denied deployment get/list. "
+                "When an already-installed and authorized add-on is invoked, Google sends the new "
+                "endpoint a user OAuth token limited to the scopes that user already authorized. "
+                "This requires a known deployment ID, an HTTP add-on, an installed/authorized user, "
+                "and later user interaction; it does not bypass OAuth consent or expose every "
+                "Workspace user's data."
             )
         if "iam.googleapis.com/workloadIdentityPoolProviders.create" in permission_set:
             notes.append(
@@ -2178,11 +2228,23 @@ class GCPPEASS(CloudPEASS):
             self.is_sa = self.email.endswith("iam.gserviceaccount.com")
             kind = "service account" if self.is_sa else "user/workforce principal"
             print(f"{Fore.BLUE}Current principal: {Fore.WHITE}{self.email} {Fore.CYAN}({kind})")
-            self.groups = self.get_user_groups()
+            discovered_groups = self.get_user_groups()
+            groups_by_normalized_email = {
+                group.lower(): group for group in discovered_groups
+            }
+            groups_by_normalized_email.update(
+                {group.lower(): group for group in self.explicit_groups}
+            )
+            self.groups = sorted(groups_by_normalized_email.values(), key=str.lower)
             if self.groups:
+                source_note = (
+                    "; --group entries are operator-supplied"
+                    if self.explicit_groups
+                    else ""
+                )
                 print(
                     f"{Fore.BLUE}Known direct/transitive groups (best effort): "
-                    f"{Fore.WHITE}{', '.join(self.groups)}"
+                    f"{Fore.WHITE}{', '.join(self.groups)}{source_note}"
                 )
         elif not use_extra:
             print(
@@ -2270,6 +2332,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--service-account",
         dest="service_accounts",
         help="Known service account emails, comma-separated",
+    )
+    parser.add_argument(
+        "--groups",
+        "--group",
+        dest="groups",
+        help=(
+            "Known current-principal group emails, comma-separated. Use this permissionless "
+            "fallback when Cloud Identity membership lookup is unavailable."
+        ),
     )
     parser.add_argument(
         "--resource",
@@ -2387,6 +2458,9 @@ def _validate_args(args, parser) -> None:
     for email in _csv(args.service_accounts):
         if not re.fullmatch(r"[^@\s/]+@[^@\s/]+\.iam\.gserviceaccount\.com", email):
             parser.error(f"Invalid service account email: {email}")
+    for email in _csv(args.groups):
+        if not re.fullmatch(r"[^@\s/:]+@[^@\s/:]+", email):
+            parser.error(f"Invalid group email: {email}")
     if args.billing_project and not simple_project.fullmatch(args.billing_project):
         parser.error(f"Invalid billing/quota project ID: {args.billing_project}")
     if args.threads < 1 or args.threads > 256:
@@ -2418,14 +2492,14 @@ def main(argv=None) -> int:
     _validate_args(args, parser)
     credentials = _load_credentials(args, parser)
     peass = GCPPEASS(
-        credentials,
-        args.extra_token or os.getenv("GCP_EXTRA_TOKEN"),
-        args.projects,
-        args.folders,
-        args.organizations,
-        args.service_accounts,
-        very_sensitive_combinations,
-        sensitive_combinations,
+        credentials=credentials,
+        extra_token=args.extra_token or os.getenv("GCP_EXTRA_TOKEN"),
+        projects=args.projects,
+        folders=args.folders,
+        orgs=args.organizations,
+        sas=args.service_accounts,
+        very_sensitive_combos=very_sensitive_combinations,
+        sensitive_combos=sensitive_combinations,
         num_threads=args.threads,
         out_path=args.out_json_path,
         billing_project=args.billing_project,
@@ -2435,6 +2509,7 @@ def main(argv=None) -> int:
         skip_bruteforce=args.skip_bruteforce,
         no_ask=args.no_ask,
         resources=args.resources,
+        groups=args.groups,
         skip_asset_inventory=args.skip_asset_inventory,
         timeout=args.timeout,
         retries=args.retries,

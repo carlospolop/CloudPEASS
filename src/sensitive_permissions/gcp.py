@@ -27,8 +27,6 @@ very_sensitive_combinations = [
 
     # Credential, secret, and decryption material.
     ["apikeys.keys.getKeyString"],
-    ["clientauthconfig.clients.getWithSecret"],
-    ["clientauthconfig.clients.listWithSecrets"],
     ["cloudkms.cryptoKeyVersions.useToDecrypt"],
     ["cloudkms.cryptoKeyVersions.useToDecryptViaDelegation"],
     ["secretmanager.versions.access"],
@@ -124,6 +122,7 @@ sensitive_combinations = [
     ["cloudscheduler.jobs.list"],
     ["cloudtasks.tasks.get"],
     ["cloudtasks.tasks.list"],
+    ["gsuiteaddons.deployments.update"],
     ["container.clusters.get"],
     ["container.clusters.getCredentials"],
     ["container.pods.attach"],
@@ -228,6 +227,10 @@ risk_documentation = (
     (
         "resourcemanager.organizations.setIamPolicy",
         "gcp-to-workspace-pivoting/README.md",
+    ),
+    (
+        "gsuiteaddons.deployments.update",
+        "gcp-to-workspace-pivoting/gcp-workspace-addons-privesc.md",
     ),
     (
         "iam.googleapis.com/workloadIdentityPoolProviders.create",

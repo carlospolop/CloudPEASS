@@ -78,10 +78,10 @@ python3 AzurePEAS.py --help
 
 GCPPEAS layers several independent techniques so a denied enumeration call does not stop the scan:
 
-1. **Permissionless/local clues:** explicit `--project`, `--service-account`, and repeatable `--resource` values are always tested. On a GCP workload, the metadata server supplies the current project, VM, and attached service account without IAM permissions. Credential and standard project environment variables are also used.
+1. **Permissionless/local clues:** explicit `--project`, `--service-account`, and repeatable `--resource` values are always tested. `--group` preserves a known current-principal group membership when Cloud Identity discovery is denied. On a GCP workload, the metadata server supplies the current project, VM, and attached service account without IAM permissions. Credential and standard project environment variables are also used.
 2. **Container and resource discovery:** Resource Manager search, Cloud Asset Inventory, and independent service-specific list calls discover projects, folders, organizations, VMs, Functions, buckets, service accounts, secrets, Cloud Run services/jobs, Artifact Registry repositories, Pub/Sub topics/subscriptions/snapshots, BigQuery datasets/tables/routines, Workflows, KMS key rings/keys, and Cloud DNS managed zones. Each failure is isolated and summarized; regional fallbacks continue when only some locations are denied.
 3. **Effective permission tests:** Google's `queryTestablePermissions` supplies the current, resource-applicable catalog and `testIamPermissions` checks it in batches. These methods avoid parsing platform-dependent `gcloud help` output. If catalog lookup fails, GCPPEAS falls back to official predefined roles, a public catalog, and finally a built-in core set. Failed or partial tests are reported rather than silently treated as zero permissions.
-4. **IAM policy supplement:** where `getIamPolicy` is allowed, direct/public/domain/known-group bindings and custom roles add context. Static grants are never merged over a successful effective test because IAM Deny, principal access boundaries, or request conditions may block them. If effective testing is unavailable, policy permissions are retained but clearly labeled as unverified. BigQuery datasets, which do not expose a dataset-level `testIamPermissions` method, use read-only metadata/list capability probes; BigQuery itself documents that table/routine tests can fail open.
+4. **IAM policy supplement:** where `getIamPolicy` is allowed, direct/public/domain/known-group bindings and custom roles add context. Visible group bindings are reported without claiming that the group is joinable; the output points operators to the relevant Google Groups settings. Static grants are never merged over a successful effective test because IAM Deny, principal access boundaries, or request conditions may block them. If effective testing is unavailable, policy permissions are retained but clearly labeled as unverified. BigQuery datasets, which do not expose a dataset-level `testIamPermissions` method, use read-only metadata/list capability probes; BigQuery itself documents that table/routine tests can fail open.
 
 Knowing a resource name is often enough to test permissions even when the principal cannot list its parent. Examples:
 
@@ -121,7 +121,7 @@ python3 GCPPEAS.py
 python3 GCPPEAS.py --project victim-project --out-json-path gcp-results.json
 ```
 
-GCPPEAS reports Workspace-capable OAuth scopes—including Gmail, Drive, Calendar, Admin SDK, Chat, Classroom, and editors—but does not automatically read Workspace content. A token containing both Workspace and Cloud scopes is called out as a cross-control-plane credential. Service-account impersonation/signing/key permissions now distinguish directly shared Workspace resources (which do not require domain-wide delegation) from user impersonation through DWD. Complete Cloud DNS record-write pairs and user access to organization `setIamPolicy` also receive concise GCP↔Workspace pivot notes with their required conditions and known-resource fallbacks.
+GCPPEAS reports Workspace-capable OAuth scopes—including Gmail, Drive, Calendar, Admin SDK, Chat, Classroom, and editors—but does not automatically read Workspace content. A token containing both Workspace and Cloud scopes is called out as a cross-control-plane credential. Service-account impersonation/signing/key permissions distinguish directly shared Workspace resources (which do not require domain-wide delegation) from user impersonation through DWD. Complete Cloud DNS record-write pairs, user access to organization `setIamPolicy`, and live-tested HTTP Workspace add-on deployment takeover receive concise GCP↔Workspace pivot notes with their required conditions and known-resource fallbacks.
 
 ### Useful controls
 
@@ -130,6 +130,7 @@ GCPPEAS reports Workspace-capable OAuth scopes—including Gmail, Drive, Calenda
 - `--skip-bruteforce`: policy-only mode; usually less complete.
 - `--skip-asset-inventory`: use service-specific discovery fallbacks only.
 - `--resource`: repeat for known resource names; comma-separated values are also accepted.
+- `--group`: known current-principal group email(s), used when Cloud Identity membership lookup is denied.
 - `--billing-project`: quota project only; no state change.
 - `--threads`, `--timeout`, `--retries`: bound concurrency and transient failures.
 - `--proxy`, `--insecure`, `--debug`: troubleshooting controls.

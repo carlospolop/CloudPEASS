@@ -23,6 +23,7 @@ def bare_peass():
     peass.debug = False
     peass.email = "alice@example.com"
     peass.is_sa = False
+    peass.explicit_groups = []
     peass.groups = ["redteam@example.com"]
     peass._role_permissions = {
         "roles/viewer": ["resourcemanager.projects.get"],
@@ -259,6 +260,33 @@ def test_policy_parser_skips_conditions_instead_of_overstating_access():
     assert peass._conditional_bindings_skipped == 1
 
 
+def test_group_trust_notes_separate_known_membership_from_join_hypotheses():
+    peass = bare_peass()
+    policy = {
+        "bindings": [
+            {"role": "roles/viewer", "members": ["group:redteam@example.com"]},
+            {
+                "role": "roles/owner",
+                "members": ["group:joinable@example.com"],
+                "condition": {"expression": "request.time < timestamp('2030-01-01T00:00:00Z')"},
+            },
+        ]
+    }
+    notes = peass._group_trust_notes(policy)
+    assert len(notes) == 1
+    assert "redteam@example.com -> roles/viewer (known member)" in notes[0]
+    assert "joinable@example.com -> roles/owner (membership unknown, conditional)" in notes[0]
+    assert "not proof that it is joinable" in notes[0]
+    assert "pass --group" in notes[0]
+    assert "without Cloud Identity permissions" in notes[0]
+
+
+def test_group_trust_notes_require_a_visible_group_binding():
+    assert bare_peass()._group_trust_notes(
+        {"bindings": [{"role": "roles/viewer", "members": ["user:alice@example.com"]}]}
+    ) == []
+
+
 def test_read_only_transport_blocks_mutating_endpoints():
     GCPReadOnlyClient._assert_read_only("GET", "https://example.googleapis.com/v1/projects/p")
     GCPReadOnlyClient._assert_read_only(
@@ -354,6 +382,7 @@ def test_proxy_validation_and_retry_after_are_bounded():
         ["--organization", "123/child"],
         ["--project", "projects/bad"],
         ["--service-account", "user@example.com"],
+        ["--group", "not-an-email"],
         ["--threads", "0"],
         ["--threads", "257"],
         ["--timeout", "nan"],
@@ -383,6 +412,28 @@ def test_valid_output_path_passes_pre_authentication_validation(tmp_path):
     _validate_args(args, parser)
 
 
+def test_group_cli_fallback_accepts_known_group_emails():
+    parser = _build_parser()
+    args = parser.parse_args(["--group", "redteam@example.com,parent@example.com"])
+    _validate_args(args, parser)
+    assert args.groups == "redteam@example.com,parent@example.com"
+
+
+def test_explicit_groups_are_merged_case_insensitively_with_discovery(capsys):
+    peass = bare_peass()
+    peass.explicit_groups = ["RedTeam@example.com"]
+    peass.groups = list(peass.explicit_groups)
+    peass.credentials = SimpleNamespace(valid=True, token="opaque")
+    peass.extra_token = ""
+    peass._inspect_token = lambda _token: {"email": "alice@example.com", "scopes": []}
+    peass.get_user_groups = lambda: ["redteam@example.com", "parent@example.com"]
+
+    peass.print_whoami_info()
+
+    assert peass.groups == ["parent@example.com", "RedTeam@example.com"]
+    assert "--group entries are operator-supplied" in capsys.readouterr().out
+
+
 def test_builtin_fallback_covers_every_modern_resource_type():
     legacy_types = {"vm", "function", "storage"}
     for resource_type, prefixes in TYPE_PREFIXES.items():
@@ -410,6 +461,10 @@ def test_dns_fallback_covers_workspace_recovery_permission_pair():
         "dns.resourceRecordSets.update",
         "dns.resourceRecordSets.delete",
     } <= BUILTIN_FALLBACK_PERMISSIONS
+
+
+def test_addon_fallback_covers_live_tested_workspace_endpoint_takeover():
+    assert "gsuiteaddons.deployments.update" in BUILTIN_FALLBACK_PERMISSIONS
 
 
 def test_testable_catalog_drops_cross_service_permissions():
@@ -558,6 +613,14 @@ def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
     )
     assert len(policy_notes) == 1
     assert "roles/dns.admin" in policy_notes[0]
+
+    addon_notes = peass._cross_cloud_pivot_notes(
+        project, ["gsuiteaddons.deployments.update"]
+    )
+    assert len(addon_notes) == 1
+    assert "update-only principal" in addon_notes[0]
+    assert "installed/authorized user" in addon_notes[0]
+    assert "does not bypass OAuth consent" in addon_notes[0]
 
     sa = peass.normalize_resource(
         "service-account:runner@demo-project.iam.gserviceaccount.com"
