@@ -358,3 +358,19 @@ def test_data_factory_identity_theft_requires_pipeline_write_and_run():
     assert pipeline_write not in write_only["critical"]
     assert pipeline_run not in run_only["critical"]
     assert pipeline_run in run_only["high"]
+
+
+def test_acr_schedule_run_does_not_require_source_upload_or_imply_identity_reuse():
+    peas = CloudPEASS(
+        very_sensitive_combinations,
+        sensitive_combinations,
+        "Azure",
+        1,
+    )
+    source_upload = "Microsoft.ContainerRegistry/registries/listBuildSourceUploadUrl/action"
+    schedule_run = "Microsoft.ContainerRegistry/registries/scheduleRun/action"
+
+    categories = peas.analyze_group({source_upload, schedule_run}, [])["permissions_cat"]
+
+    assert not categories["critical"]
+    assert schedule_run in categories["high"]

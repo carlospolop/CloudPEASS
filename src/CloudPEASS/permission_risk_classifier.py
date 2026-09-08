@@ -556,6 +556,10 @@ _AZURE_HIGH_EXACT = frozenset(
         # separately enforced tasks/write and managed-identity assign/action
         # for existing-Task reuse and direct UAMI attachment.
         "microsoft.containerregistry/registries/taskruns/write",
+        # scheduleRun alone accepted an encoded command and a remote Docker
+        # build, then pushed the selected tag. Existing-Task identity reuse
+        # was separately blocked by a linked tasks/write requirement.
+        "microsoft.containerregistry/registries/schedulerun/action",
     }
 )
 

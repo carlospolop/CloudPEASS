@@ -45,8 +45,6 @@ very_sensitive_combinations = [
     ["Microsoft.ContainerRegistry/registries/listCredentials/action"],
     ["Microsoft.ContainerRegistry/registries/regenerateCredential/action"],
     ["Microsoft.ContainerRegistry/registries/generateCredentials/action"],
-    ["Microsoft.ContainerRegistry/registries/listBuildSourceUploadUrl/action", "Microsoft.ContainerRegistry/registries/scheduleRun/action"],
-
     ["Microsoft.ContainerInstance/containerGroups/containers/exec/action"],
     ["Microsoft.Web/sites/functions/masterkey/read"],
     ["Microsoft.Web/sites/functions/token/read"],
@@ -199,6 +197,7 @@ sensitive_combinations = [
     ["Microsoft.Automation/automationAccounts/sourceControls/write"],
     ["Microsoft.ContainerRegistry/registries/tasks/write"],
     ["Microsoft.ContainerRegistry/registries/taskruns/write"],
+    ["Microsoft.ContainerRegistry/registries/scheduleRun/action"],
     ["Microsoft.ContainerRegistry/registries/importImage/action"],
     ["Microsoft.ContainerRegistry/registries/tasks/listDetails/action"],
     ["Microsoft.ContainerRegistry/registries/taskruns/listDetails/action"],
