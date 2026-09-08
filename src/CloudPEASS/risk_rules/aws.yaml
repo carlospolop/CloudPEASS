@@ -133,6 +133,7 @@ high_exact:
   - invoicing:GetInvoicePDF
   - invoicing:ListInvoiceSummaries
   - pipes:DescribePipe
+  - profile:SearchProfiles
   - route53domains:GetDomainDetail
   - s3:GetDataAccess
   - s3express:CreateSession
@@ -229,6 +230,7 @@ high_override_exact:
   - invoicing:GetInvoicePDF
   - invoicing:ListInvoiceSummaries
   - pipes:DescribePipe
+  - profile:SearchProfiles
   - s3:GetDataAccess
   - s3express:CreateSession
   - sagemaker:DescribeModel

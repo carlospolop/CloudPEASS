@@ -85,6 +85,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "s3express:CreateSession",
     "scheduler:GetSchedule",
     "pipes:DescribePipe",
+    "profile:SearchProfiles",
     "ses:GetSuppressedDestination",
     "ses:GetEmailTemplate",
     "ses:ListSuppressedDestinations",
