@@ -19,6 +19,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "appsync:ListApiKeys",
     "autoscaling:DescribeLaunchConfigurations",
     "batch:DescribeJobDefinitions",
+    "bedrock:Retrieve",
     "bedrock-agentcore:GetWorkloadAccessTokenForUserId",
     "cloudformation:DescribeStacks",
     "cloudformation:DescribeChangeSet",

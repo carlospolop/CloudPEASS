@@ -72,6 +72,7 @@ high_exact:
   - appstream:CreateStreamingURL
   - autoscaling:DescribeLaunchConfigurations
   - batch:DescribeJobDefinitions
+  - bedrock:Retrieve
   - bedrock-agentcore:GetWorkloadAccessTokenForUserId
   - cloudformation:DescribeStacks
   - cloudformation:DescribeChangeSet
@@ -180,6 +181,7 @@ high_override_exact:
   - appstream:CreateStreamingURL
   - autoscaling:DescribeLaunchConfigurations
   - batch:DescribeJobDefinitions
+  - bedrock:Retrieve
   - bedrock-agentcore:GetWorkloadAccessTokenForUserId
   - cloudformation:DescribeStacks
   - cloudformation:DescribeChangeSet
