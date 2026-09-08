@@ -131,6 +131,7 @@ high_exact:
   - dynamodb:TransactGetItems
   - deadline:AssumeQueueRoleForRead
   - deadline:AssumeQueueRoleForUser
+  - datazone:GetEnvironmentCredentials
   - ec2:DescribeLaunchTemplateVersions
   - ec2:DescribeInstanceAttribute
   - ebs:GetSnapshotBlock
@@ -246,6 +247,7 @@ high_override_exact:
   - dynamodb:TransactGetItems
   - deadline:AssumeQueueRoleForRead
   - deadline:AssumeQueueRoleForUser
+  - datazone:GetEnvironmentCredentials
   - ec2:DescribeLaunchTemplateVersions
   - ec2:DescribeInstanceAttribute
   - ebs:GetSnapshotBlock
