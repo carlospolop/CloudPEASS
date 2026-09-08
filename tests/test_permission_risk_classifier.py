@@ -225,6 +225,11 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Web/sites/slots/config/snapshots/listsecrets/action": "high",
             "Microsoft.Web/sites/functions/keys/write": "high",
             "Microsoft.Web/sites/slots/functions/keys/write": "high",
+            "Microsoft.Web/sites/functions/listkeys/action": "high",
+            "Microsoft.Web/sites/slots/functions/listkeys/action": "high",
+            "Microsoft.Web/sites/functions/listsecrets/action": "high",
+            "Microsoft.Web/sites/host/functionKeys/write": "high",
+            "Microsoft.Web/sites/slots/host/functionKeys/write": "high",
             "Microsoft.ApiManagement/service/apiKeys/listSecrets/action": "high",
             "Microsoft.ApiManagement/service/workspaces/toolServers/listSecrets/action": "high",
             "Microsoft.AppConfiguration/configurationStores/ListKeyValue/action": "high",
@@ -236,8 +241,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.MachineLearningServices/workspaces/connections/listsecrets/action": "critical",
             "Microsoft.MachineLearningServices/workspaces/datastores/listsecrets/action": "critical",
             "Microsoft.Web/sites/host/listkeys/action": "critical",
-            "Microsoft.Web/sites/functions/listkeys/action": "critical",
-            "Microsoft.Web/sites/functions/listsecrets/action": "critical",
+            "Microsoft.Web/sites/slots/host/listkeys/action": "critical",
             "Microsoft.CognitiveServices/accounts/connections/listsecrets/action": "critical",
             "Microsoft.CognitiveServices/accounts/projects/connections/listsecrets/action": "critical",
             "Microsoft.ApiManagement/service/namedValues/listValue/action": "critical",
@@ -348,6 +352,10 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         )
         self.assertEqual(
             self.classify("Microsoft.Web/certificates/write"), "medium"
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Web/sites/slots/functions/listsecrets/action"),
+            "medium",
         )
         self.assertEqual(
             self.classify("Microsoft.KeyVault/vaults/certificates/purge/action"),

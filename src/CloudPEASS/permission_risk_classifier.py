@@ -298,8 +298,10 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.machinelearningservices/workspaces/connections/listsecrets/action",
         "microsoft.machinelearningservices/workspaces/datastores/listsecrets/action",
         "microsoft.web/sites/host/listkeys/action",
-        "microsoft.web/sites/functions/listkeys/action",
-        "microsoft.web/sites/functions/listsecrets/action",
+        # Host listKeys returns the slot's master key. Live controls showed
+        # missing/wrong/cross-slot keys receive 401 while the recovered
+        # 56-character key authenticates to the slot administration API.
+        "microsoft.web/sites/slots/host/listkeys/action",
         # Foundry account/project connections returned a stored Cognitive
         # Services key that successfully called the connected Language API.
         "microsoft.cognitiveservices/accounts/connections/listsecrets/action",
@@ -517,6 +519,18 @@ _AZURE_HIGH_EXACT = frozenset(
         # invoked the protected function and returned the seeded canary.
         "microsoft.web/sites/functions/keys/write",
         "microsoft.web/sites/slots/functions/keys/write",
+        # Function-level list operations return a key scoped to one function.
+        # Live production and slot controls invoked only the named function;
+        # a second protected function returned 401. The legacy listSecrets
+        # route was also live-proved on its supported Files secret store.
+        "microsoft.web/sites/functions/listkeys/action",
+        "microsoft.web/sites/slots/functions/listkeys/action",
+        "microsoft.web/sites/functions/listsecrets/action",
+        # A host-level function key is accepted by every key-protected
+        # function in the corresponding production app or slot, but is not a
+        # master key and cannot authenticate to the administration API.
+        "microsoft.web/sites/host/functionkeys/write",
+        "microsoft.web/sites/slots/host/functionkeys/write",
     }
 )
 
