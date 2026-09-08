@@ -195,6 +195,8 @@ sensitive_combinations = [
     ["Microsoft.Automation/automationAccounts/sourceControls/write"],
     ["Microsoft.ContainerRegistry/registries/tasks/write"],
     ["Microsoft.ContainerRegistry/registries/importImage/action"],
+    ["Microsoft.ContainerRegistry/registries/tasks/listDetails/action"],
+    ["Microsoft.ContainerRegistry/registries/taskruns/listDetails/action"],
     ["Microsoft.App/containerApps/getAuthToken/action"],
     ["Microsoft.App/jobs/write"],
     ["Microsoft.Web/staticSites/createInvitation/action"],

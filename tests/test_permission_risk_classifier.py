@@ -292,6 +292,8 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Insights/Components/ApiKeys/Action": "high",
             "Microsoft.Insights/generateLiveToken/read": "high",
             "Microsoft.HealthBot/healthBots/listSecrets/action": "high",
+            "Microsoft.ContainerRegistry/registries/tasks/listDetails/action": "high",
+            "Microsoft.ContainerRegistry/registries/taskruns/listDetails/action": "high",
             "Microsoft.NotificationHubs/Namespaces/NotificationHubs/pnsCredentials/action": "high",
             "Microsoft.ApiManagement/service/subscriptions/listSecrets/action": "high",
             "Microsoft.ApiManagement/service/portalConfigs/listDelegationSecrets/action": "high",

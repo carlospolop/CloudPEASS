@@ -542,6 +542,11 @@ _AZURE_HIGH_EXACT = frozenset(
         # a signed WebSocket connection delivered a canary to the Relay while
         # the same request signed with a wrong key was rejected with 401.
         "microsoft.web/sites/hybridconnectionnamespaces/relays/listkeys/action",
+        # An ordinary Task or TaskRun GET redacts secret arguments and values.
+        # Exact-action service principals returned the seeded cleartext values
+        # only through listDetails; both no-role controls were denied.
+        "microsoft.containerregistry/registries/tasks/listdetails/action",
+        "microsoft.containerregistry/registries/taskruns/listdetails/action",
     }
 )
 
