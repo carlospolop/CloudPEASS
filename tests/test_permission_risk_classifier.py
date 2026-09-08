@@ -333,6 +333,14 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         self.assertEqual(
             self.classify("Microsoft.App/builds/listAuthToken/action"), "medium"
         )
+        for permission in (
+            "Microsoft.App/connectedEnvironments/certificates/write",
+            "Microsoft.App/managedEnvironments/certificates/write",
+            "Microsoft.App/sandboxGroups/secrets/write",
+            "Microsoft.App/sandboxGroups/secrets/peek/action",
+        ):
+            with self.subTest(permission=permission):
+                self.assertEqual(self.classify(permission), "medium")
         self.assertEqual(
             self.classify("Microsoft.App/sessionPools/read"), "low"
         )

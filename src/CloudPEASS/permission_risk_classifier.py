@@ -516,6 +516,15 @@ _AZURE_HIGH_EXACT = frozenset(
 
 _AZURE_MEDIUM_EXACT = frozenset(
     {
+        # Creating an environment certificate does not bind it to a hostname,
+        # alter a running app, or expose an existing private key by itself.
+        "microsoft.app/connectedenvironments/certificates/write",
+        "microsoft.app/managedenvironments/certificates/write",
+        # Sandbox secret writes do not make a workload consume the value, and
+        # the current principal could not exercise these data actions. Keep
+        # both write and value-peek visible without an untested High claim.
+        "microsoft.app/sandboxgroups/secrets/write",
+        "microsoft.app/sandboxgroups/secrets/peek/action",
         # Creating or updating the identity object does not attach it to a
         # workload and does not grant control of an existing identity.
         "microsoft.managedidentity/userassignedidentities/write",
