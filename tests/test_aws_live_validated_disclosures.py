@@ -36,6 +36,11 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "cloudfront:ListDistributions",
     "cloudtrail:LookupEvents",
     "ce:GetCostAndUsage",
+    "budgets:ViewBudget",
+    "aws-portal:ViewBilling",
+    "aws-marketplace:SearchAgreements",
+    "aws-marketplace:DescribeAgreement",
+    "aws-marketplace:GetAgreementTerms",
     "codebuild:BatchGetBuilds",
     "codebuild:BatchGetProjects",
     "codeartifact:GetPackageVersionAsset",
@@ -733,6 +738,47 @@ def test_live_validated_cloudwatch_dashboard_disclosure():
     assert live_validated_disclosure_documentation[action] == (
         "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md"
     )
+
+
+def test_live_validated_budget_disclosure_uses_view_budget_iam_action():
+    action = "budgets:ViewBudget"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-security-and-detection-services/aws-cost-explorer-enum.md"
+    )
+
+
+def test_live_validated_legacy_billing_console_permission_discloses_credits():
+    action = "aws-portal:ViewBilling"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-security-and-detection-services/aws-cost-explorer-enum.md"
+    )
+
+
+def test_live_validated_marketplace_agreement_disclosures_are_independent():
+    actions = (
+        "aws-marketplace:SearchAgreements",
+        "aws-marketplace:DescribeAgreement",
+        "aws-marketplace:GetAgreementTerms",
+    )
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    for action in actions:
+        assert (action,) in high
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "high"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-marketplace-enum.md"
+        )
 
 
 def test_live_validated_lex_export_disclosure_requires_export_workflow():

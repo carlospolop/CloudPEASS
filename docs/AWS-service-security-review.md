@@ -951,6 +951,79 @@ operational links, runbooks, and operator-pasted text; the name can be recovered
 deployment output, bookmarks, logs, errors, or console URLs without list permission. The
 dashboard, users, access keys, and policy were deleted and exact inventories were empty.
 
+### AWS Budgets (`budgets`) — 2026-09-09
+
+The IAM action name does not mirror the API operation: `budgets:ViewBudget` alone authorized
+`DescribeBudget` for an exact synthetic budget ARN. The response returned the randomized budget
+name and its distinctive USD `42009` limit. The candidate was denied `DescribeBudgets`, while an
+empty-permission control was denied the same known-name `DescribeBudget` request. This read can
+expose configured limits, filters, actual and forecast spend, health, time periods, and action or
+notification context; it does not by itself modify the budget or execute a budget action.
+
+The budget had no notification, subscriber, or action. It was deleted together with both test
+users, access keys, and the inline policy, and exact name lookups for the budget and users returned
+not found. The account's pre-existing `Cost Budget` was deliberately not read or changed.
+
+### AWS Billing and Billing Console (`billing`, `aws-portal`) — 2026-09-09
+
+`aws-portal:ViewBilling` alone was validated as a sensitive credit-record disclosure through the
+current Billing `GetCredits` API. The response contained a real record with credit identifiers,
+type, monetary balances, applicable products, dates, sharing state, and status. The harness asserted
+record presence and field names but did not print or persist any value. The candidate was denied
+`billing:ListBillingViews`, and an empty-permission identity was denied the same credits request.
+
+An independent identity with only the apparently narrower `billing:GetCredits` action was also
+denied: the response named missing `aws-portal:ViewBilling`. Conversely, the legacy Billing Console
+permission needed no `billing:GetCredits` grant to return the record. Therefore the observed impact
+is attributed only to `aws-portal:ViewBilling`; the `billing` prefix is `no_new_positive` for this
+hypothesis. Four disposable users, their access keys, and inline policies were deleted and exact
+user lookups returned not found. Existing billing views, preferences, credits, and account data
+were read-only and were not modified.
+
+### AWS Marketplace agreements (`aws-marketplace`) — 2026-09-09
+
+Three agreement reads were independently validated against the account's existing buyer
+agreements. `SearchAgreements` alone returned non-empty agreement summaries;
+`DescribeAgreement` alone returned metadata for a known agreement ID; and `GetAgreementTerms`
+alone returned accepted term content. These surfaces can reveal vendor relationships, buyer and
+seller account IDs, product/offer identifiers, contract dates and renewal state, negotiated
+pricing dimensions, quantities, and legal terms. A caller does not need
+`aws-marketplace:ViewSubscriptions` for these API calls despite current operation-mapping tables
+showing it as an additional authorization action.
+
+Each permission was placed in its own disposable assumed role. The roles carrying either a
+different Marketplace action or no action were denied the target request, establishing that the
+three permissions are independent rather than a bundle. The harness logged only booleans, error
+codes, and content presence: it did not print or persist agreement IDs, parties, products, prices,
+or terms. No Marketplace agreement, subscription, product, offer, payment, cancellation, or seller
+state was changed. All eight matrix roles and inline policies were deleted; exact role lookups
+returned not found. Seller catalog inventories for AMI, container, SaaS, data, and offer entities
+were empty.
+
+### Billing exports and service prerequisites — 2026-09-09
+
+Billing and Cost Management Data Exports returned zero configured exports and seven AWS-provided
+table schemas; legacy Cost and Usage Reports returned zero report definitions. Both create paths
+need a destination bucket policy, and AWS documents that initial report delivery can take up to 24
+hours. Because an accepted create call would not prove data access and waiting would leave an
+asynchronous export beyond the bounded cleanup window, `bcm-data-exports` and `cur` remain blocked
+without a pre-existing disposable export. No export, report, bucket, or policy was created.
+
+Cloud Directory rejected directory inventory in `eu-west-1`, `us-east-1`, and `us-west-2` because
+the account is not authorized for the service in those Regions. Compute Optimizer reported
+`Inactive` with no member enrollment; enabling its account-wide analysis was not treated as an
+isolated test fixture. CodeGuru Security returned `FeatureNoLongerAvailableException` and stated
+that the service is no longer supported. CodeCatalyst workspace inventory required a distinct
+authorization token that the AWS profile does not have, and there is no known disposable space,
+connection, or Identity Center application to test its separate IAM integration actions.
+
+CloudTrail returned one pre-existing integration channel in each of the two queried Regions, but
+zero CloudTrail Lake event data stores. The real channels were not used to inject synthetic audit
+events. Creating the event store needed to prove `cloudtrail-data:PutAuditEvents` would leave that
+store in AWS's mandatory seven-day `PENDING_DELETION` state, so this integrity-impact hypothesis is
+blocked by the same-session destruction requirement. None of these prerequisite checks created or
+changed infrastructure.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

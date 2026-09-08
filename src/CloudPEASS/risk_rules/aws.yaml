@@ -133,6 +133,11 @@ high_exact:
   - cloudwatch:GetDashboard
   - cloudtrail:LookupEvents
   - ce:GetCostAndUsage
+  - budgets:ViewBudget
+  - aws-portal:ViewBilling
+  - aws-marketplace:SearchAgreements
+  - aws-marketplace:DescribeAgreement
+  - aws-marketplace:GetAgreementTerms
   - codebuild:BatchGetBuilds
   - codebuild:BatchGetProjects
   - codeartifact:GetPackageVersionAsset
