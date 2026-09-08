@@ -56,7 +56,6 @@ pass the evidence gate before it can change a permission severity or appear in H
 
 | Rank | Service | Next isolated hypothesis |
 | ---: | --- | --- |
-| Q02 | EventBridge Scheduler | Change an existing schedule's target or universal-target input while preserving its role; independently test the same-role pass-role check. |
 | Q03 | AWS Config | Point remediation at a preauthorized SSM Automation path and call `StartRemediationExecution`; distinguish Config permissions from SSM and pass-role checks. |
 | Q04 | CodeConnections | Use an installed connection through an existing or synthetic consumer to determine whether `UseConnection` exposes or executes otherwise inaccessible private repository content. |
 | Q05 | IAM Roles Anywhere | Mutate a trust anchor used by an existing profile and role, then attempt a certificate-backed session; retain the exact role trust and profile prerequisites. |
@@ -67,7 +66,6 @@ pass the evidence gate before it can change a permission severity or appear in H
 | Q12 | RDS | Share, copy, or restore an unencrypted snapshot and read a canary without source-instance access; record customer-managed KMS blockers separately. |
 | Q13 | FSx | Copy, share, or restore a backup and mount/read a canary without source-filesystem permission. |
 | Q14 | EventBridge | Attach a target to an existing rule and attempt execution through an existing service role or target resource policy, with and without `iam:PassRole`. |
-| Q15 | Secrets Manager | Use `PutResourcePolicy` for a same-account or cross-account self-grant and prove `GetSecretValue`, including `BlockPublicPolicy` and KMS boundaries. |
 | Q16 | S3 Object Lambda | Test access-point policy self-grant and a known transformed-object path while the caller remains denied direct source-object access. |
 
 Source catalog: <https://awspolicygen.s3.amazonaws.com/js/policies.js>
@@ -346,3 +344,43 @@ a separate deployment path.
 The HTTP API, stage, route and integration, both Lambda functions and their policies, private proof
 bucket and object, execution role, two disposable IAM users, both access keys, and local deployment
 ZIP were deleted. Exact prefix inventories returned no API Gateway, Lambda, S3, or IAM resource.
+
+### Amazon EventBridge Scheduler (`scheduler`) — 2026-09-08
+
+The tested stored-role target-redirection hypothesis produced no new positive. An administrator
+created an enabled schedule whose execution role could send to both a benign queue and a synthetic
+attacker queue. A restricted user had only `scheduler:UpdateSchedule` on that exact schedule and
+receive access to the attacker queue; it was denied reads from the original target queue.
+
+`UpdateSchedule` requires a complete target object including `RoleArn`. AWS denied the restricted
+update specifically on `iam:PassRole` even though the request resubmitted the unchanged role already
+stored on the schedule. A no-permission user was independently denied the update. Therefore
+`scheduler:UpdateSchedule` alone is not classified as a stored-role bypass for this configuration;
+attack chains that also include `iam:PassRole` remain separately relevant.
+
+The schedule, both queues, execution role and policy, two disposable IAM users, and both access keys
+were deleted. Exact prefix queries returned no remaining Scheduler, SQS, or IAM resources.
+
+### AWS Secrets Manager (`secretsmanager`) — 2026-09-08
+
+Live validation confirmed that `secretsmanager:PutResourcePolicy` alone can grant a same-account IAM
+user access to a secret value. A synthetic user had an identity policy allowing only
+`PutResourcePolicy` on one exact secret and was denied `GetSecretValue` before the change. A
+no-permission user was independently denied the policy update.
+
+The restricted user installed a policy naming its exact IAM-user ARN and allowing
+`secretsmanager:GetSecretValue` on that secret. The same user then recovered the exact canary even
+though its identity policy still contained no read action. This is classified Critical because it
+directly turns resource-policy control into secret disclosure.
+
+The proof is deliberately limited to a same-account IAM user and a secret encrypted with the
+AWS-managed Secrets Manager key. Cross-account principals require both resource- and identity-based
+allows, and customer-managed KMS keys introduce `kms:Decrypt` plus key-policy authorization.
+`BlockPublicPolicy` protects against policies that Zelkova considers broad/public; fixed-principal
+self-grants must still be prevented by restricting `PutResourcePolicy` itself. Known secret names or
+ARNs may come from application configuration, IaC, CI files, environment variables, logs, errors,
+or shell history when list/get metadata calls are denied.
+
+The resource policy was removed, the secret was force-deleted and polled until absent, and both
+disposable IAM users, access keys, and inline policy were deleted. Exact Secrets Manager and IAM
+prefix inventories returned empty.

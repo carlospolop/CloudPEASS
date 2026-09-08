@@ -41,6 +41,7 @@ critical_exact:
   - sagemaker:CreatePresignedNotebookInstanceUrl
   - sagemaker:UpdateNotebookInstanceLifecycleConfig
   - secretsmanager:GetSecretValue
+  - secretsmanager:PutResourcePolicy
   - ssm:GetParameter
   - ssm:GetParameters
   - ssm:GetParametersByPath

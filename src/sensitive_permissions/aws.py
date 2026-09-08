@@ -589,6 +589,7 @@ live_validated_disclosure_documentation = {
     "sagemaker:DescribeModel": "aws-services/aws-sagemaker-enum/README.md",
     "sagemaker:DescribeTrainingJob": "aws-services/aws-sagemaker-enum/README.md",
     "sagemaker:UpdateNotebookInstanceLifecycleConfig": "aws-persistence/aws-sagemaker-persistence/README.md",
+    "secretsmanager:PutResourcePolicy": "aws-privilege-escalation/aws-secrets-manager-privesc/README.md",
     "s3:GetDataAccess": "aws-services/aws-s3-athena-and-glacier-enum.md",
     "s3:CreateAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "s3:GetAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
