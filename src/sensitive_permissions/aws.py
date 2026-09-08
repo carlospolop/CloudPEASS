@@ -130,6 +130,7 @@ very_sensitive_combinations = [
     ["rolesanywhere:UpdateTrustAnchor"],
 
     ["sns:AddPermission"],
+    ["sns:SetTopicAttributes"],
 
     ["sqs:AddPermission"],
     ["sqs:SetQueueAttributes"],
@@ -609,6 +610,7 @@ live_validated_disclosure_documentation = {
     "sns:ListSubscriptionsByTopic": "aws-services/aws-sns-enum.md",
     "sqs:ReceiveMessage": "aws-post-exploitation/aws-sqs-post-exploitation/README.md",
     "scheduler:GetSchedule": "aws-services/eventbridgescheduler-enum.md",
+    "sns:SetTopicAttributes": "aws-post-exploitation/aws-sns-post-exploitation/README.md",
     "sqs:SetQueueAttributes": "aws-post-exploitation/aws-sqs-post-exploitation/README.md",
     "pipes:DescribePipe": "aws-services/eventbridgescheduler-enum.md",
     "profile:SearchProfiles": "aws-services/aws-connect-customer-profiles-enum.md",

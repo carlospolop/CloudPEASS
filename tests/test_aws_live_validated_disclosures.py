@@ -451,6 +451,18 @@ def test_live_validated_sqs_queue_policy_self_grant():
     )
 
 
+def test_live_validated_sns_topic_policy_subscription_self_grant():
+    action = "sns:SetTopicAttributes"
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert (action,) in critical
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "critical"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-post-exploitation/aws-sns-post-exploitation/README.md"
+    )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

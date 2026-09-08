@@ -428,3 +428,26 @@ variables, IaC, CI files, logs, errors, or shell history.
 
 The policy attribute was cleared before deleting the queue. Both disposable IAM users, access keys,
 and the inline policy were deleted; exact SQS and IAM prefix inventories returned empty.
+
+### Amazon SNS (`sns`) — 2026-09-08
+
+Live validation confirmed that `sns:SetTopicAttributes` alone can replace a topic policy and grant
+the same-account caller subscription access. A restricted IAM user's identity policy allowed only
+`SetTopicAttributes` on one topic plus receive access to a synthetic destination queue. Its
+`Subscribe` request was denied before the policy change, and a no-permission user was independently
+denied the attribute update.
+
+The restricted user set the topic's `Policy` attribute to name its exact IAM-user ARN and allow
+only `sns:Subscribe`. It then subscribed the queue without an identity-based SNS subscribe allow.
+An administrator published a later canary, and the restricted user received it from the queue. The
+permission is Critical because it can convert policy control into persistent access to future topic
+messages and can also authorize publication or other policy-supported topic actions.
+
+The delivery endpoint must separately accept SNS messages. The lab kept all data inside the test
+account and used a queue policy restricted to `sns.amazonaws.com` with the exact topic ARN as
+`aws:SourceArn`. When SNS listing is denied, topic ARNs can still appear in application settings,
+subscriptions, IaC, CI files, logs, errors, or shell history.
+
+The subscription was removed before deleting the topic and queue. Both disposable IAM users,
+access keys, inline policy, and queue policy were deleted; exact SNS, SQS, and IAM inventories
+returned empty.
