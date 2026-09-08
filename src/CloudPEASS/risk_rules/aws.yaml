@@ -63,6 +63,11 @@ medium_override_exact:
   # launch constraint. Neither action is independently a privilege grant.
   - servicecatalog:CreateProvisioningArtifact
   - servicecatalog:ProvisionProduct
+  # A recipe must track a wildcard version of the attacker-writable component,
+  # and its existing pipeline instance profile must have useful privileges.
+  # The pair is critical; neither action provides that profile by itself.
+  - imagebuilder:CreateComponent
+  - imagebuilder:StartImagePipelineExecution
   # No supported caller-facing API exposes connection credentials directly.
   - events:RetrieveConnectionCredentials
 

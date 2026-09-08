@@ -242,6 +242,24 @@ def test_live_validated_service_catalog_launch_role_escalation_requires_pair():
         )
 
 
+def test_live_validated_image_builder_wildcard_component_escalation_requires_pair():
+    combination = (
+        "imagebuilder:CreateComponent",
+        "imagebuilder:StartImagePipelineExecution",
+    )
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert combination in critical
+    assert (combination[0],) not in critical
+    assert (combination[1],) not in critical
+    for action in combination:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "medium"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-privilege-escalation/aws-ec2-image-builder-privesc/README.md"
+        )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

@@ -118,3 +118,29 @@ so that permission is not part of the minimum chain. The caller still needs cont
 source, access to a non-shared product associated with its portfolio, and a launch constraint whose
 role can perform the template's actions. The pair is therefore recorded as a conditional critical
 combination while each permission remains medium in isolation.
+
+### Amazon EC2 Image Builder (`imagebuilder`) — 2026-09-08
+
+Live validation confirmed a version-reference escalation. A benign recipe stored
+`component/cloudpeass-ib-.../x.x.x` and an enabled pipeline used an infrastructure configuration
+with a synthetic instance profile. A restricted role with only `imagebuilder:CreateComponent` on
+that component name, `imagebuilder:StartImagePipelineExecution` on the existing pipeline, and read
+access to a proof bucket published version `2.0.0` and started the unchanged pipeline. The resulting
+image record resolved the wildcard to the new `2.0.0/1` component and launched a build instance
+with the existing instance profile.
+
+The caller had no `iam:PassRole`, no `imagebuilder:UpdateImagePipeline`, and was denied
+`organizations:DescribeOrganization`. Its component used the build profile to write the caller
+identity and organization response to the proof bucket. Reading those objects showed the exact
+build-instance role ARN and organization metadata. Removing `StartImagePipelineExecution` denied a
+second start and created no image; removing `CreateComponent` denied creation of version `3.0.0`.
+The pair is conditional critical: the recipe must track a wildcard version beneath a component name
+the caller can update, and the existing pipeline profile must expose a useful permission or data
+path. Pinned component build ARNs prevent this particular technique.
+
+The image was cancelled as soon as both proof objects arrived. Image Builder reported `CANCELLED`,
+the EC2 instance reached `terminated`, and no AMI, snapshot, or active volume was produced. The
+pipeline, image record, recipe, both component versions, infrastructure configuration, two log
+groups, proof objects and bucket, test roles, and instance profile were deleted. Exact-prefix checks
+returned no active Image Builder, IAM, S3, CloudWatch Logs, EC2, EBS, AMI, or snapshot resources.
+The account's Image Builder service-linked role dates from 2020 and was deliberately left untouched.

@@ -140,7 +140,7 @@
 "P1","queued","health","AWS Health APIs and Notifications","","",""
 "P1","queued","identity-sync","AWS Identity Sync","","",""
 "P1","queued","identitystore-auth","AWS Identity Store Auth","","",""
-"P1","queued","imagebuilder","Amazon EC2 Image Builder","","",""
+"P1","validated","imagebuilder","Amazon EC2 Image Builder","2026-09-08","CreateComponent published v2 beneath a recipe's x.x.x component reference; StartImagePipelineExecution resolved v2 and ran it under the existing instance profile without iam:PassRole or pipeline-update access.","Caller was denied Organizations access but retrieved build output containing the instance-role ARN and organization metadata. Removing either action denied its operation. Requires a wildcard component reference, writable component name, runnable pipeline, and useful instance-profile privilege."
 "P1","queued","inspector2","Amazon Inspector2","","",""
 "P1","queued","iot","AWS IoT","","",""
 "P1","queued","iotanalytics","AWS IoT Analytics","","",""

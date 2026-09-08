@@ -8,6 +8,8 @@ very_sensitive_combinations = [
 
     ["servicecatalog:CreateProvisioningArtifact", "servicecatalog:ProvisionProduct"],
 
+    ["imagebuilder:CreateComponent", "imagebuilder:StartImagePipelineExecution"],
+
     ["codebuild:StartBuild"],
     ["codebuild:StartBuildBatch"],
 
@@ -456,6 +458,8 @@ live_validated_disclosure_documentation = {
     "backup:StartRestoreJob": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "servicecatalog:CreateProvisioningArtifact": "aws-privilege-escalation/aws-service-catalog-privesc/README.md",
     "servicecatalog:ProvisionProduct": "aws-privilege-escalation/aws-service-catalog-privesc/README.md",
+    "imagebuilder:CreateComponent": "aws-privilege-escalation/aws-ec2-image-builder-privesc/README.md",
+    "imagebuilder:StartImagePipelineExecution": "aws-privilege-escalation/aws-ec2-image-builder-privesc/README.md",
     "batch:DescribeJobDefinitions": "aws-services/aws-batch-enum.md",
     "bedrock:Retrieve": "aws-services/aws-bedrock-enum.md",
     "bedrock-agentcore:GetWorkloadAccessTokenForUserId": "aws-services/aws-bedrock-enum.md",
