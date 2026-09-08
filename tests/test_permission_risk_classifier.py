@@ -223,6 +223,8 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Network/connections/sharedKey/read": "high",
             "Microsoft.Web/sites/config/snapshots/listsecrets/action": "high",
             "Microsoft.Web/sites/slots/config/snapshots/listsecrets/action": "high",
+            "Microsoft.Web/sites/functions/keys/write": "high",
+            "Microsoft.Web/sites/slots/functions/keys/write": "high",
             "Microsoft.ApiManagement/service/apiKeys/listSecrets/action": "high",
             "Microsoft.ApiManagement/service/workspaces/toolServers/listSecrets/action": "high",
             "Microsoft.AppConfiguration/configurationStores/ListKeyValue/action": "high",
@@ -343,6 +345,9 @@ class AzureWildcardClassificationTest(unittest.TestCase):
                 self.assertEqual(self.classify(permission), "medium")
         self.assertEqual(
             self.classify("Microsoft.App/sessionPools/read"), "low"
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Web/certificates/write"), "medium"
         )
         self.assertEqual(
             self.classify("Microsoft.KeyVault/vaults/certificates/purge/action"),

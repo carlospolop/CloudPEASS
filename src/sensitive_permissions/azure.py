@@ -202,6 +202,8 @@ sensitive_combinations = [
     ["Microsoft.App/containerApps/getAuthToken/action"],
     ["Microsoft.App/jobs/write"],
     ["Microsoft.Web/staticSites/createInvitation/action"],
+    ["Microsoft.Web/sites/functions/keys/write"],
+    ["Microsoft.Web/sites/slots/functions/keys/write"],
     ["Microsoft.ContainerService/managedClusters/listClusterUserCredential/action"],
     ["Microsoft.Kubernetes/connectedClusters/listClusterUserCredential/action"],
     ["Microsoft.Kubernetes/connectedClusters/listClusterUserCredentials/action"],

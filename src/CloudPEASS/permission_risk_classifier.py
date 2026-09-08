@@ -511,6 +511,12 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.app/containerapps/getauthtoken/action",
         "microsoft.resources/deploymentscripts/write",
         "microsoft.web/staticsites/createinvitation/action",
+        # Live tests created attacker-chosen function-scoped keys on both a
+        # production Function App and a deployment slot. Requests without a
+        # key (or with a wrong key) returned 401, while each created key
+        # invoked the protected function and returned the seeded canary.
+        "microsoft.web/sites/functions/keys/write",
+        "microsoft.web/sites/slots/functions/keys/write",
     }
 )
 
@@ -525,6 +531,10 @@ _AZURE_MEDIUM_EXACT = frozenset(
         # both write and value-peek visible without an untested High claim.
         "microsoft.app/sandboxgroups/secrets/write",
         "microsoft.app/sandboxgroups/secrets/peek/action",
+        # Uploading an App Service certificate does not bind it to an app,
+        # replace a hostname binding, or expose an existing private key. Those
+        # effects require separate binding/configuration permissions.
+        "microsoft.web/certificates/write",
         # Creating or updating the identity object does not attach it to a
         # workload and does not grant control of an existing identity.
         "microsoft.managedidentity/userassignedidentities/write",
