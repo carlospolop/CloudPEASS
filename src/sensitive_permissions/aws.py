@@ -550,6 +550,7 @@ live_validated_disclosure_documentation = {
     "emr-serverless:GetApplication": "aws-services/aws-emr-enum.md",
     "emr-serverless:GetJobRun": "aws-services/aws-emr-enum.md",
     "events:ListTargetsByRule": "aws-services/eventbridgescheduler-enum.md",
+    "iam:CreateAccessKey": "aws-privilege-escalation/aws-iam-privesc/README.md",
     "execute-api:Invoke": "aws-services/aws-api-gateway-enum.md",
     "glue:GetConnection": "aws-post-exploitation/aws-glue-post-exploitation/README.md",
     "glue:GetJob": "aws-post-exploitation/aws-glue-post-exploitation/README.md",

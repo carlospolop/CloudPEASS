@@ -25,6 +25,7 @@ critical_exact:
   - ecr:GetAuthorizationToken
   - ecs:ExecuteCommand
   - events:RetrieveConnectionCredentials
+  - iam:CreateAccessKey
   - iam:PassRole
   - iot:OpenTunnel
   - kms:CreateGrant

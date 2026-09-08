@@ -459,6 +459,27 @@ The subscription was removed before deleting the topic and queue. Both disposabl
 access keys, inline policy, and queue policy were deleted; exact SNS, SQS, and IAM inventories
 returned empty.
 
+### AWS Identity and Access Management (`iam`) — 2026-09-08
+
+Validated `iam:CreateAccessKey` as a direct cross-user credential takeover primitive. A synthetic
+target user had only `organizations:DescribeOrganization`; the attacking user had only
+`iam:CreateAccessKey` on that exact target ARN. The attacker was denied the Organizations call,
+and a separate no-permission user was denied access-key creation. The attacking user then created
+an access key for the target, and the returned credentials successfully retrieved the lab
+organization's exact ID and ARN. This observes inherited target authorization rather than merely
+an accepted IAM control-plane response.
+
+`iam:ListUsers` is not required. Target names and ARNs can instead be recovered from CloudTrail,
+resource policies, trust policies, infrastructure-as-code, CI/CD configuration, application
+settings, environment variables, logs, and access-denied messages. A target that already has two
+access keys cannot receive another until one is deleted, so `iam:DeleteAccessKey` is only an
+optional capacity-making companion permission and not part of the validated singleton.
+
+The proof used a unique prefix and never persisted target credentials in the repository. Cleanup
+enumerated and deleted every access key before deleting all three synthetic users and their inline
+policies; the exact-prefix IAM user inventory returned empty. A prior propagation-sensitive run
+was also cleaned by enumerating every key rather than relying on a cached identifier.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
