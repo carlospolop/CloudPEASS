@@ -338,3 +338,23 @@ def test_azure_multi_permission_attacks_are_not_critical_when_incomplete():
     categories = peas.analyze_group(incomplete, [])["permissions_cat"]
 
     assert not categories["critical"]
+
+
+def test_data_factory_identity_theft_requires_pipeline_write_and_run():
+    peas = CloudPEASS(
+        very_sensitive_combinations,
+        sensitive_combinations,
+        "Azure",
+        1,
+    )
+    pipeline_write = "Microsoft.DataFactory/factories/pipelines/write"
+    pipeline_run = "Microsoft.DataFactory/factories/pipelines/createRun/action"
+
+    complete = peas.analyze_group({pipeline_write, pipeline_run}, [])["permissions_cat"]
+    write_only = peas.analyze_group({pipeline_write}, [])["permissions_cat"]
+    run_only = peas.analyze_group({pipeline_run}, [])["permissions_cat"]
+
+    assert {pipeline_write, pipeline_run} <= set(complete["critical"])
+    assert pipeline_write not in write_only["critical"]
+    assert pipeline_run not in run_only["critical"]
+    assert pipeline_run in run_only["high"]

@@ -38,6 +38,10 @@ very_sensitive_combinations = [
     ["Microsoft.Automation/automationAccounts/runbooks/draft/write", "Microsoft.Automation/automationAccounts/runbooks/draft/content/write", "Microsoft.Automation/automationAccounts/runbooks/publish/action", "Microsoft.Automation/automationAccounts/jobs/write"],
     ["Microsoft.Automation/automationAccounts/sourceControls/write", "Microsoft.Automation/automationAccounts/jobs/write"],
 
+    # Live validated: pipeline replacement plus execution can make Data Factory
+    # send its managed-identity bearer token to an attacker-controlled WebActivity.
+    ["Microsoft.DataFactory/factories/pipelines/write", "Microsoft.DataFactory/factories/pipelines/createRun/action"],
+
     ["Microsoft.ContainerRegistry/registries/listCredentials/action"],
     ["Microsoft.ContainerRegistry/registries/regenerateCredential/action"],
     ["Microsoft.ContainerRegistry/registries/generateCredentials/action"],
