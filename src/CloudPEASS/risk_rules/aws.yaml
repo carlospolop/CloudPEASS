@@ -141,6 +141,7 @@ high_exact:
   - profile:SearchProfiles
   - route53domains:GetDomainDetail
   - s3:GetDataAccess
+  - s3vectors:GetVectors
   - s3express:CreateSession
   - sagemaker:DescribeModel
   - sagemaker:DescribeTrainingJob
@@ -241,6 +242,7 @@ high_override_exact:
   - pipes:DescribePipe
   - profile:SearchProfiles
   - s3:GetDataAccess
+  - s3vectors:GetVectors
   - s3express:CreateSession
   - sagemaker:DescribeModel
   - sagemaker:DescribeTrainingJob

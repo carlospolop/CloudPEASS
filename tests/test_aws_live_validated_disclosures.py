@@ -85,6 +85,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "sagemaker:DescribeModel",
     "sagemaker:DescribeTrainingJob",
     "s3:GetDataAccess",
+    "s3vectors:GetVectors",
     "s3express:CreateSession",
     "scheduler:GetSchedule",
     "pipes:DescribePipe",
@@ -188,3 +189,18 @@ def test_live_validated_agentcore_api_key_disclosure_requires_full_chain():
     assert live_validated_disclosure_documentation[combination[2]] == (
         "aws-services/aws-secrets-manager-enum.md"
     )
+
+
+def test_live_validated_s3_vectors_plaintext_disclosure_paths():
+    combinations = {tuple(candidate) for candidate in sensitive_combinations}
+    assert ("s3vectors:GetVectors",) in combinations
+    assert ("s3vectors:ListVectors", "s3vectors:GetVectors") in combinations
+    assert ("s3vectors:QueryVectors", "s3vectors:GetVectors") in combinations
+    for action in (
+        "s3vectors:GetVectors",
+        "s3vectors:ListVectors",
+        "s3vectors:QueryVectors",
+    ):
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-bedrock-enum.md"
+        )
