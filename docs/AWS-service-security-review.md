@@ -684,6 +684,10 @@ and `Select` arrived while the EKS review was running. Their dedicated regressio
 HackTricks document mappings were already committed, so the two P2 tracker rows were reconciled to
 `validated`; this reconciliation created no infrastructure and made no new severity decision.
 
+Concurrent live evidence for TwinMaker `GetWorkspace`, `GetComponentType`, and `GetPropertyValue`
+arrived during the subsequent prerequisite review and was reconciled to its existing dedicated
+HackTricks mapping under the same no-new-infrastructure rule.
+
 ### Amazon EKS (`eks`) — 2026-09-08
 
 Validated the `eks:CreateAccessEntry` plus `eks:AssociateAccessPolicy` pair as direct Kubernetes
@@ -706,6 +710,28 @@ names cannot start with `system:`. The singleton was therefore not promoted; the
 the validated Critical result. Both access entries and clusters were deleted and polled absent,
 then their roles, users, every access key, policies, generated ENIs/security groups, and exact local
 kubeconfig files were removed. All exact-prefix inventories returned empty.
+
+### CodeConnections and agent-channel prerequisite review — 2026-09-08
+
+`codeconnections:UseConnection` is a permissions-only authorization gate used by integrated
+consumers; the current caller-facing CodeConnections API exposes no operation that returns its
+installation token or private repository contents. The account contains five AVAILABLE real
+GitHub/Bitbucket connections, which were deliberately not consumed or altered. Exploitation also
+needs a consumer operation such as CodeBuild/CodePipeline create or update plus its service-role and
+often `iam:PassRole` prerequisites. No standalone CodeConnections technique was promoted; impact
+must be attributed to and tested through the actual consumer.
+
+The current AWS CLI contains no `ec2messages` or `ssmmessages` service model, and Systems Manager
+reported no managed nodes. The former is an agent message-delivery plane; the latter's control/data
+channel operations require managed-node/session material such as the stream token issued by
+`StartSession`. With neither a node nor token, ordinary IAM-user calls cannot reach an independent
+channel target. Both prefixes are `blocked`, not negative, until an authorized managed-node fixture
+can test stolen-token and cross-node controls.
+
+SageMaker geospatial was reachable only in `us-west-2` during the regional check and contained no
+Earth Observation jobs; `eu-west-1` returned a service/authorization-resolution error. Testing job
+reads or exports requires a synthetic source collection, job, and execution role, so that prefix is
+also retained as blocked rather than inferred safe.
 
 ### AWS KMS (`kms`) — 2026-09-08
 
