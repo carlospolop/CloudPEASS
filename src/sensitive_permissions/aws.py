@@ -528,6 +528,7 @@ live_validated_disclosure_documentation = {
     "cognito-idp:DescribeIdentityProvider": "aws-services/aws-cognito-enum/cognito-user-pools.md",
     "cognito-idp:ListUsers": "aws-services/aws-cognito-enum/cognito-user-pools.md",
     "cognito-idp:ListUsersInGroup": "aws-services/aws-cognito-enum/cognito-user-pools.md",
+    "dynamodb:PutResourcePolicy": "aws-privilege-escalation/aws-dynamodb-privesc/README.md",
     "dynamodb:BatchGetItem": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
     "dynamodb:GetItem": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
     "dynamodb:Query": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",

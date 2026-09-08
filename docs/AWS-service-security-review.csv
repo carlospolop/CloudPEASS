@@ -23,7 +23,7 @@
 "P0","queued","config","AWS Config","","","Hypothesis Q03: test PutRemediationConfigurations + StartRemediationExecution with a preauthorized SSM Automation role and no caller iam:PassRole."
 "P0","queued","connect","Amazon Connect","","",""
 "P0","queued","controltower","AWS Control Tower","","",""
-"P0","queued","dynamodb","Amazon DynamoDB","","",""
+"P0","validated","dynamodb","Amazon DynamoDB","2026-09-08","PutResourcePolicy alone let a same-account IAM user name itself in a table policy and read an item canary that was denied before the policy change, without an identity-based GetItem allow.","A no-permission policy update was denied. The proof used an exact table and IAM-user ARN; cross-account access, indexes, streams, backups, and customer-managed KMS authorization have separate constraints."
 "P0","queued","ec2","Amazon EC2","","",""
 "P0","queued","ec2messages","Amazon Message Delivery Service","","",""
 "P0","queued","ecs","Amazon Elastic Container Service","","",""

@@ -17,6 +17,7 @@ provider: aws
 critical_exact:
   - backup:PutBackupVaultAccessPolicy
   - codeartifact:GetAuthorizationToken
+  - dynamodb:PutResourcePolicy
   - ec2:AssociateIamInstanceProfile
   - ec2:GetPasswordData
   - ec2:ReplaceIamInstanceProfileAssociation

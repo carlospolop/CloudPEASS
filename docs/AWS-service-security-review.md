@@ -384,3 +384,26 @@ or shell history when list/get metadata calls are denied.
 The resource policy was removed, the secret was force-deleted and polled until absent, and both
 disposable IAM users, access keys, and inline policy were deleted. Exact Secrets Manager and IAM
 prefix inventories returned empty.
+
+### Amazon DynamoDB (`dynamodb`) — 2026-09-08
+
+Live validation confirmed that `dynamodb:PutResourcePolicy` alone can grant a same-account IAM user
+data access to a table. The restricted user's identity policy allowed only `PutResourcePolicy` on
+one exact table, and its `GetItem` request was denied before the change. A no-permission user was
+independently denied the policy update.
+
+The restricted user installed a table policy naming its exact IAM-user ARN and allowing only
+`dynamodb:GetItem`. After DynamoDB's short policy-propagation interval, the same user read the exact
+canary without an identity-based data action. The permission is classified Critical because it
+directly converts authorization-boundary control into table data access and can grant broader
+write, stream, or backup actions when the table policy accepts them.
+
+The result is scoped to the tested same-account user/table path. Cross-account principals and
+secondary resources such as indexes, streams, global-table replicas, exports, and backups have
+their own supported-action, ARN, KMS, and identity-policy requirements. When table enumeration is
+denied, names and ARNs may remain in application configuration, IaC, CI files, environment
+variables, logs, error messages, or shell history.
+
+The resource policy was removed before the table was deleted and polled until absent. Both
+disposable IAM users, access keys, and the inline policy were deleted; exact DynamoDB and IAM
+prefix inventories returned empty.
