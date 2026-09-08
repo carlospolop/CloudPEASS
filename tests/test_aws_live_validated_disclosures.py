@@ -23,6 +23,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "batch:DescribeJobDefinitions",
     "bedrock:Retrieve",
     "bedrock-agentcore:GetWorkloadAccessTokenForUserId",
+    "b2bi:GetProfile",
+    "b2bi:GetTransformer",
     "cloudformation:DescribeStacks",
     "cloudformation:DescribeChangeSet",
     "cloudformation:GetTemplate",
@@ -44,7 +46,10 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "codepipeline:PollForJobs",
     "chime:GetChannelMessage",
     "chime:ListChannelMessages",
+    "connect:BatchDescribeDataTableValue",
+    "connect:EvaluateDataTableValues",
     "connect:GetAttachedFile",
+    "connect:GetContactAttributes",
     "connect:GetFederationToken",
     "cognito-idp:AdminGetUser",
     "cognito-idp:DescribeUserPoolClient",
@@ -180,6 +185,32 @@ def test_live_validated_chime_message_disclosures():
         ) == "high"
         assert live_validated_disclosure_documentation[action] == (
             "aws-services/aws-chime-sdk-enum.md"
+        )
+
+
+def test_live_validated_b2bi_disclosures():
+    actions = ("b2bi:GetProfile", "b2bi:GetTransformer")
+    for action in actions:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "high"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-b2b-data-interchange-enum.md"
+        )
+
+
+def test_live_validated_connect_data_disclosures():
+    actions = (
+        "connect:BatchDescribeDataTableValue",
+        "connect:EvaluateDataTableValues",
+        "connect:GetContactAttributes",
+    )
+    for action in actions:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "high"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-connect-enum.md"
         )
 
 

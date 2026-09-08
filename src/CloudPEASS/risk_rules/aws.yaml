@@ -113,6 +113,8 @@ high_exact:
   - batch:DescribeJobDefinitions
   - bedrock:Retrieve
   - bedrock-agentcore:GetWorkloadAccessTokenForUserId
+  - b2bi:GetProfile
+  - b2bi:GetTransformer
   - cloudformation:DescribeStacks
   - cloudformation:DescribeChangeSet
   - cloudformation:GetTemplate
@@ -134,7 +136,10 @@ high_exact:
   - codepipeline:PollForJobs
   - chime:GetChannelMessage
   - chime:ListChannelMessages
+  - connect:BatchDescribeDataTableValue
+  - connect:EvaluateDataTableValues
   - connect:GetAttachedFile
+  - connect:GetContactAttributes
   - connect:GetFederationToken
   - cognito-idp:AdminGetUser
   - cognito-idp:DescribeUserPoolClient
@@ -259,6 +264,8 @@ high_override_exact:
   - batch:DescribeJobDefinitions
   - bedrock:Retrieve
   - bedrock-agentcore:GetWorkloadAccessTokenForUserId
+  - b2bi:GetProfile
+  - b2bi:GetTransformer
   - cloudformation:DescribeStacks
   - cloudformation:DescribeChangeSet
   - cloudformation:GetTemplate
@@ -278,7 +285,10 @@ high_override_exact:
   - codepipeline:PollForJobs
   - chime:GetChannelMessage
   - chime:ListChannelMessages
+  - connect:BatchDescribeDataTableValue
+  - connect:EvaluateDataTableValues
   - connect:GetAttachedFile
+  - connect:GetContactAttributes
   - connect:GetFederationToken
   - cognito-idp:AdminGetUser
   - cognito-idp:DescribeUserPoolClient

@@ -56,6 +56,12 @@ service-specific HackTricks document; those rows now record the exact actions an
 tracker regression test prevents a prefix with registered live evidence from silently remaining
 queued.
 
+The same evidence gate was subsequently applied to B2BI and additional Amazon Connect data
+surfaces. Exact-action sessions recovered randomized B2BI sample/mapping and partner-contact
+canaries, Connect contact attributes, and two forms of Connect Data Table values. Neighboring-action
+controls were denied, and every transformer, profile, contact, table, flow, instance, and test role
+was removed before those actions were marked `validated`.
+
 ## Ranked P0 hypothesis queue
 
 These are test plans, not findings. The order favors paths that might reuse an existing service
