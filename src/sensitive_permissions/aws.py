@@ -125,9 +125,8 @@ very_sensitive_combinations = [
 
     ["rds:ModifyDBInstance"],
 
-    ["redshift:DescribeClusters", "redshift:GetClusterCredentials"],
-
-    ["redshift:DescribeClusters", "redshift:GetClusterCredentialsWithIAM"],
+    ["redshift:GetClusterCredentials"],
+    ["redshift:GetClusterCredentialsWithIAM"],
 
     ["route53:CreateHostedZone", "route53:ChangeResourceRecordSets", "acm-pca:IssueCertificate",  "acm-pca:GetCertificate"],
 
@@ -671,6 +670,8 @@ live_validated_disclosure_documentation = {
     "rolesanywhere:UpdateTrustAnchor": "aws-privilege-escalation/aws-sts-privesc/README.md",
     "route53:ChangeResourceRecordSets": "aws-services/aws-route53-enum.md",
     "route53domains:GetDomainDetail": "aws-privilege-escalation/aws-route53-domains-privesc/README.md",
+    "redshift:GetClusterCredentials": "aws-privilege-escalation/aws-redshift-privesc/README.md",
+    "redshift:GetClusterCredentialsWithIAM": "aws-privilege-escalation/aws-redshift-privesc/README.md",
     "ssm:GetDocument": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "ssm:GetOpsItem": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "ssm:StartAutomationExecution": "aws-privilege-escalation/aws-ssm-privesc/README.md",

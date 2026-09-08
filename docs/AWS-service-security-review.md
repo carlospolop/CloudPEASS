@@ -820,6 +820,33 @@ recorders, delivery channels, documents, buckets, objects, prefixed roles/users,
 were deleted. IAM service-linked-role deletion initially returned transient internal errors with an
 empty usage list; a later deletion task reached `SUCCEEDED`, and `GetRole` returned `NoSuchEntity`.
 
+### Amazon Redshift (`redshift`) and Data API (`redshift-data`) — 2026-09-09
+
+Two provisioned-cluster credential actions were independently validated without discovery
+permissions. One IAM user had exactly `redshift:GetClusterCredentials`; a second had exactly
+`redshift:GetClusterCredentialsWithIAM`; both used `Resource: *` for the isolated authorization
+test and both were denied `DescribeClusters`. Each API returned a temporary username/password,
+and each credential set connected to the synthetic cluster over TLS and selected the randomized
+canary. An empty-permission control was denied both credential calls. `DescribeClusters` is thus a
+discovery convenience, not part of either minimum credential path; a known cluster ID, endpoint,
+database, and applicable database-user privileges are the material prerequisites.
+
+The same fixture rejected two Data API bypass hypotheses. A user with only
+`redshift-data:GetStatementResult` supplied a valid completed statement UUID created by the lab
+administrator, but the API returned `ResourceNotFoundException: Query does not exist`; the
+empty-permission control was denied. Replacing that policy with exactly
+`redshift-data:ExecuteStatement` plus `redshift-data:GetStatementResult` still could not submit the
+query without underlying Redshift authentication authority. A provisioned-cluster Data API path
+therefore also needs `redshift:GetClusterCredentials`/`GetClusterCredentialsWithIAM`, or a
+secret-based path and its separate Secrets Manager authorization, so those impacts are not
+attributed to the Data API actions alone.
+
+The test used the region's smallest currently orderable single-node class, `ra3.large`; obsolete
+`dc2.large`, zero-retention, and unencrypted create requests were rejected before provisioning and
+their support resources were removed. Both completed clusters were deleted without final
+snapshots. All automated/manual snapshots, subnet groups, ingress security groups, IAM users,
+access keys, policies, and the temporary PostgreSQL driver directory were re-enumerated absent.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

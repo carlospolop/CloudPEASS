@@ -674,6 +674,21 @@ def test_live_validated_eks_pod_identity_token_exchange():
     )
 
 
+def test_live_validated_redshift_single_action_database_credentials():
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    for action in (
+        "redshift:GetClusterCredentials",
+        "redshift:GetClusterCredentialsWithIAM",
+    ):
+        assert (action,) in critical
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "critical"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-privilege-escalation/aws-redshift-privesc/README.md"
+        )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

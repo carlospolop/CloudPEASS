@@ -38,6 +38,8 @@ critical_exact:
   - kms:PutKeyPolicy
   - lambda:UpdateFunctionCode
   - lambda:UpdateFunctionConfiguration
+  - redshift:GetClusterCredentials
+  - redshift:GetClusterCredentialsWithIAM
   - rolesanywhere:UpdateTrustAnchor
   - s3:PutBucketPolicy
   - s3:PutAccessPointPolicy
