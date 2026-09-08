@@ -847,6 +847,39 @@ their support resources were removed. Both completed clusters were deleted witho
 snapshots. All automated/manual snapshots, subnet groups, ingress security groups, IAM users,
 access keys, policies, and the temporary PostgreSQL driver directory were re-enumerated absent.
 
+### Amazon RDS (`rds`) and IAM database authentication (`rds-db`) — 2026-09-09
+
+`rds:ModifyDBInstance` alone was validated as a non-Aurora master-password takeover. The candidate
+policy scoped the action to the exact synthetic DB ARN and did not grant any describe action; an
+empty-permission control could not modify the instance. The mutation response itself returned the
+endpoint, and after the immediate change completed the new caller-selected password connected to
+PostgreSQL over TLS with AWS's published CA bundle and selected the exact canary. This path does
+not apply when Secrets Manager manages the master password, and network reachability remains a
+separate prerequisite.
+
+`rds-db:connect` was independently validated against the exact
+`arn:aws:rds-db:<region>:<account>:dbuser:<DbiResourceId>/iam_reader` resource. Both the candidate
+and empty-permission control could locally generate syntactically valid signed authentication
+tokens because token generation makes no service API call. The control's database authentication
+failed, while the allowed principal connected over verified TLS as the IAM-enabled database user
+and selected the canary. IAM database authentication, a live matching engine user with `rds_iam`,
+its database grants, the exact endpoint/port/user, and network reachability are all required.
+
+One preliminary instance was removed after the local operating-system trust store rejected the RDS
+certificate chain before SQL or test-user creation. The successful rerun used AWS's official global
+RDS CA bundle with hostname verification enabled. Both instances, subnet groups, ingress security
+groups, IAM users, keys, policies, CA bundle, temporary PostgreSQL driver directories, automated
+backups, and snapshots were deleted; exact inventories returned empty.
+
+### Amazon FSx (`fsx`) — 2026-09-09
+
+The authorized region contains no FSx filesystem and no FSx backup. Consequently the Q13
+`CopyBackup`/`CreateFileSystemFromBackup` data-copy hypothesis cannot be given a source canary, and
+the resource-policy and backup-principal-association paths have no existing object on which to
+prove a boundary change. A conclusive data test would additionally require a protocol-compatible
+client to mount the restored Windows, Lustre, OpenZFS, or ONTAP filesystem. No existing account
+resource was touched, no synthetic FSx infrastructure was created, and no FSx impact is claimed.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

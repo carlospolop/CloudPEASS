@@ -38,6 +38,7 @@ critical_exact:
   - kms:PutKeyPolicy
   - lambda:UpdateFunctionCode
   - lambda:UpdateFunctionConfiguration
+  - rds:ModifyDBInstance
   - redshift:GetClusterCredentials
   - redshift:GetClusterCredentialsWithIAM
   - rolesanywhere:UpdateTrustAnchor
@@ -214,6 +215,7 @@ high_exact:
   - invoicing:ListInvoiceSummaries
   - pipes:DescribePipe
   - profile:SearchProfiles
+  - rds-db:connect
   - route53:ChangeResourceRecordSets
   - route53domains:GetDomainDetail
   - rum:GetAppMonitorData

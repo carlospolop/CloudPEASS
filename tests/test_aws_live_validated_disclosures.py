@@ -689,6 +689,28 @@ def test_live_validated_redshift_single_action_database_credentials():
         )
 
 
+def test_live_validated_rds_password_takeover_and_iam_database_access():
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+
+    modify_action = "rds:ModifyDBInstance"
+    assert (modify_action,) in critical
+    assert classify_permission(
+        "aws", modify_action, unknown_default="medium"
+    ) == "critical"
+
+    connect_action = "rds-db:connect"
+    assert (connect_action,) in high
+    assert classify_permission(
+        "aws", connect_action, unknown_default="medium"
+    ) == "high"
+
+    for action in (modify_action, connect_action):
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-privilege-escalation/aws-rds-privesc/README.md"
+        )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}
