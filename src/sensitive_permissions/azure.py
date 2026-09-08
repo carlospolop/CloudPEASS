@@ -39,7 +39,7 @@ very_sensitive_combinations = [
 
     ["Microsoft.ContainerRegistry/registries/listCredentials/action"],
     ["Microsoft.ContainerRegistry/registries/regenerateCredential/action"],
-    ["Microsoft.ContainerRegistry/registries/tokens/write", "Microsoft.ContainerRegistry/registries/generateCredentials/action"],
+    ["Microsoft.ContainerRegistry/registries/generateCredentials/action"],
     ["Microsoft.ContainerRegistry/registries/listBuildSourceUploadUrl/action", "Microsoft.ContainerRegistry/registries/scheduleRun/action"],
 
     ["Microsoft.ContainerInstance/containerGroups/containers/exec/action"],
@@ -60,6 +60,7 @@ very_sensitive_combinations = [
     ["Microsoft.DocumentDB/databaseAccounts/mongodbRoleDefinitions/write", "Microsoft.DocumentDB/databaseAccounts/mongodbUserDefinitions/write"],
 
     ["Microsoft.DocumentDB/databaseAccounts/listKeys/action"],
+    ["Microsoft.DocumentDB/databaseAccounts/listConnectionStrings/action"],
     ["Microsoft.DocumentDB/mongoClusters/write"],
 
     ["Microsoft.Web/sites/host/listkeys/action"],
@@ -259,6 +260,8 @@ sensitive_combinations = [
     ["Microsoft.Logic/integrationAccounts/listCallbackUrl/action"],
     ["Microsoft.Insights/actionGroups/read"],
     ["Microsoft.Insights/webtests/read"],
+    ["Microsoft.Insights/Components/ApiKeys/Action"],
+    ["Microsoft.NotificationHubs/Namespaces/NotificationHubs/pnsCredentials/action"],
     ["Microsoft.ContainerRegistry/registries/webhooks/getCallbackConfig/action"],
     ["Microsoft.ApiManagement/service/policies/read"],
     ["Microsoft.ApiManagement/service/apis/policies/read"],

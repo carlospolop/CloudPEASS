@@ -240,6 +240,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.ApiManagement/service/gateways/generateToken/action": "critical",
             "Microsoft.ContainerRegistry/registries/listCredentials/action": "critical",
             "Microsoft.ContainerRegistry/registries/regenerateCredential/action": "critical",
+            "Microsoft.ContainerRegistry/registries/generateCredentials/action": "critical",
             "Microsoft.App/containerApps/listSecrets/action": "critical",
             "Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action": "critical",
             "Microsoft.ServiceBus/namespaces/authorizationRules/regenerateKeys/action": "critical",
@@ -264,11 +265,15 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Cache/redisEnterprise/databases/regenerateKey/action": "critical",
             "Microsoft.CognitiveServices/accounts/regenerateKey/action": "critical",
             "Microsoft.DocumentDB/databaseAccounts/listKeys/action": "critical",
+            "Microsoft.DocumentDB/databaseAccounts/listConnectionStrings/action": "critical",
+            "Microsoft.Storage/storageAccounts/localusers/regeneratePassword/action": "critical",
             "Microsoft.Search/searchServices/listAdminKeys/action": "critical",
             "Microsoft.Maps/accounts/listKeys/action": "high",
             "Microsoft.Maps/accounts/regenerateKey/action": "high",
             "Microsoft.Purview/accounts/listkeys/action": "high",
             "Microsoft.BotService/botServices/channels/listchannelwithkeys/action": "high",
+            "Microsoft.Insights/Components/ApiKeys/Action": "high",
+            "Microsoft.NotificationHubs/Namespaces/NotificationHubs/pnsCredentials/action": "high",
             "Microsoft.ApiManagement/service/subscriptions/listSecrets/action": "high",
             "Microsoft.Logic/integrationAccounts/listCallbackUrl/action": "high",
             "Microsoft.Logic/integrationAccounts/agreements/listContentCallbackUrl/action": "high",
@@ -397,11 +402,28 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             self.classify("Microsoft.Example/widgets/listKeys/action"),
             "medium",
         )
+        # Generic OAuth connection secrets remained redacted/null in every
+        # supported Bot Service API version exercised during live testing.
+        self.assertEqual(
+            self.classify(
+                "Microsoft.BotService/botServices/connections/listwithsecrets/action"
+            ),
+            "medium",
+        )
         # listKeys returned an SMB-shaped local-user key, but the credential
         # did not authenticate to the reachable Azure Files endpoint.
         self.assertEqual(
             self.classify(
                 "Microsoft.Storage/storageAccounts/localusers/listKeys/action"
+            ),
+            "medium",
+        )
+        # ComputeRP accepted the route but rejected the operation because
+        # restore-point SAS retrieval is unsupported; DiskRP beginGetAccess is
+        # the separately permissioned, live-validated disclosure path.
+        self.assertEqual(
+            self.classify(
+                "Microsoft.Compute/restorePointCollections/restorePoints/retrieveSasUris/action"
             ),
             "medium",
         )

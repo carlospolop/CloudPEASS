@@ -312,6 +312,10 @@ _AZURE_CRITICAL_EXACT = frozenset(
         # service's data plane instead of trusting credential-shaped names.
         "microsoft.containerregistry/registries/listcredentials/action",
         "microsoft.containerregistry/registries/regeneratecredential/action",
+        # generateCredentials/action alone rotated an existing repository
+        # token password. The returned password listed a protected tag and
+        # deleted its manifest without tokens/write.
+        "microsoft.containerregistry/registries/generatecredentials/action",
         "microsoft.app/containerapps/listsecrets/action",
         "microsoft.servicebus/namespaces/authorizationrules/listkeys/action",
         "microsoft.servicebus/namespaces/authorizationrules/regeneratekeys/action",
@@ -329,12 +333,18 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.cache/redisenterprise/databases/listkeys/action",
         "microsoft.cache/redisenterprise/databases/regeneratekey/action",
         "microsoft.documentdb/databaseaccounts/listkeys/action",
+        # The returned Cosmos connection string contained an account
+        # credential that read a seeded SQL API item through a fresh client.
+        "microsoft.documentdb/databaseaccounts/listconnectionstrings/action",
         "microsoft.search/searchservices/listadminkeys/action",
         "microsoft.managedidentity/userassignedidentities/federatedidentitycredentials/write",
         "microsoft.web/sites/config/list/action",
         "microsoft.web/sites/publishxml/action",
         "microsoft.storage/storageaccounts/listaccountsas/action",
         "microsoft.storage/storageaccounts/listservicesas/action",
+        # The regenerated local-user password downloaded a protected blob over
+        # SFTP with the user's existing container permissions.
+        "microsoft.storage/storageaccounts/localusers/regeneratepassword/action",
         # Regenerated admin keys permit full Search data-plane reads and writes.
         "microsoft.search/searchservices/regenerateadminkey/action",
         # Default Notification Hubs management rules expose device registration
@@ -442,6 +452,11 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.insights/actiongroups/read",
         "microsoft.insights/webtests/read",
         "microsoft.containerregistry/registries/webhooks/getcallbackconfig/action",
+        # A newly minted Application Insights API key queried a seeded custom
+        # event. Notification Hubs returned a seeded PNS credential verbatim.
+        # Both impacts depend on target configuration, so they remain High.
+        "microsoft.insights/components/apikeys/action",
+        "microsoft.notificationhubs/namespaces/notificationhubs/pnscredentials/action",
         "microsoft.apimanagement/service/policies/read",
         "microsoft.apimanagement/service/apis/policies/read",
         "microsoft.apimanagement/service/apis/operations/policies/read",
