@@ -58,6 +58,11 @@ medium_override_exact:
   # The caller also needs iam:PassRole, a capable restore role, and access to
   # the restored target before this becomes a sensitive-data path.
   - backup:StartRestoreJob
+  # These become a critical launch-role escalation only as a pair, and only
+  # when the caller controls a product artifact associated with a privileged
+  # launch constraint. Neither action is independently a privilege grant.
+  - servicecatalog:CreateProvisioningArtifact
+  - servicecatalog:ProvisionProduct
   # No supported caller-facing API exposes connection credentials directly.
   - events:RetrieveConnectionCredentials
 

@@ -222,6 +222,24 @@ def test_live_validated_backup_access_point_requires_full_policy_chain():
         )
 
 
+def test_live_validated_service_catalog_launch_role_escalation_requires_pair():
+    combination = (
+        "servicecatalog:CreateProvisioningArtifact",
+        "servicecatalog:ProvisionProduct",
+    )
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert combination in critical
+    assert (combination[0],) not in critical
+    assert (combination[1],) not in critical
+    for action in combination:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "medium"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-privilege-escalation/aws-service-catalog-privesc/README.md"
+        )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

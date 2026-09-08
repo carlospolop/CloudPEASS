@@ -90,3 +90,31 @@ Cleanup completed in dependency order. Exact-prefix inventories for Backup vault
 recovery points, DynamoDB tables/backups, S3 buckets/access points, IAM roles, EventBridge rules,
 and tagged resources all returned empty. The account's AWS Backup service-linked role dates from
 2022 and was deliberately left untouched.
+
+### Account access manager (`account-access`) — 2026-09-08
+
+The management-account lab is an all-features AWS Organization but has no IAM Identity Center
+instance. Account access manager requires that identity source before an application or role
+entitlement can be created. Enabling a new organization-wide identity system solely to exercise
+`account-access:CreateEntitlement` would expand the test beyond a safely isolated fixture, so the
+service is recorded as `blocked`, with no security claim and no infrastructure created.
+
+### AWS Service Catalog (`servicecatalog`) — 2026-09-08
+
+Live validation confirmed that `servicecatalog:CreateProvisioningArtifact` plus
+`servicecatalog:ProvisionProduct` can turn an existing privileged launch constraint into a
+privilege-escalation path. A synthetic end-user role controlled one private template object and
+the exact product, but had no `iam:PassRole`, no CloudFormation create permission, and no direct
+`organizations:DescribeOrganization`. It added an artifact whose template created a role trusting
+the end user, provisioned it, assumed the created role, and successfully called
+`organizations:DescribeOrganization`. The Service Catalog record identified the configured launch
+role as the executor.
+
+Independent controls removed each Service Catalog action in turn. Creating the artifact without
+`CreateProvisioningArtifact` and provisioning it without `ProvisionProduct` both returned
+`AccessDenied`, and neither control created a resource. A second end-to-end run used
+`DisableTemplateValidation=true` and succeeded without caller `cloudformation:ValidateTemplate`,
+so that permission is not part of the minimum chain. The caller still needs control of a template
+source, access to a non-shared product associated with its portfolio, and a launch constraint whose
+role can perform the template's actions. The pair is therefore recorded as a conditional critical
+combination while each permission remains medium in isolation.
