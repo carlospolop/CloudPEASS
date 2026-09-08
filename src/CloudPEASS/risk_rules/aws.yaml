@@ -249,6 +249,8 @@ high_override_exact:
   - codecommit:GetCommit
   - codecommit:GetFile
   - codepipeline:PollForJobs
+  - chime:GetChannelMessage
+  - chime:ListChannelMessages
   - connect:GetAttachedFile
   - connect:GetFederationToken
   - cognito-idp:AdminGetUser
@@ -288,6 +290,11 @@ high_override_exact:
   - ivschat:CreateChatToken
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
+  - kinesisvideo:GetClip
+  - kinesisvideo:GetDASHStreamingSessionURL
+  - kinesisvideo:GetHLSStreamingSessionURL
+  - kinesisvideo:GetImages
+  - kinesisvideo:GetMediaForFragmentList
   - medical-imaging:GetImageFrame
   - medical-imaging:GetImageSetMetadata
   - omics:GetReadSet
