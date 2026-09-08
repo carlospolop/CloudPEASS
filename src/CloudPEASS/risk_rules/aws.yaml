@@ -15,6 +15,7 @@ provider: aws
 ## Exact action names that must always be classified as `critical`.
 ## Matching is case-insensitive in the classifier.
 critical_exact:
+  - acm:ExportCertificate
   - backup:PutBackupVaultAccessPolicy
   - codeartifact:GetAuthorizationToken
   - cognito-identity:UpdateIdentityPool

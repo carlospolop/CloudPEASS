@@ -537,6 +537,18 @@ def test_live_validated_route53_domain_registration_disclosure():
     )
 
 
+def test_live_validated_acm_private_key_export():
+    action = "acm:ExportCertificate"
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert (action,) in critical
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "critical"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-certificate-manager-acm-and-private-certificate-authority-pca.md"
+    )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

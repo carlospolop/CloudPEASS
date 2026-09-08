@@ -601,6 +601,30 @@ Both synthetic secrets were force-deleted and polled until absent. All three dis
 every access key, and inline policy were deleted; exact Secrets Manager and IAM inventories
 returned empty. No HackTricks attack entry or permission-severity promotion was made.
 
+### AWS Certificate Manager (`acm`) — 2026-09-08
+
+Validated `acm:ExportCertificate` as direct private-key disclosure for an exportable certificate.
+The lab requested one unique public certificate with export enabled and certificate-transparency
+logging disabled, then validated it using one unique CNAME beneath an authorized hosted zone. The
+attacking user had only `ExportCertificate` on the exact certificate ARN and was denied
+`ListCertificates`; a separate no-permission user was denied export. The successful response
+contained an encrypted private-key PEM. Because the caller chooses the export passphrase, the
+harness decrypted it and confirmed that its derived public-key fingerprint exactly matched the
+issued certificate. No key material or fingerprint was printed or persisted.
+
+The path requires a known certificate ARN and a certificate that was issued as exportable. This
+action does not turn existing non-exportable or imported certificates into exportable ones. ARN
+fallbacks include ALB/NLB listeners, CloudFront and API Gateway configuration, CloudFormation/IaC
+state, deployment output, CloudTrail, certificate deployment configuration, logs, and console
+URLs. The permission is Critical because the returned private key can enable service impersonation
+where the certificate remains trusted.
+
+The validation CNAME was deleted from the existing zone before the synthetic certificate was
+deleted. The certificate, both IAM users, every access key, and the inline policy were removed;
+exact ACM, Route 53 record, and IAM inventories returned empty. A first harness run translated no
+ACM `Value` field into Route 53's `ResourceRecords` shape, failed before DNS mutation, and was also
+fully cleaned; it did not count as a security result.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

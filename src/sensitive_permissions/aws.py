@@ -2,6 +2,7 @@
 
 very_sensitive_combinations = [
     ["[*]"],
+    ["acm:ExportCertificate"],
     ["iam:PassRole"],
 
     ["backup:PutBackupVaultAccessPolicy"],
@@ -476,6 +477,7 @@ tested_risk_documentation = {
 
 
 live_validated_disclosure_documentation = {
+    "acm:ExportCertificate": "aws-services/aws-certificate-manager-acm-and-private-certificate-authority-pca.md",
     "account:GetContactInformation": "aws-services/aws-account-management-enum.md",
     "amplify:GetApp": "aws-privilege-escalation/aws-amplify-privesc/README.md",
     "amplify:GetArtifactUrl": "aws-privilege-escalation/aws-amplify-privesc/README.md",
