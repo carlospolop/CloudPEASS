@@ -196,6 +196,8 @@ high_exact:
   - tax:GetTaxRegistration
   - tax:ListTaxRegistrations
   - transcribe:GetTranscriptionJob
+  - translate:GetParallelData
+  - translate:GetTerminology
   - wisdom:GetContent
 
 ## Evidence-backed corrections for stale upstream/cache entries. These take
@@ -309,6 +311,8 @@ high_override_exact:
   - wisdom:GetContent
   - tax:ListTaxRegistrations
   - transcribe:GetTranscriptionJob
+  - translate:GetParallelData
+  - translate:GetTerminology
 
 ## =====================
 ## MEDIUM RULES

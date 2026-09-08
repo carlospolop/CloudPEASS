@@ -284,6 +284,8 @@ sensitive_combinations = [
     ["tax:GetTaxRegistration"],
     ["tax:ListTaxRegistrations"],
     ["transcribe:GetTranscriptionJob"],
+    ["translate:GetParallelData"],
+    ["translate:GetTerminology"],
     ["wisdom:GetContent"],
 
     ["apigateway:POST"],
@@ -582,5 +584,7 @@ live_validated_disclosure_documentation = {
     "tax:GetTaxRegistration": "aws-services/aws-tax-settings-enum.md",
     "tax:ListTaxRegistrations": "aws-services/aws-tax-settings-enum.md",
     "transcribe:GetTranscriptionJob": "aws-services/aws-transcribe-enum.md",
+    "translate:GetParallelData": "aws-services/aws-translate-enum.md",
+    "translate:GetTerminology": "aws-services/aws-translate-enum.md",
     "wisdom:GetContent": "aws-services/aws-q-in-connect-enum.md",
 }

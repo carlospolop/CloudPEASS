@@ -114,6 +114,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "tax:GetTaxRegistration",
     "tax:ListTaxRegistrations",
     "transcribe:GetTranscriptionJob",
+    "translate:GetParallelData",
+    "translate:GetTerminology",
     "wisdom:GetContent",
 }
 
