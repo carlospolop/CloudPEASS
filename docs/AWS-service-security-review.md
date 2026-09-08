@@ -775,6 +775,51 @@ auto-optimize operations; it is not an alias for `es`. `ListApplications` return
 `eu-west-1` and `us-east-1`, so application login/query hypotheses remain blocked without a
 disposable application. The validated managed-domain result is attributed only to `es`.
 
+### Amazon EKS Auth (`eks-auth`) — 2026-09-08
+
+`eks-auth:AssumeRoleForPodIdentity` was validated as a credential-access primitive when the caller
+has a live Pod-bound EKS service-account token. The least-privilege IAM user had only that action
+on `Resource: *`; it was denied EKS cluster listing and direct access to a synthetic S3 canary. An
+empty-permission user could not exchange the same token, and changing one token character caused
+`InvalidTokenException`. With the valid token, the candidate received the role associated with
+the `proof/reader` service account and those temporary credentials read the exact canary.
+
+The token prerequisite is material. A service-account-only token with the correct
+`pods.eks.amazonaws.com` audience was rejected because it lacked the required
+`kubernetes.io/pod` claim. The successful proof used a TokenRequest bound to a real, unscheduled
+Pod object and therefore included the live Pod UID; no worker node or workload execution was
+needed. The action does not let a caller choose an arbitrary role: EKS resolves the existing Pod
+Identity association for the token's cluster, namespace, service account, and Pod binding.
+
+The association, Pod/namespace, no-node cluster, bucket/object, cluster and pod roles, IAM users,
+access keys, policies, generated cluster security group, and local kubeconfig were deleted. The
+returned temporary credentials were never printed or persisted, and the only resource they could
+read was deleted during cleanup. Exact-prefix cluster, role, user, and bucket inventories returned
+empty.
+
+### AWS Config (`config`) — 2026-09-08
+
+The Q03 remediation hypothesis did not produce an independent escalation. A complete disposable
+recorder and delivery channel evaluated a synthetic IAM user as `NON_COMPLIANT`; a custom SSM
+Automation document stored a constant execution-role ARN whose only privilege was writing a proof
+object. The candidate had exactly `config:PutRemediationConfigurations` and
+`config:StartRemediationExecution`, while an empty-permission control was denied.
+
+The candidate could configure the document and request manual remediation without
+`iam:PassRole`, but Config reported `FAILED` at `Initialization`: the initiating user lacked the
+necessary Systems Manager and resource permissions. No SSM Automation execution existed and no
+proof object was written. The account initially lacked `AWSServiceRoleForConfigRemediation`, so a
+service-linked role was created before the final run; its presence did not remove the initiator
+permission check. Adding direct SSM execution and resource authority would collapse the path into
+the already documented `ssm:StartAutomationExecution` technique rather than make the Config pair a
+separate primitive.
+
+Two preliminary fixtures were also removed: one exposed that the managed rule keys IAM resources
+by immutable `UserId`, and one hit access-key propagation before authorization. All Config rules,
+recorders, delivery channels, documents, buckets, objects, prefixed roles/users, keys, and policies
+were deleted. IAM service-linked-role deletion initially returned transient internal errors with an
+empty usage list; a later deletion task reached `SUCCEEDED`, and `GetRole` returned `NoSuchEntity`.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

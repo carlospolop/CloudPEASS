@@ -41,6 +41,7 @@ very_sensitive_combinations = [
 
     ["ec2:ModifyInstanceAttribute"],
     ["eks:CreateAccessEntry", "eks:AssociateAccessPolicy"],
+    ["eks-auth:AssumeRoleForPodIdentity"],
     ["es:UpdateDomainConfig"],
     ["ec2:CreateLaunchTemplateVersion", "ec2:CreateLaunchTemplate", "ec2:ModifyLaunchTemplate"],
     ["ec2-instance-connect:SendSSHPublicKey"],
@@ -586,6 +587,7 @@ live_validated_disclosure_documentation = {
     "elasticloadbalancing:ModifyListener": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "eks:CreateAccessEntry": "aws-post-exploitation/aws-eks-post-exploitation/README.md",
     "eks:AssociateAccessPolicy": "aws-post-exploitation/aws-eks-post-exploitation/README.md",
+    "eks-auth:AssumeRoleForPodIdentity": "aws-post-exploitation/aws-eks-post-exploitation/README.md",
     "es:UpdateDomainConfig": "aws-services/aws-opensearch-enum.md",
     "iam:CreateAccessKey": "aws-privilege-escalation/aws-iam-privesc/README.md",
     "execute-api:Invoke": "aws-services/aws-api-gateway-enum.md",
