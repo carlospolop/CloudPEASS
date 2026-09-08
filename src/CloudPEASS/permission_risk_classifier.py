@@ -531,6 +531,11 @@ _AZURE_HIGH_EXACT = frozenset(
         # master key and cannot authenticate to the administration API.
         "microsoft.web/sites/host/functionkeys/write",
         "microsoft.web/sites/slots/host/functionkeys/write",
+        # The normal App Service Hybrid Connection GET redacts the configured
+        # Relay key. This action returned its exact 44-character Send-only key;
+        # a signed WebSocket connection delivered a canary to the Relay while
+        # the same request signed with a wrong key was rejected with 401.
+        "microsoft.web/sites/hybridconnectionnamespaces/relays/listkeys/action",
     }
 )
 

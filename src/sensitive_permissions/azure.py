@@ -205,6 +205,7 @@ sensitive_combinations = [
     ["Microsoft.Web/sites/functions/listsecrets/action"],
     ["Microsoft.Web/sites/host/functionKeys/write"],
     ["Microsoft.Web/sites/slots/host/functionKeys/write"],
+    ["Microsoft.Web/sites/hybridConnectionNamespaces/relays/listKeys/action"],
     ["Microsoft.ContainerService/managedClusters/listClusterUserCredential/action"],
     ["Microsoft.Kubernetes/connectedClusters/listClusterUserCredential/action"],
     ["Microsoft.Kubernetes/connectedClusters/listClusterUserCredentials/action"],

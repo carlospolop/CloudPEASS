@@ -230,6 +230,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Web/sites/functions/listsecrets/action": "high",
             "Microsoft.Web/sites/host/functionKeys/write": "high",
             "Microsoft.Web/sites/slots/host/functionKeys/write": "high",
+            "Microsoft.Web/sites/hybridConnectionNamespaces/relays/listKeys/action": "high",
             "Microsoft.ApiManagement/service/apiKeys/listSecrets/action": "high",
             "Microsoft.ApiManagement/service/workspaces/toolServers/listSecrets/action": "high",
             "Microsoft.AppConfiguration/configurationStores/ListKeyValue/action": "high",
