@@ -221,6 +221,11 @@ sensitive_combinations = [
     ["Microsoft.Web/sites/functions/listsecrets/action"],
     ["Microsoft.Web/sites/host/functionKeys/write"],
     ["Microsoft.Web/sites/slots/host/functionKeys/write"],
+    # Live validated independently against production and a deployment slot:
+    # each exact action set an attacker-chosen Event Grid extension system key
+    # that invoked the matching webhook and produced the expected side effect.
+    ["Microsoft.Web/sites/host/systemkeys/write"],
+    ["Microsoft.Web/sites/slots/host/systemkeys/write"],
     ["Microsoft.Web/sites/hybridConnectionNamespaces/relays/listKeys/action"],
     ["Microsoft.ContainerService/managedClusters/listClusterUserCredential/action"],
     ["Microsoft.Kubernetes/connectedClusters/listClusterUserCredential/action"],

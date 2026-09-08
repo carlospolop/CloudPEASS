@@ -552,6 +552,11 @@ _AZURE_HIGH_EXACT = frozenset(
         # master key and cannot authenticate to the administration API.
         "microsoft.web/sites/host/functionkeys/write",
         "microsoft.web/sites/slots/host/functionkeys/write",
+        # Exact-role writes set attacker-chosen Event Grid extension keys in a
+        # production Function App and slot. Each key authenticated only to its
+        # matching webhook and triggered a distinct blob-output canary.
+        "microsoft.web/sites/host/systemkeys/write",
+        "microsoft.web/sites/slots/host/systemkeys/write",
         # The normal App Service Hybrid Connection GET redacts the configured
         # Relay key. This action returned its exact 44-character Send-only key;
         # a signed WebSocket connection delivered a canary to the Relay while
