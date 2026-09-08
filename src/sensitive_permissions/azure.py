@@ -219,6 +219,7 @@ sensitive_combinations = [
     ["Microsoft.Logic/workflows/versions/triggers/listCallbackUrl/action"],
     ["Microsoft.Logic/workflows/triggers/run/action"],
     ["Microsoft.Logic/workflows/triggers/histories/resubmit/action"],
+    ["Microsoft.Logic/workflows/runs/actions/read"],
     ["Microsoft.DataFactory/factories/pipelines/createRun/action"],
     ["Microsoft.EventGrid/eventSubscriptions/getFullUrl/action"],
     ["Microsoft.EventGrid/topics/eventSubscriptions/getFullUrl/action"],

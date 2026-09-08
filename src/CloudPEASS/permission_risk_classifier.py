@@ -461,6 +461,10 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.logic/workflows/versions/triggers/listcallbackurl/action",
         "microsoft.logic/workflows/triggers/run/action",
         "microsoft.logic/workflows/triggers/histories/resubmit/action",
+        # Exact action-history read returned signed input/output links. The
+        # unauthenticated output-link request disclosed the seeded run value;
+        # a no-role principal was denied the ARM action request.
+        "microsoft.logic/workflows/runs/actions/read",
         "microsoft.datafactory/factories/pipelines/createrun/action",
         # getFullUrl returned signed Logic App callback URLs that were usable
         # without the caller's Entra token. ACR run-log SAS URLs similarly

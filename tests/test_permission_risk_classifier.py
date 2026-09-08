@@ -191,6 +191,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Logic/workflows/versions/triggers/listCallbackUrl/action": "high",
             "Microsoft.Logic/workflows/triggers/run/action": "high",
             "Microsoft.Logic/workflows/triggers/histories/resubmit/action": "high",
+            "Microsoft.Logic/workflows/runs/actions/read": "high",
             "Microsoft.DataFactory/factories/pipelines/createRun/action": "high",
             "Microsoft.App/jobs/start/action": "critical",
             "Microsoft.App/jobs/listSecrets/action": "critical",
