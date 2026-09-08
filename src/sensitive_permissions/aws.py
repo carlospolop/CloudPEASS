@@ -147,6 +147,7 @@ very_sensitive_combinations = [
     ["secretsmanager:PutResourcePolicy"],
 
     ["ssm:SendCommand"],
+    ["ssm:StartAutomationExecution"],
     ["ssm:StartSession"],
     ["ssm:ResumeSession"],
 
@@ -444,6 +445,7 @@ tested_risk_documentation = {
     "route53domains:GetDomainDetail": "aws-privilege-escalation/aws-route53-domains-privesc/README.md",
     "s3:PutAccessPointPolicy": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "sts:GetFederationToken": "aws-privilege-escalation/aws-sts-privesc/README.md",
+    "ssm:StartAutomationExecution": "aws-privilege-escalation/aws-ssm-privesc/README.md",
 }
 
 
@@ -569,6 +571,7 @@ live_validated_disclosure_documentation = {
     "profile:SearchProfiles": "aws-services/aws-connect-customer-profiles-enum.md",
     "ssm:GetDocument": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "ssm:GetOpsItem": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
+    "ssm:StartAutomationExecution": "aws-privilege-escalation/aws-ssm-privesc/README.md",
     "ssm:GetParameterHistory": "aws-privilege-escalation/aws-ssm-privesc/README.md",
     "states:DescribeStateMachine": "aws-post-exploitation/aws-stepfunctions-post-exploitation/README.md",
     "states:DescribeExecution": "aws-post-exploitation/aws-stepfunctions-post-exploitation/README.md",

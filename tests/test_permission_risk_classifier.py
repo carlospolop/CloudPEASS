@@ -691,6 +691,7 @@ class AwsRiskClassificationTest(unittest.TestCase):
             "lambda:GetFunction": "high",
             "route53domains:GetDomainDetail": "high",
             "s3:PutAccessPointPolicy": "critical",
+            "ssm:StartAutomationExecution": "critical",
             "sts:GetFederationToken": "high",
         }
         self.assertEqual(set(tested_risk_documentation), set(expected))

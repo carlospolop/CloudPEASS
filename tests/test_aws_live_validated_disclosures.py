@@ -2,6 +2,7 @@ from CloudPEASS.permission_risk_classifier import classify_permission
 from sensitive_permissions.aws import (
     live_validated_disclosure_documentation,
     sensitive_combinations,
+    tested_risk_documentation,
     very_sensitive_combinations,
 )
 
@@ -284,6 +285,21 @@ def test_live_validated_codedeploy_instance_profile_escalation_requires_chain():
     assert classify_permission(
         "aws", combination[2], unknown_default="medium"
     ) == "medium"
+
+
+def test_live_validated_ssm_stored_automation_role_escalation():
+    action = "ssm:StartAutomationExecution"
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert (action,) in critical
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "critical"
+    assert tested_risk_documentation[action] == (
+        "aws-privilege-escalation/aws-ssm-privesc/README.md"
+    )
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-privilege-escalation/aws-ssm-privesc/README.md"
+    )
 
 
 def test_live_validated_lex_export_disclosure_requires_export_workflow():

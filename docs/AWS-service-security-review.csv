@@ -60,7 +60,7 @@
 "P0","queued","signer","AWS Signer","","",""
 "P0","queued","sns","Amazon SNS","","",""
 "P0","queued","sqs","Amazon SQS","","",""
-"P0","queued","ssm","AWS Systems Manager","","",""
+"P0","validated","ssm","AWS Systems Manager","2026-09-08","StartAutomationExecution alone ran an administrator-authored runbook with a constant embedded assumeRole and returned Organizations output although the caller lacked iam:PassRole and direct Organizations access.","GetAutomationExecution was optional: a start-only session was denied the read but the execution still succeeded. Runtime-supplied AutomationAssumeRole parameters can have different pass-role checks; requires access to a useful preauthorized runbook."
 "P0","queued","ssmmessages","Amazon Message Gateway Service","","",""
 "P0","queued","sso","AWS IAM Identity Center","","",""
 "P0","queued","sso-directory","AWS IAM Identity Center directory","","",""

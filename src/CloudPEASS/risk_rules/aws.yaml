@@ -44,6 +44,7 @@ critical_exact:
   - ssm:GetParametersByPath
   - ssm:ResumeSession
   - ssm:SendCommand
+  - ssm:StartAutomationExecution
   - ssm:StartSession
   - sts:GetDelegatedAccessToken
   - sts:GetServiceBearerToken

@@ -168,3 +168,24 @@ deleted with its group/application; the only EC2 target was terminated, its volu
 security group deleted, and all test IAM, instance-profile, S3, and local bundle resources removed.
 Authoritative inventories returned no active prefix-matching resource; the Resource Groups Tagging
 API temporarily retained tombstones for the terminated instance and deleted volume.
+
+### AWS Systems Manager (`ssm`) — 2026-09-08
+
+Live validation confirmed that `ssm:StartAutomationExecution` alone can invoke an
+administrator-authored Automation runbook with a constant privileged `assumeRole`. The test role
+had no `iam:PassRole` and was denied `organizations:DescribeOrganization`, but started the exact
+document successfully. Its `aws:executeAwsApi` step assumed the stored role and returned the
+organization ID.
+
+`ssm:GetAutomationExecution` is not required for the action's impact. A second session containing
+only `StartAutomationExecution` was denied the get call, while an independent administrator
+observed that its execution reached `Success` with the same privileged output. Removing Start and
+retaining only Get denied a third execution. This finding is scoped to a role ARN stored directly in
+the runbook and preauthorized when the document was authored; passing an attacker-selected
+`AutomationAssumeRole` parameter at runtime can invoke separate `iam:PassRole` checks.
+
+The permission is classified critical because preauthorized runbooks are delegated-administration
+entry points and may change infrastructure or expose role-only output. A useful document and any
+required parameter values remain prerequisites. Both completed executions became immutable history;
+the document and two test roles were deleted, and exact checks returned no active Automation, IAM,
+or tagged fixture.
