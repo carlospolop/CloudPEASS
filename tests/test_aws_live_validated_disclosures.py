@@ -67,6 +67,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "glue:GetConnection",
     "glue:GetJob",
     "glue:GetWorkflowRunProperties",
+    "geo:GetDevicePosition",
+    "geo:GetDevicePositionHistory",
     "greengrass:GetComponentVersionArtifact",
     "imagebuilder:GetComponent",
     "iot:GetThingShadow",

@@ -138,6 +138,8 @@ high_exact:
   - glue:GetConnection
   - glue:GetJob
   - glue:GetWorkflowRunProperties
+  - geo:GetDevicePosition
+  - geo:GetDevicePositionHistory
   - greengrass:GetComponentVersionArtifact
   - imagebuilder:GetComponent
   - iot:GetThingShadow
@@ -252,6 +254,8 @@ high_override_exact:
   - glue:GetConnection
   - glue:GetJob
   - glue:GetWorkflowRunProperties
+  - geo:GetDevicePosition
+  - geo:GetDevicePositionHistory
   - greengrass:GetComponentVersionArtifact
   - imagebuilder:GetComponent
   - iot:GetThingShadow
