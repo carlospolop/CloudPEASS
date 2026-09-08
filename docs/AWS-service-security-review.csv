@@ -41,7 +41,7 @@
 "P0","queued","lambda","AWS Lambda","","",""
 "P0","queued","opensearch","Amazon OpenSearch","","","Hypothesis Q11: test domain access-policy mutation and existing-role execution/data access paths with independent data-plane proof."
 "P0","queued","organizations","AWS Organizations","","",""
-"P0","queued","pipes","Amazon EventBridge Pipes","","","Hypothesis Q01: test UpdatePipe + StartPipe target/enrichment mutation while reusing an existing execution role and lacking iam:PassRole."
+"P0","no_new_positive","pipes","Amazon EventBridge Pipes","2026-09-08","UpdatePipe target replacement was denied on iam:PassRole when the restricted caller supplied the exact execution role already attached to the running pipe.","A no-permission update and direct source-queue read were also denied. The tested same-role target-redirection hypothesis is not a standalone UpdatePipe escalation; combinations that include iam:PassRole remain separately relevant."
 "P0","queued","ram","AWS Resource Access Manager (RAM)","","",""
 "P0","queued","rds","Amazon RDS","","","Hypothesis Q12: validate unencrypted snapshot sharing/copy/restore as a source-data bypass and enumerate KMS blockers separately."
 "P0","queued","rds-db","Amazon RDS IAM Authentication","","",""

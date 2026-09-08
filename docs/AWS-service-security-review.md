@@ -56,7 +56,6 @@ pass the evidence gate before it can change a permission severity or appear in H
 
 | Rank | Service | Next isolated hypothesis |
 | ---: | --- | --- |
-| Q01 | EventBridge Pipes | Change an existing pipe's target, enrichment, or input and start it under its stored execution role; determine whether reusing the same role avoids or still enforces `iam:PassRole`. |
 | Q02 | EventBridge Scheduler | Change an existing schedule's target or universal-target input while preserving its role; independently test the same-role pass-role check. |
 | Q03 | AWS Config | Point remediation at a preauthorized SSM Automation path and call `StartRemediationExecution`; distinguish Config permissions from SSM and pass-role checks. |
 | Q04 | CodeConnections | Use an installed connection through an existing or synthetic consumer to determine whether `UseConnection` exposes or executes otherwise inaccessible private repository content. |
@@ -280,3 +279,21 @@ principal-tag conditions can prevent a swapped CA from satisfying the role trust
 The trust anchor, profile, target role, two disposable IAM users and access keys, inline policies,
 local CA/client keys, and the service-linked role created by the first anchor were deleted. Exact
 Roles Anywhere and IAM inventories returned empty.
+
+### Amazon EventBridge Pipes (`pipes`) — 2026-09-08
+
+The tested same-role target-redirection hypothesis produced no new positive. An administrator
+created a running SQS-to-SQS pipe whose existing execution role could receive from the source and
+send to both the benign and synthetic attacker queues. A restricted IAM user had only
+`pipes:UpdatePipe` on that exact pipe and receive access to the attacker queue; it was denied direct
+reads from the source queue.
+
+Changing the target still required the caller to submit the pipe's `RoleArn`. AWS denied the update
+specifically because the caller lacked `iam:PassRole`, even though the ARN was unchanged and the
+pipe was already running. A no-permission user was also denied. This rules out treating
+`pipes:UpdatePipe` alone as a validated stored-role bypass for this configuration; attack paths
+that genuinely include `iam:PassRole`, or a different independently tested authorization surface,
+remain separate cases.
+
+The pipe, all three queues, execution role and policy, both disposable IAM users, and both access
+keys were deleted. Exact prefix queries returned no remaining Pipes, SQS, or IAM resources.
