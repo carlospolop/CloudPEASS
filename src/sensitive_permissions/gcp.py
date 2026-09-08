@@ -116,6 +116,8 @@ sensitive_combinations = [
     ["agentidentity.authProviders.update"],
     ["integrations.integrations.invoke"],
     ["apikeys.keys.create"],
+    ["appengine.versions.get"],
+    ["appengine.versions.list"],
     ["artifactregistry.repositories.uploadArtifacts"],
     ["iam.serviceAccounts.getOpenIdToken"],
     ["cloudbuild.repositories.accessReadToken"],
@@ -289,6 +291,14 @@ risk_documentation = (
     ("pubsub.topics.publish", "gcp-post-exploitation/gcp-pub-sub-post-exploitation.md"),
     ("resourcemanager.projects.get", "gcp-post-exploitation/gcp-dataflow-post-exploitation.md"),
     ("apikeys.*", "gcp-privilege-escalation/gcp-serviceusage-privesc.md"),
+    (
+        "appengine.versions.get",
+        "gcp-post-exploitation/gcp-app-engine-post-exploitation.md",
+    ),
+    (
+        "appengine.versions.list",
+        "gcp-post-exploitation/gcp-app-engine-post-exploitation.md",
+    ),
     ("appengine.*", "gcp-privilege-escalation/gcp-appengine-privesc.md"),
     ("artifactregistry.*", "gcp-privilege-escalation/gcp-artifact-registry-privesc.md"),
     ("bigquery.*", "gcp-privilege-escalation/gcp-bigquery-privesc.md"),

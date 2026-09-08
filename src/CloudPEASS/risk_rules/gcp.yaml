@@ -55,6 +55,8 @@ high_exact:
   - agentidentity.authProviders.retrieveCredentials
   - agentidentity.authProviders.update
   - apikeys.keys.create
+  - appengine.versions.get
+  - appengine.versions.list
   - artifactregistry.repositories.uploadArtifacts
   - artifactregistry.repositories.downloadArtifacts
   - bigquery.tables.export
