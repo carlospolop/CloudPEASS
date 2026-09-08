@@ -3,6 +3,7 @@
 very_sensitive_combinations = [
     ["[*]"],
     ["acm:ExportCertificate"],
+    ["aps:PutResourcePolicy"],
     ["iam:PassRole"],
 
     ["backup:PutBackupVaultAccessPolicy"],
@@ -514,6 +515,7 @@ live_validated_disclosure_documentation = {
     "appconfig:GetLatestConfiguration": "aws-services/aws-appconfig-enum.md",
     "appsync:GraphQL": "aws-services/aws-appsync-enum.md",
     "appsync:ListApiKeys": "aws-services/aws-appsync-enum.md",
+    "aps:PutResourcePolicy": "aws-services/aws-managed-prometheus-enum.md",
     "autoscaling:DescribeLaunchConfigurations": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "backup:CreateBackupAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "backup:DescribeBackupAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",

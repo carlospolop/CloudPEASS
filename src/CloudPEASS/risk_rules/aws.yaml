@@ -16,6 +16,7 @@ provider: aws
 ## Matching is case-insensitive in the classifier.
 critical_exact:
   - acm:ExportCertificate
+  - aps:PutResourcePolicy
   - backup:PutBackupVaultAccessPolicy
   - codeartifact:GetAuthorizationToken
   - cognito-identity:UpdateIdentityPool

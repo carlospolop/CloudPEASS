@@ -880,6 +880,42 @@ prove a boundary change. A conclusive data test would additionally require a pro
 client to mount the restored Windows, Lustre, OpenZFS, or ONTAP filesystem. No existing account
 resource was touched, no synthetic FSx infrastructure was created, and no FSx impact is claimed.
 
+### Initial P1 prerequisite batch — 2026-09-09
+
+Ten P1 prefixes were reviewed without mutating existing resources. MWAA and MWAA Serverless
+returned no environments or workflows in `eu-west-1` or `us-east-1`. OpenSearch Serverless had no
+collections, data-access policies, or encryption policies. Compute Optimizer Automation returned
+`OptInRequiredException` for both enrollment and rule inventory. AppIntegrations was unavailable in
+`eu-west-1` and returned no applications, data integrations, or event integrations in
+`us-east-1`. The current CLI has no App2Container or AgentAccess MCP model; the account also has no
+WorkSpace/session or known App2Container job target.
+
+Two existing Amplify applications were observed but deliberately not changed. Both returned empty
+backend-environment inventories, leaving Amplify Admin token/backend operations and UI Builder
+components, forms, themes, codegen jobs, and Studio-token operations without a test target. IAM
+Access Analyzer returned no analyzers. A real management trail and existing policy-generation role
+were not consumed; policy-generation behavior therefore remains blocked behind a separate
+synthetic trail/role and pass-role validation rather than being inferred safe. These rows are
+recorded as prerequisite blockers, not negative security conclusions.
+
+### Amazon Managed Service for Prometheus (`aps`) — 2026-09-09
+
+`aps:PutResourcePolicy` alone was validated as a workspace-policy self-grant. A disposable AMP
+workspace contained a recording rule whose constant vector exposed the exact value `42009`. The
+candidate IAM user had only `PutResourcePolicy` on the exact workspace ARN, was denied
+`ListWorkspaces`, and received HTTP 403 from a SigV4 Prometheus query before the change. An
+empty-permission user was denied the same syntactically valid policy update. The candidate then
+replaced the workspace policy with an exact-principal grant of only `aps:QueryMetrics`; its same
+signed request returned HTTP 200 and the canary value.
+
+This needs a known workspace ID/ARN and a reachable Prometheus endpoint. Other desired capabilities
+must be explicitly included in the resource policy, and organization policies or explicit denies
+can still block the path. The current AMP API has separate create and put operations for rule-group
+namespaces; an initial harness using the now update-only put operation was deleted before users
+were created. The successful rule namespace, resource policy, workspace, users, access keys,
+identity policy, and local rule file were removed; exact workspace and user inventories returned
+empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
