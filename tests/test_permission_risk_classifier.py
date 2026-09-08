@@ -780,6 +780,41 @@ def test_live_validated_low_cost_configuration_disclosures_are_high():
         assert [permission] in sensitive_combinations
 
 
+def test_live_validated_data_plane_disclosures_and_dependencies():
+    high_actions = (
+        "athena:GetQueryExecution",
+        "cognito-idp:DescribeUserPoolClient",
+        "ebs:GetSnapshotBlock",
+        "execute-api:Invoke",
+        "iot:GetThingShadow",
+        "kinesis:GetRecords",
+        "logs:GetLogRecord",
+        "logs:GetQueryResults",
+        "transcribe:GetTranscriptionJob",
+    )
+    for permission in high_actions:
+        assert classify_permission(
+            "aws", permission, unknown_default="medium"
+        ) == "high"
+        assert [permission] in sensitive_combinations
+
+    # Neither action retrieves data on its own in the validated normal paths.
+    assert classify_permission(
+        "aws", "athena:GetQueryResults", unknown_default="medium"
+    ) == "low"
+    assert classify_permission(
+        "aws", "kinesis:GetShardIterator", unknown_default="medium"
+    ) == "low"
+    assert ["athena:GetQueryResults"] not in sensitive_combinations
+    assert ["kinesis:GetShardIterator"] not in sensitive_combinations
+    assert ["athena:GetQueryResults", "s3:GetObject"] in sensitive_combinations
+
+    # Listing block tokens plus reading blocks is complete raw-disk access.
+    ebs_chain = ["ebs:ListSnapshotBlocks", "ebs:GetSnapshotBlock"]
+    assert ebs_chain in very_sensitive_combinations
+    assert ebs_chain not in sensitive_combinations
+
+
 def test_elastic_beanstalk_configuration_secret_requires_s3_dependencies():
     assert [
         "elasticbeanstalk:DescribeConfigurationSettings",

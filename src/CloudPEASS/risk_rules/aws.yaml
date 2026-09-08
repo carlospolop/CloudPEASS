@@ -64,6 +64,7 @@ high_exact:
   - amplify:GetApp
   - amplify:GetJob
   - apigateway:GET
+  - athena:GetQueryExecution
   - appconfig:GetHostedConfigurationVersion
   - appsync:ListApiKeys
   - appstream:CreateStreamingURL
@@ -86,6 +87,7 @@ high_exact:
   - codecommit:GetFile
   - codecommit:GitPull
   - cognito-idp:AdminGetUser
+  - cognito-idp:DescribeUserPoolClient
   - cognito-idp:DescribeIdentityProvider
   - cognito-idp:ListUsers
   - cognito-idp:ListUsersInGroup
@@ -95,20 +97,26 @@ high_exact:
   - dynamodb:Scan
   - dynamodb:TransactGetItems
   - ec2:DescribeLaunchTemplateVersions
+  - ebs:GetSnapshotBlock
   - ecr:GetDownloadUrlForLayer
   - ecs:DescribeTaskDefinition
   - emr-serverless:GetApplication
   - events:ListTargetsByRule
+  - execute-api:Invoke
   - glue:GetConnection
   - glue:GetJob
   - glue:GetWorkflowRunProperties
   - imagebuilder:GetComponent
+  - iot:GetThingShadow
+  - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
   - lambda:GetFunction
   - lambda:GetFunctionConfiguration
   - lambda:GetLayerVersion
   - logs:FilterLogEvents
+  - logs:GetLogRecord
   - logs:GetLogEvents
+  - logs:GetQueryResults
   - invoicing:BatchGetInvoiceProfile
   - invoicing:GetInvoicePDF
   - invoicing:ListInvoiceSummaries
@@ -129,6 +137,7 @@ high_exact:
   - sts:GetFederationToken
   - tax:GetTaxRegistration
   - tax:ListTaxRegistrations
+  - transcribe:GetTranscriptionJob
 
 ## Evidence-backed corrections for stale upstream/cache entries. These take
 ## precedence over critical_exact and low_exact during classification.
@@ -137,6 +146,7 @@ high_override_exact:
   - amplify:GetApp
   - amplify:GetJob
   - apigateway:GET
+  - athena:GetQueryExecution
   - appconfig:GetHostedConfigurationVersion
   - appsync:ListApiKeys
   - appstream:CreateStreamingURL
@@ -157,6 +167,7 @@ high_override_exact:
   - codecommit:GetCommit
   - codecommit:GetFile
   - cognito-idp:AdminGetUser
+  - cognito-idp:DescribeUserPoolClient
   - cognito-idp:DescribeIdentityProvider
   - cognito-idp:ListUsers
   - cognito-idp:ListUsersInGroup
@@ -166,15 +177,19 @@ high_override_exact:
   - dynamodb:Scan
   - dynamodb:TransactGetItems
   - ec2:DescribeLaunchTemplateVersions
+  - ebs:GetSnapshotBlock
   - ec2:GetPasswordData
   - ecr:GetDownloadUrlForLayer
   - ecs:DescribeTaskDefinition
   - emr-serverless:GetApplication
   - events:ListTargetsByRule
+  - execute-api:Invoke
   - glue:GetConnection
   - glue:GetJob
   - glue:GetWorkflowRunProperties
   - imagebuilder:GetComponent
+  - iot:GetThingShadow
+  - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
   - invoicing:BatchGetInvoiceProfile
   - invoicing:GetInvoicePDF
@@ -192,10 +207,13 @@ high_override_exact:
   - states:DescribeStateMachine
   - sts:GetDelegatedAccessToken
   - logs:FilterLogEvents
+  - logs:GetLogRecord
+  - logs:GetQueryResults
   - sts:GetFederationToken
   - sts:GetServiceBearerToken
   - tax:GetTaxRegistration
   - tax:ListTaxRegistrations
+  - transcribe:GetTranscriptionJob
 
 ## =====================
 ## MEDIUM RULES
@@ -259,6 +277,8 @@ low_exact:
   - appconfig:ListHostedConfigurationVersions
   - appfabric:GetAppAuthorization
   - appfabric:ListAppAuthorizations
+  # GetQueryResults still requires access to the S3 result object.
+  - athena:GetQueryResults
   - cognito-idp:GetSigningCertificate
   - cognito-identity:GetOpenIdToken
   - dynamodb:DescribeEndpoints
@@ -272,6 +292,8 @@ low_exact:
   - kinesisvideo:GetHLSStreamingSessionURL
   - kinesisvideo:GetIceServerConfig
   - kinesisvideo:ListFragments
+  # Iterator creation alone does not return stream records.
+  - kinesis:GetShardIterator
   - logs:CreateLogGroup
   - logs:CreateLogStream
   - logs:PutLogEvents
