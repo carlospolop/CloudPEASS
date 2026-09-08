@@ -281,6 +281,7 @@ _AZURE_CRITICAL_EXACT = frozenset(
         # Storage through Azure ML, and protected Functions.
         "microsoft.web/staticsites/listsecrets/action",
         "microsoft.cognitiveservices/accounts/listkeys/action",
+        "microsoft.cognitiveservices/accounts/regeneratekey/action",
         # These long-standing credential paths are also configured as
         # singleton critical attacks in sensitive_permissions.azure. Keep the
         # standalone classifier aligned without promoting every unknown action
@@ -304,6 +305,25 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.apimanagement/service/backends/read",
         "microsoft.apimanagement/service/authorizationservers/listsecrets/action",
         "microsoft.apimanagement/service/openidconnectproviders/listsecrets/action",
+        # Live tests used the returned or renewed credentials against each
+        # service's data plane instead of trusting credential-shaped names.
+        "microsoft.containerregistry/registries/regeneratecredential/action",
+        "microsoft.servicebus/namespaces/authorizationrules/listkeys/action",
+        "microsoft.servicebus/namespaces/authorizationrules/regeneratekeys/action",
+        "microsoft.servicebus/namespaces/queues/authorizationrules/listkeys/action",
+        "microsoft.servicebus/namespaces/queues/authorizationrules/regeneratekeys/action",
+        "microsoft.servicebus/namespaces/topics/authorizationrules/listkeys/action",
+        "microsoft.servicebus/namespaces/topics/authorizationrules/regeneratekeys/action",
+        "microsoft.eventhub/namespaces/authorizationrules/listkeys/action",
+        "microsoft.eventhub/namespaces/authorizationrules/regeneratekeys/action",
+        "microsoft.eventhub/namespaces/eventhubs/authorizationrules/listkeys/action",
+        "microsoft.eventhub/namespaces/eventhubs/authorizationrules/regeneratekeys/action",
+        "microsoft.appconfiguration/configurationstores/regeneratekey/action",
+        "microsoft.batch/batchaccounts/listkeys/action",
+        "microsoft.cache/redisenterprise/databases/listkeys/action",
+        "microsoft.cache/redisenterprise/databases/regeneratekey/action",
+        "microsoft.documentdb/databaseaccounts/listkeys/action",
+        "microsoft.search/searchservices/listadminkeys/action",
         "microsoft.managedidentity/userassignedidentities/federatedidentitycredentials/write",
         "microsoft.web/sites/config/list/action",
         "microsoft.web/sites/publishxml/action",
@@ -356,6 +376,7 @@ _AZURE_HIGH_EXACT = frozenset(
         # configured API, bot, map service, artifact, or workflow. Their exact
         # downstream impact is configuration-dependent, so keep them High.
         "microsoft.maps/accounts/listkeys/action",
+        "microsoft.maps/accounts/regeneratekey/action",
         "microsoft.botservice/botservices/channels/listchannelwithkeys/action",
         "microsoft.apimanagement/service/subscriptions/listsecrets/action",
         "microsoft.logic/integrationaccounts/listcallbackurl/action",

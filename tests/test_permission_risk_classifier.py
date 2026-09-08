@@ -235,7 +235,26 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.ApiManagement/service/backends/read": "critical",
             "Microsoft.ApiManagement/service/authorizationServers/listSecrets/action": "critical",
             "Microsoft.ApiManagement/service/openidConnectProviders/listSecrets/action": "critical",
+            "Microsoft.ContainerRegistry/registries/regenerateCredential/action": "critical",
+            "Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action": "critical",
+            "Microsoft.ServiceBus/namespaces/authorizationRules/regenerateKeys/action": "critical",
+            "Microsoft.ServiceBus/namespaces/queues/authorizationRules/listKeys/action": "critical",
+            "Microsoft.ServiceBus/namespaces/queues/authorizationRules/regenerateKeys/action": "critical",
+            "Microsoft.ServiceBus/namespaces/topics/authorizationRules/listKeys/action": "critical",
+            "Microsoft.ServiceBus/namespaces/topics/authorizationRules/regenerateKeys/action": "critical",
+            "Microsoft.EventHub/namespaces/authorizationRules/listKeys/action": "critical",
+            "Microsoft.EventHub/namespaces/authorizationRules/regenerateKeys/action": "critical",
+            "Microsoft.EventHub/namespaces/eventhubs/authorizationRules/listKeys/action": "critical",
+            "Microsoft.EventHub/namespaces/eventhubs/authorizationRules/regenerateKeys/action": "critical",
+            "Microsoft.AppConfiguration/configurationStores/RegenerateKey/action": "critical",
+            "Microsoft.Batch/batchAccounts/listkeys/action": "critical",
+            "Microsoft.Cache/redisEnterprise/databases/listKeys/action": "critical",
+            "Microsoft.Cache/redisEnterprise/databases/regenerateKey/action": "critical",
+            "Microsoft.CognitiveServices/accounts/regenerateKey/action": "critical",
+            "Microsoft.DocumentDB/databaseAccounts/listKeys/action": "critical",
+            "Microsoft.Search/searchServices/listAdminKeys/action": "critical",
             "Microsoft.Maps/accounts/listKeys/action": "high",
+            "Microsoft.Maps/accounts/regenerateKey/action": "high",
             "Microsoft.BotService/botServices/channels/listchannelwithkeys/action": "high",
             "Microsoft.ApiManagement/service/subscriptions/listSecrets/action": "high",
             "Microsoft.Logic/integrationAccounts/listCallbackUrl/action": "high",
@@ -363,6 +382,26 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         )
         self.assertEqual(
             self.classify("Microsoft.Example/widgets/listKeys/action"),
+            "medium",
+        )
+        # listKeys returned an SMB-shaped local-user key, but the credential
+        # did not authenticate to the reachable Azure Files endpoint.
+        self.assertEqual(
+            self.classify(
+                "Microsoft.Storage/storageAccounts/localusers/listKeys/action"
+            ),
+            "medium",
+        )
+        # Maps SAS is constrained by the attached UAMI's Maps data role, and
+        # Web PubSub rechecks clientConnection/write during the handshake.
+        self.assertEqual(
+            self.classify("Microsoft.Maps/accounts/listSas/action"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.SignalRService/WebPubSub/clientConnection/generateToken/action"
+            ),
             "medium",
         )
 

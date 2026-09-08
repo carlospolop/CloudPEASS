@@ -38,6 +38,7 @@ very_sensitive_combinations = [
     ["Microsoft.Automation/automationAccounts/sourceControls/write", "Microsoft.Automation/automationAccounts/jobs/write"],
 
     ["Microsoft.ContainerRegistry/registries/listCredentials/action"],
+    ["Microsoft.ContainerRegistry/registries/regenerateCredential/action"],
     ["Microsoft.ContainerRegistry/registries/tokens/write", "Microsoft.ContainerRegistry/registries/generateCredentials/action"],
     ["Microsoft.ContainerRegistry/registries/listBuildSourceUploadUrl/action", "Microsoft.ContainerRegistry/registries/scheduleRun/action"],
 
@@ -86,6 +87,10 @@ very_sensitive_combinations = [
     ["Microsoft.ServiceBus/namespaces/authorizationrules/regenerateKeys/action"],
     ["Microsoft.ServiceBus/namespaces/*/authorizationRules/ListKeys/action"],
     ["Microsoft.ServiceBus/namespaces/*/authorizationRules/regenerateKeys/action"],
+    ["Microsoft.ServiceBus/namespaces/queues/authorizationRules/listKeys/action"],
+    ["Microsoft.ServiceBus/namespaces/queues/authorizationRules/regenerateKeys/action"],
+    ["Microsoft.ServiceBus/namespaces/topics/authorizationRules/listKeys/action"],
+    ["Microsoft.ServiceBus/namespaces/topics/authorizationRules/regenerateKeys/action"],
 
     ["Microsoft.Web/staticSites/listSecrets/action"],
 
@@ -115,11 +120,16 @@ very_sensitive_combinations = [
     ["Microsoft.Automation/automationAccounts/listKeys/action"],
     ["Microsoft.Batch/batchAccounts/listkeys/action"],
     ["Microsoft.Cache/redis/listKeys/action"],
+    ["Microsoft.Cache/redisEnterprise/databases/listKeys/action"],
+    ["Microsoft.Cache/redisEnterprise/databases/regenerateKey/action"],
     ["Microsoft.CognitiveServices/accounts/listKeys/action"],
+    ["Microsoft.CognitiveServices/accounts/regenerateKey/action"],
     ["Microsoft.DataFactory/datafactories/gateways/listauthkeys/action"],
     ["Microsoft.DataFactory/factories/integrationruntimes/listauthkeys/action"],
     ["Microsoft.EventHub/namespaces/authorizationRules/listkeys/action"],
+    ["Microsoft.EventHub/namespaces/authorizationRules/regenerateKeys/action"],
     ["Microsoft.EventHub/namespaces/eventhubs/authorizationRules/listkeys/action"],
+    ["Microsoft.EventHub/namespaces/eventhubs/authorizationRules/regenerateKeys/action"],
     ["Microsoft.Devices/IotHubs/listkeys/action"],
     ["Microsoft.Devices/IotHubs/iotHubKeys/listkeys/action"],
     ["Microsoft.KeyVault/vaults/accessPolicies/write"],
@@ -232,6 +242,7 @@ sensitive_combinations = [
     ["Microsoft.SignalRService/WebPubSub/listkeys/action"],
     ["Microsoft.SignalRService/WebPubSub/regeneratekey/action"],
     ["Microsoft.Maps/accounts/listKeys/action"],
+    ["Microsoft.Maps/accounts/regenerateKey/action"],
     ["Microsoft.BotService/botServices/channels/listchannelwithkeys/action"],
     ["Microsoft.ApiManagement/service/subscriptions/listSecrets/action"],
     ["Microsoft.Logic/integrationAccounts/listCallbackUrl/action"],
