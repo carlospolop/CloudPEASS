@@ -243,6 +243,8 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.MachineLearningServices/workspaces/datastores/listsecrets/action": "critical",
             "Microsoft.Web/sites/host/listkeys/action": "critical",
             "Microsoft.Web/sites/slots/host/listkeys/action": "critical",
+            "Microsoft.Web/sites/publish/action": "critical",
+            "Microsoft.Web/sites/slots/publish/action": "critical",
             "Microsoft.CognitiveServices/accounts/connections/listsecrets/action": "critical",
             "Microsoft.CognitiveServices/accounts/projects/connections/listsecrets/action": "critical",
             "Microsoft.ApiManagement/service/namedValues/listValue/action": "critical",
@@ -357,6 +359,12 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         self.assertEqual(
             self.classify("Microsoft.Web/sites/slots/functions/listsecrets/action"),
             "medium",
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Web/containerApps/listsecrets/action"), "medium"
+        )
+        self.assertEqual(
+            self.classify("Microsoft.Web/sites/hostruntime/vfs/read"), "low"
         )
         self.assertEqual(
             self.classify("Microsoft.KeyVault/vaults/certificates/purge/action"),

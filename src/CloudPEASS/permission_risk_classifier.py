@@ -264,6 +264,12 @@ _AZURE_CRITICAL_EXACT = frozenset(
         # slot. Slot config/list also exposed a reusable Storage account key.
         "microsoft.web/sites/functions/masterkey/read",
         "microsoft.web/sites/functions/token/read",
+        # The production and slot Kudu command endpoints rejected an invalid
+        # bearer with 403. ARM bearers authorized by these publish actions ran
+        # harmless commands in their respective workers and returned the exact
+        # canaries with exit code zero.
+        "microsoft.web/sites/publish/action",
+        "microsoft.web/sites/slots/publish/action",
         "microsoft.web/sites/slots/publishxml/action",
         "microsoft.web/sites/slots/config/list/action",
         # Live validation confirmed that start/action accepts a per-execution

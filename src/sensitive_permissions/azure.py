@@ -32,6 +32,7 @@ very_sensitive_combinations = [
     
     
     ["Microsoft.Web/sites/publish/Action"],
+    ["Microsoft.Web/sites/slots/publish/Action"],
 
     ["Microsoft.Automation/automationAccounts/runbooks/draft/write", "Microsoft.Automation/automationAccounts/runbooks/draft/content/write", "Microsoft.Automation/automationAccounts/runbooks/draft/testJob/write"],
     ["Microsoft.Automation/automationAccounts/runbooks/draft/write", "Microsoft.Automation/automationAccounts/runbooks/draft/content/write", "Microsoft.Automation/automationAccounts/runbooks/publish/action", "Microsoft.Automation/automationAccounts/jobs/write"],
@@ -150,7 +151,6 @@ very_sensitive_combinations = [
     ["Microsoft.NotificationHubs/Namespaces/authorizationRules/regenerateKeys/action"],
     ["Microsoft.NotificationHubs/Namespaces/NotificationHubs/authorizationRules/listkeys/action"],
     ["Microsoft.NotificationHubs/Namespaces/NotificationHubs/authorizationRules/regenerateKeys/action"],
-    ["Microsoft.Web/containerApps/listsecrets/action"],
     ["Microsoft.App/containerApps/listSecrets/action"],
 
     ["Microsoft.ContainerService/managedClusters/listClusterAdminCredential/action"],
@@ -293,7 +293,6 @@ sensitive_combinations = [
     ["Microsoft.Logic/integrationAccounts/partners/listContentCallbackUrl/action"],
     ["Microsoft.Logic/integrationAccounts/schemas/listContentCallbackUrl/action"],
     ["Microsoft.Logic/workflows/listCallbackUrl/action"],
-    ["Microsoft.Web/sites/hostruntime/vfs/read"],
     ["Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"],
     ["Microsoft.Storage/storageAccounts/fileServices/fileshares/files/read"],
     ["Microsoft.Storage/storageAccounts/queueServices/queues/messages/read"],
