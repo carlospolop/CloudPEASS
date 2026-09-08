@@ -916,6 +916,33 @@ were created. The successful rule namespace, resource policy, workspace, users, 
 identity policy, and local rule file were removed; exact workspace and user inventories returned
 empty.
 
+### P1 application, recovery, and governance prerequisites — 2026-09-09
+
+Application Auto Scaling returned no targets across eleven common service namespaces. App Runner
+returned no services, source connections, or VPC connectors; Application Insights returned no
+applications; ARC Zonal Shift returned no managed resources or shifts. Audit Manager reported
+`INACTIVE` and rejected assessment/report inventory until account setup. Backup Gateway returned no
+gateway, hypervisor, or virtual machine; Backup Search returned no search or export jobs. These
+execution, configuration, and data paths remain blocked on their respective service targets.
+
+The current CLI exposes no Application Signals MCP, Application Transformation, Mainframe
+Application Testing, Arsenal, or Backup storage model, and the account has no external session,
+agent, assessment, deployment, test-run, job, or capsule identifier for their protocol actions.
+Marketplace Management is portal-only and operates on real seller banking/verification state, so
+it was not mutated without a disposable seller account. AWS Artifact's report catalog was
+enumerated without downloading a report: it exposed AWS-managed compliance documents but no
+credential, execution, delegation, or customer-workload path, so it is recorded
+`no_new_positive`; report and agreement content can still be contract-sensitive.
+
+Application Signals had real service observations, so two exact-action identities were tested on
+a known service key. `GetService` alone and `ListServiceOperations` alone were accepted but returned
+zero service keys, attribute maps, metric references, and operations, while the administrator saw
+3, 2, 3, and 5 respectively for the same target and time window. Both identities were denied
+`ListServices`, and empty-permission controls were denied the exact calls. This shows that the
+service actions alone do not expose the telemetry; underlying CloudWatch/X-Ray/observability
+authority remains material. No standalone read was promoted, and every test user, key, and policy
+was removed.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
