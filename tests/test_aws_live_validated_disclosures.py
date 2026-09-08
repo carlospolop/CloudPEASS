@@ -781,6 +781,31 @@ def test_live_validated_marketplace_agreement_disclosures_are_independent():
         )
 
 
+def test_live_validated_ecr_public_repository_policy_self_grant():
+    action = "ecr-public:SetRepositoryPolicy"
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert (action,) in critical
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "critical"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-privilege-escalation/aws-ecr-privesc/README.md"
+    )
+
+
+def test_live_validated_datasync_delegated_copy_requires_destination_access():
+    action = "datasync:StartTaskExecution"
+    combination = (action, "s3:GetObject")
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert combination in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-datasync-enum.md"
+    )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

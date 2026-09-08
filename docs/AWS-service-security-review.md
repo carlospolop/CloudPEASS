@@ -1024,6 +1024,58 @@ store in AWS's mandatory seven-day `PENDING_DELETION` state, so this integrity-i
 blocked by the same-session destruction requirement. None of these prerequisite checks created or
 changed infrastructure.
 
+### Amazon ECR Public (`ecr-public`) — 2026-09-09
+
+`ecr-public:SetRepositoryPolicy` alone was validated as a public-repository supply-chain takeover.
+A disposable role scoped to the exact synthetic repository ARN was denied
+`InitiateLayerUpload` before the change. An empty-permission role was denied the same
+`SetRepositoryPolicy` request. The candidate then installed a policy granting only its own role
+the four upload operations (`InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`, and
+`PutImage`), uploaded an in-memory OCI config and tar/gzip layer containing a randomized canary,
+and published that manifest as the mutable `stable` tag.
+
+An administrator independently observed that `stable` resolved to the candidate-created manifest
+digest and that both uploaded digests were `AVAILABLE`. Thus the impact was a real tagged-image
+change, not merely an accepted policy request. Downstream CI, ECS, Kubernetes, or other consumers
+that repull mutable tags could execute the substituted content with their workload identity. Tag
+immutability, digest pinning, explicit denies, or consumers that never refresh the tag prevent this
+specific path.
+
+Two earlier attempts also reached the successful policy self-grant and tagged upload, but their
+verification incorrectly used private ECR's unavailable `BatchGetImage` API and then an incomplete
+anonymous Registry V2 request; both cleanup traps still succeeded. The final run used the native
+ECR Public describe and layer-availability APIs. Every synthetic repository/image/layer, role, and
+inline policy from all runs was force-deleted, exact prefix inventories were empty, and the
+account's unrelated pre-existing public repository was not read or changed.
+
+### AWS DataSync (`datasync`) — 2026-09-09
+
+`datasync:StartTaskExecution` was validated as a delegated sensitive-data copy when an existing
+task's destination is accessible to the caller. A synthetic S3-to-S3 task used a DataSync role
+that could read a protected source canary and write to an initially empty destination. The
+candidate had only `StartTaskExecution` on the exact task ARN and `s3:GetObject` on the destination
+prefix: it had no source-bucket action, no `iam:PassRole`, and could not list DataSync tasks. A
+destination-only control was denied when starting the same task.
+
+The candidate started the unchanged task. After DataSync reported `SUCCESS`, its destination read
+returned the exact source canary. This is a conditional high-impact combination rather than a
+universal source selector: the task fixes its source, destination, and service role, and the caller
+still needs a way to access the destination. Non-S3 locations may instead be reachable through
+their native NFS, SMB, EFS, FSx, HDFS, or object-storage protocol.
+
+Two preliminary fixtures were also removed after exposing S3's nonexistent-key anti-oracle and
+normal IAM policy propagation. The successful task execution, task, both S3 locations, source and
+destination objects/buckets, DataSync service role, candidate/control roles, and every inline
+policy were deleted. Exact task, location, bucket, and role inventories returned empty.
+
+Three adjacent data/security services had no safe data target. Database Query Metadata Service is
+not present in the installed SDK or CLI and no Query Editor favorite, history, tab, or authenticated
+console protocol object is known, so `GetQueryString` remains blocked rather than inferred.
+Detective returned zero graphs in both primary Regions; enabling the account-wide graph would not
+produce an immediate synthetic investigation dataset. Application Discovery Service likewise
+returned zero agents in both Regions and has no external host or imported dataset from which to
+prove configuration or network disclosure. None of these checks changed service state.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

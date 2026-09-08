@@ -26,6 +26,7 @@ critical_exact:
   - ec2:ModifyInstanceAttribute
   - ec2:ReplaceIamInstanceProfileAssociation
   - ecr-public:GetAuthorizationToken
+  - ecr-public:SetRepositoryPolicy
   - ecr:GetAuthorizationToken
   - ecs:ExecuteCommand
   - eks-auth:AssumeRoleForPodIdentity
@@ -166,6 +167,7 @@ high_exact:
   - deadline:AssumeQueueRoleForRead
   - deadline:AssumeQueueRoleForUser
   - datazone:GetEnvironmentCredentials
+  - datasync:StartTaskExecution
   - ec2:DescribeLaunchTemplateVersions
   - ec2:DescribeInstanceAttribute
   - elasticloadbalancing:ModifyListener
