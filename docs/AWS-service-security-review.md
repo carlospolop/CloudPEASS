@@ -733,6 +733,21 @@ Earth Observation jobs; `eu-west-1` returned a service/authorization-resolution 
 reads or exports requires a synthetic source collection, job, and execution role, so that prefix is
 also retained as blocked rather than inferred safe.
 
+### Amazon S3 Object Lambda (`s3-object-lambda`) — 2026-09-08
+
+The Q16 access-point-policy self-grant hypothesis is blocked by service eligibility. The synthetic
+fixture successfully created a private source bucket/object, supporting S3 access point, published
+Lambda transformer version, and an execution role limited to `WriteGetObjectResponse`. AWS then
+rejected `CreateAccessPointForObjectLambda` with the explicit statement that S3 Object Lambda is
+available only to existing customers already using the service and selected APN partners. The
+authorized account has no pre-existing Object Lambda access point.
+
+No policy was set and no transformed read was attempted, so there is no positive or negative claim
+about `PutObjectLambdaAccessPointPolicy`. The supporting access point, Lambda function/version,
+execution role and policy, object and bucket were deleted. The failure occurred before disposable
+reader users were created. Exact Object Lambda access-point, S3 access-point/bucket, Lambda, IAM
+user/role inventories returned empty, and the local source and ZIP were removed.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
