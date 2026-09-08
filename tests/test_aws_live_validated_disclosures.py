@@ -80,6 +80,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "logs:GetLogRecord",
     "logs:GetLogEvents",
     "logs:GetQueryResults",
+    "omics:GetReadSet",
     "invoicing:BatchGetInvoiceProfile",
     "invoicing:GetInvoicePDF",
     "invoicing:ListInvoiceSummaries",

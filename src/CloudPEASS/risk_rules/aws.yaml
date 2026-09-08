@@ -143,6 +143,7 @@ high_exact:
   - logs:GetLogRecord
   - logs:GetLogEvents
   - logs:GetQueryResults
+  - omics:GetReadSet
   - invoicing:BatchGetInvoiceProfile
   - invoicing:GetInvoicePDF
   - invoicing:ListInvoiceSummaries
@@ -247,6 +248,7 @@ high_override_exact:
   - ivschat:CreateChatToken
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
+  - omics:GetReadSet
   - invoicing:BatchGetInvoiceProfile
   - invoicing:GetInvoicePDF
   - invoicing:ListInvoiceSummaries
