@@ -39,6 +39,7 @@ critical_exact:
   - s3:PutObjectAcl
   - s3:PutObjectVersionAcl
   - sagemaker:CreatePresignedNotebookInstanceUrl
+  - sagemaker:UpdateNotebookInstanceLifecycleConfig
   - secretsmanager:GetSecretValue
   - ssm:GetParameter
   - ssm:GetParameters

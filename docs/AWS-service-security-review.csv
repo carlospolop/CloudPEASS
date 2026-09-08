@@ -53,7 +53,7 @@
 "P0","queued","route53domains","Amazon Route 53 Domains","","",""
 "P0","queued","s3","Amazon S3","","",""
 "P0","queued","s3-object-lambda","Amazon S3 Object Lambda","","","Hypothesis Q16: test access-point policy self-grant and whether a known Object Lambda path exposes transformed source data without direct source permissions."
-"P0","queued","sagemaker","Amazon SageMaker","","","Hypothesis Q06: test lifecycle-configuration mutation followed by an existing notebook start to execute under its profile without caller iam:PassRole."
+"P0","validated","sagemaker","Amazon SageMaker","2026-09-08","UpdateNotebookInstanceLifecycleConfig alone replaced the OnStart script of a lifecycle configuration already attached to a stopped notebook; the next administrator start ran it as root under the notebook execution role and returned role-only Organizations data.","The updater lacked iam:PassRole and notebook start/stop permissions. The benign lifecycle produced no proof; a no-permission update control and direct Organizations call were denied. Requires an attached lifecycle configuration and a later notebook start."
 "P0","queued","sagemaker-geospatial","Amazon SageMaker geospatial capabilities","","",""
 "P0","queued","scheduler","Amazon EventBridge Scheduler","","","Hypothesis Q02: test UpdateSchedule target/input mutation while preserving an existing execution role and isolate same-role pass-role enforcement."
 "P0","queued","secretsmanager","AWS Secrets Manager","","","Hypothesis Q15: test PutResourcePolicy same-account and cross-account self-grants, including BlockPublicPolicy and KMS authorization boundaries."

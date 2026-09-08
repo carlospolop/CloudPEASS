@@ -146,6 +146,7 @@ very_sensitive_combinations = [
     ["s3:PutObjectVersionAcl"],
 
     ["sagemaker:CreatePresignedNotebookInstanceUrl"],
+    ["sagemaker:UpdateNotebookInstanceLifecycleConfig"],
 
     ["secretsmanager:GetSecretValue"],
     ["secretsmanager:PutResourcePolicy"],
@@ -586,6 +587,7 @@ live_validated_disclosure_documentation = {
     "invoicing:ListInvoiceSummaries": "aws-services/aws-invoicing-enum.md",
     "sagemaker:DescribeModel": "aws-services/aws-sagemaker-enum/README.md",
     "sagemaker:DescribeTrainingJob": "aws-services/aws-sagemaker-enum/README.md",
+    "sagemaker:UpdateNotebookInstanceLifecycleConfig": "aws-persistence/aws-sagemaker-persistence/README.md",
     "s3:GetDataAccess": "aws-services/aws-s3-athena-and-glacier-enum.md",
     "s3:CreateAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "s3:GetAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",

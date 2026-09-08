@@ -60,7 +60,6 @@ pass the evidence gate before it can change a permission severity or appear in H
 | Q03 | AWS Config | Point remediation at a preauthorized SSM Automation path and call `StartRemediationExecution`; distinguish Config permissions from SSM and pass-role checks. |
 | Q04 | CodeConnections | Use an installed connection through an existing or synthetic consumer to determine whether `UseConnection` exposes or executes otherwise inaccessible private repository content. |
 | Q05 | IAM Roles Anywhere | Mutate a trust anchor used by an existing profile and role, then attempt a certificate-backed session; retain the exact role trust and profile prerequisites. |
-| Q06 | SageMaker | Replace a notebook lifecycle configuration and start an existing notebook under its attached role without changing or passing that role. |
 | Q07 | AWS Batch | Register and submit attacker code against existing job and execution roles; remove each `iam:PassRole` and Batch dependency independently. |
 | Q08 | API Gateway | Mutate an integration or deployment to intercept backend data or reuse stored credentials, separating control-plane changes from invoke permission. |
 | Q09 | ACM Private CA | Issue a certificate from a CA trusted for workload mTLS and prove impersonation at a synthetic relying service; test template and CA-policy boundaries. |
@@ -297,3 +296,28 @@ remain separate cases.
 
 The pipe, all three queues, execution role and policy, both disposable IAM users, and both access
 keys were deleted. Exact prefix queries returned no remaining Pipes, SQS, or IAM resources.
+
+### Amazon SageMaker (`sagemaker`) — 2026-09-08
+
+Live validation confirmed that `sagemaker:UpdateNotebookInstanceLifecycleConfig` alone can persist
+attacker-controlled shell code into a lifecycle configuration already attached to a notebook. The
+restricted user could not start or stop the notebook, lacked `iam:PassRole`, and was denied direct
+`organizations:DescribeOrganization`. A no-permission user was denied the lifecycle update.
+
+The notebook's original benign `OnStart` hook reached `InService` without creating a proof object.
+After an administrator stopped it, the restricted user replaced only the lifecycle configuration's
+`OnStart` content. The restricted user's own start request was denied. On the next administrator
+start, the new script ran as root, wrote the unique canary, reported the notebook's exact assumed
+execution-role ARN, and returned organization metadata that the updater could not access directly.
+
+This single permission is critical when a target lifecycle configuration is attached to at least
+one notebook that will later start and the notebook role or host exposes useful privilege or data.
+The action does not attach the configuration to a different notebook; known configuration names
+can still be recovered from IaC, CI files, cached output, errors, or shell history when list and
+describe permissions are unavailable. Disabling notebook-user root access does not restrict the
+lifecycle hook itself.
+
+The notebook was stopped and deleted, followed by its lifecycle configuration, private proof
+bucket and object, execution role and policy, two disposable IAM users, and both access keys.
+Exact prefix inventories returned no remaining SageMaker notebook, lifecycle configuration, S3
+bucket, IAM user, or IAM role.
