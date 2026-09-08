@@ -150,7 +150,11 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
         "iam.serviceAccounts.setIamPolicy",
         "iam.serviceAccounts.signBlob",
         "iam.serviceAccounts.signJwt",
+        "iam.googleapis.com/workloadIdentityPoolProviders.create",
+        "iam.googleapis.com/workloadIdentityPoolProviders.undelete",
         "iam.googleapis.com/workloadIdentityPoolProviders.update",
+        "iam.googleapis.com/workloadIdentityPools.undelete",
+        "iam.googleapis.com/workloadIdentityPools.update",
         "pubsub.snapshots.create",
         "pubsub.snapshots.delete",
         "pubsub.snapshots.get",
@@ -1740,6 +1744,23 @@ class GCPPEASS(CloudPEASS):
                 "authoritative public zone for a Workspace primary domain, also assess the "
                 "administrator-recovery pivot. Preserve the existing policy etag and bindings."
             )
+        if "iam.googleapis.com/workloadIdentityPoolProviders.create" in permission_set:
+            notes.append(
+                "Critical federation privilege escalation (requires a broadly trusted pool): this "
+                "permission can add an attacker-controlled provider to an existing Workload Identity "
+                "Pool. If the pool already has a wildcard principalSet IAM binding, such as a binding "
+                "ending in /POOL_ID/*, a forged external subject from the new provider inherits that "
+                "binding after Google STS token exchange. Provider creation alone grants no access "
+                "when the pool has no matching pool-wide wildcard IAM binding."
+            )
+        if "iam.googleapis.com/workloadIdentityPoolProviders.undelete" in permission_set:
+            notes.append(
+                "Critical federation restoration (requires residual trust and IAM): this permission "
+                "can restore a soft-deleted Workload Identity Federation provider for up to 30 days. "
+                "If the restored provider trusts an attacker-controlled identity and its pool still "
+                "has a matching IAM binding, forged assertions regain those privileges through STS. "
+                "Undelete alone grants no access without both prerequisites."
+            )
         if "iam.googleapis.com/workloadIdentityPoolProviders.update" in permission_set:
             notes.append(
                 "Critical federation privilege escalation: this permission can change an existing "
@@ -1750,6 +1771,22 @@ class GCPPEASS(CloudPEASS):
                 "overlap during metadata rotation, so replacing every existing certificate at once "
                 "is not required and is rejected. The reachable privileges depend on existing "
                 "principal/principalSet IAM bindings for that pool."
+            )
+        if "iam.googleapis.com/workloadIdentityPools.undelete" in permission_set:
+            notes.append(
+                "Critical federation restoration (requires residual trust and IAM): this permission "
+                "can restore a soft-deleted Workload Identity Pool for up to 30 days, including its "
+                "provider trust. Existing principalSet IAM bindings become usable again; an attacker "
+                "who controls an accepted external identity can exchange assertions at STS. Undelete "
+                "alone grants no access without a usable provider and matching IAM binding."
+            )
+        if "iam.googleapis.com/workloadIdentityPools.update" in permission_set:
+            notes.append(
+                "Critical federation reactivation (requires residual trust and IAM): this permission "
+                "can set disabled=false on a disabled Workload Identity Pool. Its existing providers "
+                "and principalSet IAM bindings then become usable again, so an attacker who controls "
+                "an accepted external identity can regain those roles through STS. Pool update alone "
+                "grants no access without both prerequisites."
             )
         return notes
 

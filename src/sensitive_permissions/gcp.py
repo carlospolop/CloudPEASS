@@ -18,7 +18,11 @@ very_sensitive_combinations = [
     ["iam.serviceAccounts.signBlob"],
     ["iam.serviceAccounts.signJwt"],
     ["iam.serviceAccountKeys.create"],
+    ["iam.googleapis.com/workloadIdentityPoolProviders.create"],
+    ["iam.googleapis.com/workloadIdentityPoolProviders.undelete"],
     ["iam.googleapis.com/workloadIdentityPoolProviders.update"],
+    ["iam.googleapis.com/workloadIdentityPools.undelete"],
+    ["iam.googleapis.com/workloadIdentityPools.update"],
     ["iam.roles.update"],
 
     # Credential, secret, and decryption material.
@@ -226,7 +230,23 @@ risk_documentation = (
         "gcp-to-workspace-pivoting/README.md",
     ),
     (
+        "iam.googleapis.com/workloadIdentityPoolProviders.create",
+        "gcp-privilege-escalation/gcp-workload-identity-federation-privesc.md",
+    ),
+    (
+        "iam.googleapis.com/workloadIdentityPoolProviders.undelete",
+        "gcp-privilege-escalation/gcp-workload-identity-federation-privesc.md",
+    ),
+    (
         "iam.googleapis.com/workloadIdentityPoolProviders.update",
+        "gcp-privilege-escalation/gcp-workload-identity-federation-privesc.md",
+    ),
+    (
+        "iam.googleapis.com/workloadIdentityPools.undelete",
+        "gcp-privilege-escalation/gcp-workload-identity-federation-privesc.md",
+    ),
+    (
+        "iam.googleapis.com/workloadIdentityPools.update",
         "gcp-privilege-escalation/gcp-workload-identity-federation-privesc.md",
     ),
     ("*.setIamPolicy", "gcp-privilege-escalation/gcp-misc-perms-privesc.md"),

@@ -586,6 +586,38 @@ def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
     assert "overlap" in federation_notes[0]
     assert "Google STS" in federation_notes[0]
 
+    provider_create_notes = peass._cross_cloud_pivot_notes(
+        project, ["iam.googleapis.com/workloadIdentityPoolProviders.create"]
+    )
+    assert len(provider_create_notes) == 1
+    assert "Critical federation privilege escalation" in provider_create_notes[0]
+    assert "broadly trusted pool" in provider_create_notes[0]
+    assert "creation alone grants no access" in provider_create_notes[0]
+
+    provider_undelete_notes = peass._cross_cloud_pivot_notes(
+        project, ["iam.googleapis.com/workloadIdentityPoolProviders.undelete"]
+    )
+    assert len(provider_undelete_notes) == 1
+    assert "Critical federation restoration" in provider_undelete_notes[0]
+    assert "soft-deleted" in provider_undelete_notes[0]
+    assert "alone grants no access" in provider_undelete_notes[0]
+
+    pool_undelete_notes = peass._cross_cloud_pivot_notes(
+        project, ["iam.googleapis.com/workloadIdentityPools.undelete"]
+    )
+    assert len(pool_undelete_notes) == 1
+    assert "Critical federation restoration" in pool_undelete_notes[0]
+    assert "provider trust" in pool_undelete_notes[0]
+    assert "alone grants no access" in pool_undelete_notes[0]
+
+    pool_update_notes = peass._cross_cloud_pivot_notes(
+        project, ["iam.googleapis.com/workloadIdentityPools.update"]
+    )
+    assert len(pool_update_notes) == 1
+    assert "Critical federation reactivation" in pool_update_notes[0]
+    assert "disabled=false" in pool_update_notes[0]
+    assert "alone grants no access" in pool_update_notes[0]
+
     organization = peass.normalize_resource("organizations/123456789")
     organization_notes = peass._cross_cloud_pivot_notes(
         organization, ["resourcemanager.organizations.setIamPolicy"]
