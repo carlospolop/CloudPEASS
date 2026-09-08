@@ -634,6 +634,7 @@ live_validated_disclosure_documentation = {
     "states:DescribeExecution": "aws-post-exploitation/aws-stepfunctions-post-exploitation/README.md",
     "states:GetActivityTask": "aws-post-exploitation/aws-stepfunctions-post-exploitation/README.md",
     "states:GetExecutionHistory": "aws-post-exploitation/aws-stepfunctions-post-exploitation/README.md",
+    "sts:GetFederationToken": "aws-privilege-escalation/aws-sts-privesc/README.md",
     "tax:GetTaxRegistration": "aws-services/aws-tax-settings-enum.md",
     "tax:ListTaxRegistrations": "aws-services/aws-tax-settings-enum.md",
     "transcribe:GetTranscriptionJob": "aws-services/aws-transcribe-enum.md",

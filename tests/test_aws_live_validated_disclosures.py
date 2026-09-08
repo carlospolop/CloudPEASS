@@ -126,6 +126,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "states:DescribeExecution",
     "states:GetActivityTask",
     "states:GetExecutionHistory",
+    "sts:GetFederationToken",
     "tax:GetTaxRegistration",
     "tax:ListTaxRegistrations",
     "transcribe:GetTranscriptionJob",

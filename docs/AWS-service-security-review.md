@@ -663,6 +663,22 @@ Both groups, both private buckets and objects, the CloudFormation stack, all fou
 every access key, and inline policies were deleted. Exact Resource Groups, CloudFormation, S3, and
 IAM prefix inventories returned empty.
 
+### AWS Security Token Service (`sts`) — evidence reconciliation — 2026-09-08
+
+The earlier live-tested `sts:GetFederationToken` result from commit `46c3d77` is now registered in
+the stricter disclosure-evidence map and tracker. It mints a separate temporary access key, secret,
+and session token for the current IAM user; requested session policies intersect with the user's
+authority, so it cannot escalate beyond that user. It remains High as credential hand-off and a
+session-lifetime extension primitive, not Critical privilege escalation. HackTricks already records
+the exact IAM-user prerequisite, 36-hour maximum, role/session restriction, permissionless
+`GetCallerIdentity` fallback, and a 15-minute restrictive demonstration.
+
+This reconciliation created no infrastructure and intentionally did not mint another STS session,
+because issued STS credentials cannot be explicitly destroyed. `AssumeRole`, SAML, web-identity,
+service-bearer, delegated-token, and root-session paths remain governed by their separate trust,
+provider/token, companion-permission, organization, and task-policy prerequisites; no unconditional
+impact is inferred from the STS action name alone.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
