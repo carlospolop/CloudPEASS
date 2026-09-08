@@ -2,6 +2,7 @@ from CloudPEASS.permission_risk_classifier import classify_permission
 from sensitive_permissions.aws import (
     live_validated_disclosure_documentation,
     sensitive_combinations,
+    very_sensitive_combinations,
 )
 
 
@@ -17,6 +18,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "appsync:ListApiKeys",
     "autoscaling:DescribeLaunchConfigurations",
     "batch:DescribeJobDefinitions",
+    "bedrock-agentcore:GetWorkloadAccessTokenForUserId",
     "cloudformation:DescribeStacks",
     "cloudformation:DescribeChangeSet",
     "cloudformation:GetTemplate",
@@ -35,6 +37,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "codecommit:GetCommit",
     "codecommit:GetFile",
     "codecommit:GitPull",
+    "codepipeline:PollForJobs",
+    "connect:GetFederationToken",
     "cognito-idp:AdminGetUser",
     "cognito-idp:DescribeUserPoolClient",
     "cognito-idp:DescribeIdentityProvider",
@@ -45,6 +49,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "dynamodb:Query",
     "dynamodb:Scan",
     "dynamodb:TransactGetItems",
+    "deadline:AssumeQueueRoleForRead",
+    "deadline:AssumeQueueRoleForUser",
     "ec2:DescribeLaunchTemplateVersions",
     "ec2:DescribeInstanceAttribute",
     "ebs:GetSnapshotBlock",
@@ -61,6 +67,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "greengrass:GetComponentVersionArtifact",
     "imagebuilder:GetComponent",
     "iot:GetThingShadow",
+    "iotwireless:GetWirelessDevice",
     "kinesis:GetRecords",
     "kinesisanalytics:DescribeApplication",
     "lambda:GetFunctionConfiguration",
@@ -74,6 +81,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "invoicing:ListInvoiceSummaries",
     "sagemaker:DescribeModel",
     "sagemaker:DescribeTrainingJob",
+    "s3:GetDataAccess",
+    "s3express:CreateSession",
     "scheduler:GetSchedule",
     "pipes:DescribePipe",
     "ses:GetSuppressedDestination",
@@ -92,6 +101,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "tax:GetTaxRegistration",
     "tax:ListTaxRegistrations",
     "transcribe:GetTranscriptionJob",
+    "wisdom:GetContent",
 }
 
 
@@ -119,3 +129,47 @@ def test_live_validated_disclosures_have_service_specific_evidence():
                 "aws-services/",
             )
         )
+
+
+def test_live_validated_appconfig_data_disclosure_requires_both_actions():
+    combination = (
+        "appconfig:StartConfigurationSession",
+        "appconfig:GetLatestConfiguration",
+    )
+    combinations = {tuple(candidate) for candidate in sensitive_combinations}
+    assert combination in combinations
+    assert (combination[0],) not in combinations
+    assert (combination[1],) not in combinations
+    for action in combination:
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-appconfig-enum.md"
+        )
+
+
+def test_live_validated_lex_export_disclosure_requires_export_workflow():
+    combination = ("lex:CreateExport", "lex:DescribeExport")
+    combinations = {tuple(candidate) for candidate in sensitive_combinations}
+    assert combination in combinations
+    for action in combination:
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-lex-v2-enum.md"
+        )
+
+
+def test_live_validated_agentcore_api_key_disclosure_requires_full_chain():
+    combination = (
+        "bedrock-agentcore:GetWorkloadAccessTokenForUserId",
+        "bedrock-agentcore:GetResourceApiKey",
+        "secretsmanager:GetSecretValue",
+    )
+    combinations = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert combination in combinations
+    assert live_validated_disclosure_documentation[combination[0]] == (
+        "aws-services/aws-bedrock-enum.md"
+    )
+    assert live_validated_disclosure_documentation[combination[1]] == (
+        "aws-services/aws-bedrock-enum.md"
+    )
+    assert live_validated_disclosure_documentation[combination[2]] == (
+        "aws-services/aws-secrets-manager-enum.md"
+    )
