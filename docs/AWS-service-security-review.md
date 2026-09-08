@@ -262,3 +262,21 @@ are prerequisites. Each EventBridge action remains medium alone.
 All three rules and targets, the custom bus, function, bucket and object versions, four IAM roles,
 inline policies, and Lambda resource-policy statements were deleted. Exact prefix checks returned
 no active EventBridge, Lambda, S3, or IAM fixture.
+
+### IAM Roles Anywhere (`rolesanywhere`) — 2026-09-08
+
+Live validation confirmed that `rolesanywhere:UpdateTrustAnchor` alone can replace the CA
+certificate bundle behind an existing trust anchor. A client certificate issued by the synthetic
+attacker CA was rejected before the update. A no-permission IAM user was denied the update, while a
+restricted user with only `UpdateTrustAnchor` replaced the anchor. The unchanged certificate then
+obtained temporary credentials for the existing profile's target role and returned organization
+metadata unavailable to the restricted user directly. No `iam:PassRole` was used.
+
+The permission is critical when the anchor is enabled, an enabled profile names a useful role, the
+role trusts `rolesanywhere.amazonaws.com`, and its trust-policy conditions accept the certificate's
+subject/issuer/SAN attributes and source anchor. Strong `aws:SourceArn`, `aws:SourceAccount`, and
+principal-tag conditions can prevent a swapped CA from satisfying the role trust.
+
+The trust anchor, profile, target role, two disposable IAM users and access keys, inline policies,
+local CA/client keys, and the service-linked role created by the first anchor were deleted. Exact
+Roles Anywhere and IAM inventories returned empty.

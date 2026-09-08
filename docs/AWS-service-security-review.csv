@@ -48,7 +48,7 @@
 "P0","queued","redshift","Amazon Redshift","","",""
 "P0","queued","redshift-data","Amazon Redshift Data API","","",""
 "P0","queued","resource-groups","AWS Resource Groups","","",""
-"P0","queued","rolesanywhere","AWS Identity and Access Management Roles Anywhere","","","Hypothesis Q05: test trust-anchor mutation with an existing profile/role to mint certificate-backed sessions and isolate trust-policy requirements."
+"P0","validated","rolesanywhere","AWS Identity and Access Management Roles Anywhere","2026-09-08","UpdateTrustAnchor alone replaced an existing certificate-bundle CA; a certificate rejected before the update then obtained target-role credentials and returned Organizations data.","No-permission update control and direct Organizations call were denied. Requires an active profile naming the role, a Roles Anywhere role trust, and certificate attributes accepted by any trust-policy conditions."
 "P0","queued","route53","Amazon Route 53","","",""
 "P0","queued","route53domains","Amazon Route 53 Domains","","",""
 "P0","queued","s3","Amazon S3","","",""

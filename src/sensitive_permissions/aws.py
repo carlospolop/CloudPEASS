@@ -127,6 +127,8 @@ very_sensitive_combinations = [
 
     ["route53:CreateHostedZone", "route53:ChangeResourceRecordSets", "acm-pca:IssueCertificate",  "acm-pca:GetCertificate"],
 
+    ["rolesanywhere:UpdateTrustAnchor"],
+
     ["sns:AddPermission"],
 
     ["sqs:AddPermission"],
@@ -504,6 +506,8 @@ live_validated_disclosure_documentation = {
     "codecommit:GetFile": "aws-services/aws-datapipeline-codepipeline-codebuild-and-codecommit.md",
     "codecommit:GitPull": "aws-services/aws-datapipeline-codepipeline-codebuild-and-codecommit.md",
     "codepipeline:PollForJobs": "aws-services/aws-datapipeline-codepipeline-codebuild-and-codecommit.md",
+    "chime:GetChannelMessage": "aws-services/aws-chime-sdk-enum.md",
+    "chime:ListChannelMessages": "aws-services/aws-chime-sdk-enum.md",
     "connect:GetAttachedFile": "aws-services/aws-connect-enum.md",
     "connect:GetFederationToken": "aws-services/aws-connect-enum.md",
     "cognito-idp:AdminGetUser": "aws-services/aws-cognito-enum/cognito-user-pools.md",
@@ -546,6 +550,11 @@ live_validated_disclosure_documentation = {
     "ivschat:CreateChatToken": "aws-services/aws-ivs-chat-enum.md",
     "kinesis:GetRecords": "aws-services/aws-kinesis-data-streams-enum.md",
     "kinesisanalytics:DescribeApplication": "aws-services/aws-managed-flink-enum.md",
+    "kinesisvideo:GetClip": "aws-services/aws-kinesis-video-streams-enum.md",
+    "kinesisvideo:GetDASHStreamingSessionURL": "aws-services/aws-kinesis-video-streams-enum.md",
+    "kinesisvideo:GetHLSStreamingSessionURL": "aws-services/aws-kinesis-video-streams-enum.md",
+    "kinesisvideo:GetImages": "aws-services/aws-kinesis-video-streams-enum.md",
+    "kinesisvideo:GetMediaForFragmentList": "aws-services/aws-kinesis-video-streams-enum.md",
     "lambda:GetFunctionConfiguration": "aws-privilege-escalation/aws-lambda-privesc/README.md",
     "lambda:GetLayerVersion": "aws-privilege-escalation/aws-lambda-privesc/README.md",
     "lex:CreateExport": "aws-services/aws-lex-v2-enum.md",
@@ -582,6 +591,7 @@ live_validated_disclosure_documentation = {
     "pipes:DescribePipe": "aws-services/eventbridgescheduler-enum.md",
     "profile:SearchProfiles": "aws-services/aws-connect-customer-profiles-enum.md",
     "rum:GetAppMonitorData": "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md",
+    "rolesanywhere:UpdateTrustAnchor": "aws-privilege-escalation/aws-sts-privesc/README.md",
     "ssm:GetDocument": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "ssm:GetOpsItem": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "ssm:StartAutomationExecution": "aws-privilege-escalation/aws-ssm-privesc/README.md",

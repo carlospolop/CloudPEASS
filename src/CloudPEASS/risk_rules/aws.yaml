@@ -31,6 +31,7 @@ critical_exact:
   - kms:PutKeyPolicy
   - lambda:UpdateFunctionCode
   - lambda:UpdateFunctionConfiguration
+  - rolesanywhere:UpdateTrustAnchor
   - s3:PutBucketPolicy
   - s3:PutAccessPointPolicy
   # S3 boundary-changing ACL operations (treat as critical via exact match)
@@ -121,6 +122,8 @@ high_exact:
   - codecommit:GetFile
   - codecommit:GitPull
   - codepipeline:PollForJobs
+  - chime:GetChannelMessage
+  - chime:ListChannelMessages
   - connect:GetAttachedFile
   - connect:GetFederationToken
   - cognito-idp:AdminGetUser
@@ -159,6 +162,11 @@ high_exact:
   - ivschat:CreateChatToken
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
+  - kinesisvideo:GetClip
+  - kinesisvideo:GetDASHStreamingSessionURL
+  - kinesisvideo:GetHLSStreamingSessionURL
+  - kinesisvideo:GetImages
+  - kinesisvideo:GetMediaForFragmentList
   - lambda:GetFunction
   - lambda:GetFunctionConfiguration
   - lambda:GetLayerVersion
@@ -394,8 +402,6 @@ low_exact:
   - elasticbeanstalk:DescribeEvents
   - elasticbeanstalk:ListAvailableSolutionStacks
   - elasticbeanstalk:ListPlatformVersions
-  - kinesisvideo:GetDASHStreamingSessionURL
-  - kinesisvideo:GetHLSStreamingSessionURL
   - kinesisvideo:GetIceServerConfig
   - kinesisvideo:ListFragments
   # Iterator creation alone does not return stream records.

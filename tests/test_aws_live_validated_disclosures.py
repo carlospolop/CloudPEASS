@@ -41,6 +41,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "codecommit:GetFile",
     "codecommit:GitPull",
     "codepipeline:PollForJobs",
+    "chime:GetChannelMessage",
+    "chime:ListChannelMessages",
     "connect:GetAttachedFile",
     "connect:GetFederationToken",
     "cognito-idp:AdminGetUser",
@@ -78,6 +80,11 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "ivschat:CreateChatToken",
     "kinesis:GetRecords",
     "kinesisanalytics:DescribeApplication",
+    "kinesisvideo:GetClip",
+    "kinesisvideo:GetDASHStreamingSessionURL",
+    "kinesisvideo:GetHLSStreamingSessionURL",
+    "kinesisvideo:GetImages",
+    "kinesisvideo:GetMediaForFragmentList",
     "lambda:GetFunctionConfiguration",
     "lambda:GetLayerVersion",
     "logs:FilterLogEvents",
@@ -144,6 +151,34 @@ def test_live_validated_disclosures_have_service_specific_evidence():
                 "aws-privilege-escalation/",
                 "aws-services/",
             )
+        )
+
+
+def test_live_validated_chime_message_disclosures():
+    actions = ("chime:GetChannelMessage", "chime:ListChannelMessages")
+    for action in actions:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "high"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-chime-sdk-enum.md"
+        )
+
+
+def test_live_validated_kinesis_video_disclosures():
+    actions = (
+        "kinesisvideo:GetClip",
+        "kinesisvideo:GetDASHStreamingSessionURL",
+        "kinesisvideo:GetHLSStreamingSessionURL",
+        "kinesisvideo:GetImages",
+        "kinesisvideo:GetMediaForFragmentList",
+    )
+    for action in actions:
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "high"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-kinesis-video-streams-enum.md"
         )
 
 
@@ -333,6 +368,18 @@ def test_live_validated_eventbridge_target_attachment_escalation_requires_pair()
         assert live_validated_disclosure_documentation[action] == (
             "aws-privilege-escalation/aws-eventbridge-privesc/README.md"
         )
+
+
+def test_live_validated_roles_anywhere_trust_anchor_replacement():
+    action = "rolesanywhere:UpdateTrustAnchor"
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert (action,) in critical
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "critical"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-privilege-escalation/aws-sts-privesc/README.md"
+    )
 
 
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
