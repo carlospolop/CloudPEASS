@@ -148,6 +148,8 @@ high_exact:
   - logs:GetLogRecord
   - logs:GetLogEvents
   - logs:GetQueryResults
+  - medical-imaging:GetImageFrame
+  - medical-imaging:GetImageSetMetadata
   - omics:GetReadSet
   - invoicing:BatchGetInvoiceProfile
   - invoicing:GetInvoicePDF
@@ -253,6 +255,8 @@ high_override_exact:
   - ivschat:CreateChatToken
   - kinesis:GetRecords
   - kinesisanalytics:DescribeApplication
+  - medical-imaging:GetImageFrame
+  - medical-imaging:GetImageSetMetadata
   - omics:GetReadSet
   - invoicing:BatchGetInvoiceProfile
   - invoicing:GetInvoicePDF

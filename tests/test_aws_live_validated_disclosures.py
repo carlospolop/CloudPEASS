@@ -80,6 +80,8 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "logs:GetLogRecord",
     "logs:GetLogEvents",
     "logs:GetQueryResults",
+    "medical-imaging:GetImageFrame",
+    "medical-imaging:GetImageSetMetadata",
     "omics:GetReadSet",
     "invoicing:BatchGetInvoiceProfile",
     "invoicing:GetInvoicePDF",
