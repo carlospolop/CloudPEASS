@@ -48,6 +48,14 @@ positives.
 The first completed service is AWS Backup (`backup`). The next service is selected from the P0
 queue after the AWS Backup changes and cleanup verification are published.
 
+On 2026-09-08 the tracker was reconciled with
+`live_validated_disclosure_documentation` and its regression suite. Fifty-six previously queued
+service prefixes already had an evidence-backed action, a dedicated automated assertion, and a
+service-specific HackTricks document; those rows now record the exact actions and documents as
+`validated`. This reconciliation created no infrastructure and made no new severity decision. A
+tracker regression test prevents a prefix with registered live evidence from silently remaining
+queued.
+
 ## Ranked P0 hypothesis queue
 
 These are test plans, not findings. The order favors paths that might reuse an existing service
