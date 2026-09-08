@@ -475,6 +475,18 @@ def test_live_validated_iam_cross_user_access_key_takeover():
     )
 
 
+def test_live_validated_route53_existing_zone_record_takeover():
+    action = "route53:ChangeResourceRecordSets"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-route53-enum.md"
+    )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

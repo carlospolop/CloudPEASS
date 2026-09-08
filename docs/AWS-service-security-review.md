@@ -480,6 +480,26 @@ enumerated and deleted every access key before deleting all three synthetic user
 policies; the exact-prefix IAM user inventory returned empty. A prior propagation-sensitive run
 was also cleaned by enumerating every key rather than relying on a cached identifier.
 
+### Amazon Route 53 (`route53`) — 2026-09-08
+
+Validated `route53:ChangeResourceRecordSets` as an existing-zone DNS takeover primitive. A
+synthetic public hosted zone began with an A record resolving to `192.0.2.10`. The attacking user
+had only the candidate action on the exact hosted-zone ARN, was denied `ListHostedZones`, and knew
+the zone ID and record name. A separate no-permission user was denied the same UPSERT. The attacker
+changed the existing record to `192.0.2.99`; after Route 53 reported the change synchronized, a
+direct query to the zone's public authoritative name server returned `192.0.2.99`.
+
+The permission is High in isolation because control of an existing record can redirect application
+or email traffic and can satisfy some DNS-based ownership checks; the final impact depends on what
+the name serves and on transport authentication. The already-recorded multi-permission private-DNS
+and Private CA chain remains Critical separately. `route53:ListHostedZones` is not required: zone
+IDs and record names commonly appear in IaC state, deployment output, CloudTrail, application and
+resolver configuration, CI/CD variables, logs, errors, console URLs, and NS/SOA lookups.
+
+Cleanup first deleted the exact altered record and then the synthetic hosted zone. Both IAM users,
+their access keys, and the inline policy were deleted. Exact Route 53 and IAM prefix inventories
+returned empty; no existing account-owned zone was modified.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

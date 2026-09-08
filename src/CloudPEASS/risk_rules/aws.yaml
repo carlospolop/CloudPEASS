@@ -193,6 +193,7 @@ high_exact:
   - invoicing:ListInvoiceSummaries
   - pipes:DescribePipe
   - profile:SearchProfiles
+  - route53:ChangeResourceRecordSets
   - route53domains:GetDomainDetail
   - rum:GetAppMonitorData
   - s3:GetDataAccess
