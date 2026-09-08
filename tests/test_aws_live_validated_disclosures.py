@@ -321,6 +321,20 @@ def test_live_validated_signer_lambda_code_signing_bypass():
     )
 
 
+def test_live_validated_eventbridge_target_attachment_escalation_requires_pair():
+    combination = ("events:PutTargets", "events:PutEvents")
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert combination in critical
+    for action in combination:
+        assert (action,) not in critical
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "medium"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-privilege-escalation/aws-eventbridge-privesc/README.md"
+        )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

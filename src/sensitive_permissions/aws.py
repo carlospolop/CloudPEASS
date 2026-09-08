@@ -54,6 +54,8 @@ very_sensitive_combinations = [
     ["ecs:RegisterTaskDefinition"],
     ["ecs:ExecuteCommand"],
 
+    ["events:PutTargets", "events:PutEvents"],
+
     ["elasticfilesystem:DeleteFileSystemPolicy"],
     ["elasticfilesystem:PutFileSystemPolicy"],
 
@@ -523,6 +525,8 @@ live_validated_disclosure_documentation = {
     "ecr:GetDownloadUrlForLayer": "aws-post-exploitation/aws-ecr-post-exploitation/README.md",
     "ecs:DescribeTaskDefinition": "aws-services/aws-ecs-enum.md",
     "ecs:DescribeTasks": "aws-services/aws-ecs-enum.md",
+    "events:PutEvents": "aws-privilege-escalation/aws-eventbridge-privesc/README.md",
+    "events:PutTargets": "aws-privilege-escalation/aws-eventbridge-privesc/README.md",
     "emr-serverless:GetApplication": "aws-services/aws-emr-enum.md",
     "emr-serverless:GetJobRun": "aws-services/aws-emr-enum.md",
     "events:ListTargetsByRule": "aws-services/eventbridgescheduler-enum.md",

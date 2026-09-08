@@ -74,6 +74,10 @@ medium_override_exact:
   # EC2/on-premises group targets a useful instance profile.
   - codedeploy:CreateDeployment
   - codedeploy:RegisterApplicationRevision
+  # A trusted target resource policy and controllable event bus/rule are also
+  # required. The pair can invoke privileged code; neither action does so alone.
+  - events:PutEvents
+  - events:PutTargets
   # No supported caller-facing API exposes connection credentials directly.
   - events:RetrieveConnectionCredentials
 

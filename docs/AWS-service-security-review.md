@@ -48,6 +48,31 @@ positives.
 The first completed service is AWS Backup (`backup`). The next service is selected from the P0
 queue after the AWS Backup changes and cleanup verification are published.
 
+## Ranked P0 hypothesis queue
+
+These are test plans, not findings. The order favors paths that might reuse an existing service
+role, weaken a trust boundary, expose a credential, or clone protected data. Each row must still
+pass the evidence gate before it can change a permission severity or appear in HackTricks.
+
+| Rank | Service | Next isolated hypothesis |
+| ---: | --- | --- |
+| Q01 | EventBridge Pipes | Change an existing pipe's target, enrichment, or input and start it under its stored execution role; determine whether reusing the same role avoids or still enforces `iam:PassRole`. |
+| Q02 | EventBridge Scheduler | Change an existing schedule's target or universal-target input while preserving its role; independently test the same-role pass-role check. |
+| Q03 | AWS Config | Point remediation at a preauthorized SSM Automation path and call `StartRemediationExecution`; distinguish Config permissions from SSM and pass-role checks. |
+| Q04 | CodeConnections | Use an installed connection through an existing or synthetic consumer to determine whether `UseConnection` exposes or executes otherwise inaccessible private repository content. |
+| Q05 | IAM Roles Anywhere | Mutate a trust anchor used by an existing profile and role, then attempt a certificate-backed session; retain the exact role trust and profile prerequisites. |
+| Q06 | SageMaker | Replace a notebook lifecycle configuration and start an existing notebook under its attached role without changing or passing that role. |
+| Q07 | AWS Batch | Register and submit attacker code against existing job and execution roles; remove each `iam:PassRole` and Batch dependency independently. |
+| Q08 | API Gateway | Mutate an integration or deployment to intercept backend data or reuse stored credentials, separating control-plane changes from invoke permission. |
+| Q09 | ACM Private CA | Issue a certificate from a CA trusted for workload mTLS and prove impersonation at a synthetic relying service; test template and CA-policy boundaries. |
+| Q10 | EKS | Create an access entry and attach an EKS access policy, then prove Kubernetes authorization rather than treating accepted IAM APIs as impact. |
+| Q11 | OpenSearch | Change a domain access policy or another authorization surface and prove new data-plane access with a denied-before control. |
+| Q12 | RDS | Share, copy, or restore an unencrypted snapshot and read a canary without source-instance access; record customer-managed KMS blockers separately. |
+| Q13 | FSx | Copy, share, or restore a backup and mount/read a canary without source-filesystem permission. |
+| Q14 | EventBridge | Attach a target to an existing rule and attempt execution through an existing service role or target resource policy, with and without `iam:PassRole`. |
+| Q15 | Secrets Manager | Use `PutResourcePolicy` for a same-account or cross-account self-grant and prove `GetSecretValue`, including `BlockPublicPolicy` and KMS boundaries. |
+| Q16 | S3 Object Lambda | Test access-point policy self-grant and a known transformed-object path while the caller remains denied direct source-object access. |
+
 Source catalog: <https://awspolicygen.s3.amazonaws.com/js/policies.js>
 
 ## Review log
@@ -189,3 +214,51 @@ entry points and may change infrastructure or expose role-only output. A useful 
 required parameter values remain prerequisites. Both completed executions became immutable history;
 the document and two test roles were deleted, and exact checks returned no active Automation, IAM,
 or tagged fixture.
+
+### AWS Signer (`signer`) — 2026-09-08
+
+Live validation confirmed a code-signing trust bypass when `signer:StartSigningJob` covers the exact
+profile version trusted by an enforcing Lambda Code Signing Config. The restricted caller staged an
+attacker-controlled ZIP, signed it with that trusted profile, and used
+`lambda:UpdateFunctionCode` to deploy it to an existing function. The caller had no
+`iam:PassRole` and was denied `organizations:DescribeOrganization`, but an independent invocation
+returned the function execution-role ARN and organization ID.
+
+The unsigned deployment was rejected with `CodeVerificationFailedException`. A role lacking
+`StartSigningJob` could not sign, while a signing-only role produced a valid signed ZIP but was
+denied `UpdateFunctionCode`. Lambda also enforced `lambda:GetCodeSigningConfig` during the update.
+Minimization runs reduced the S3 prerequisites to `ListBucket`, `GetObjectVersion`, and `PutObject`
+for signing, plus `GetObject` so Lambda could fetch the signed result. `GetBucketLocation` and
+`GetBucketVersioning` were removed and the complete path still succeeded.
+
+`StartSigningJob` is high because it is authority to produce artifacts accepted as a trusted
+publisher; the end-to-end Lambda execution path is conditional critical and additionally requires
+an enforcing configuration that trusts the profile, code-update access, controlled staging objects,
+and a function role with useful access. List and describe permissions were absent from the attack
+sessions. Known names and versions can instead come from SAM/CloudFormation templates, CI files,
+artifact manifests, cached command output, errors, or shell history.
+
+All functions, code-signing configurations, buckets and every object version, IAM roles, and inline
+policies were deleted. Signer jobs remain immutable history, and each test signing profile was
+canceled and revoked because Signer does not permit reusing or physically deleting its name after
+cancellation. Exact checks returned no active compute, S3, Lambda, or IAM fixture.
+
+### Amazon EventBridge (`events`) — 2026-09-08
+
+Live validation confirmed that `events:PutTargets` plus `events:PutEvents` can invoke an existing
+privileged Lambda without `lambda:InvokeFunction` or `iam:PassRole` when the Lambda resource policy
+already trusts the targeted rule ARN. Three administrator-created rules on a synthetic custom bus
+isolated the controls. A PutEvents-only role emitted before any target existed and no proof object
+appeared; it was denied PutTargets. A PutTargets-only role attached the function but was denied
+PutEvents. The full role attached the same function to a third rule, emitted an attacker-controlled
+event, and read a proof containing the function execution-role ARN and organization ID.
+
+The caller was independently denied direct Lambda invocation and
+`organizations:DescribeOrganization`. No execution role was supplied to `PutTargets`; Lambda
+authorized `events.amazonaws.com` through its own resource policy. This pair is conditional
+critical because a controllable bus/rule, a useful target, and a matching target resource policy
+are prerequisites. Each EventBridge action remains medium alone.
+
+All three rules and targets, the custom bus, function, bucket and object versions, four IAM roles,
+inline policies, and Lambda resource-policy statements were deleted. Exact prefix checks returned
+no active EventBridge, Lambda, S3, or IAM fixture.

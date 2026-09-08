@@ -704,6 +704,7 @@ class AwsRiskClassificationTest(unittest.TestCase):
             "lambda:GetFunction": "high",
             "route53domains:GetDomainDetail": "high",
             "s3:PutAccessPointPolicy": "critical",
+            "signer:StartSigningJob": "high",
             "ssm:StartAutomationExecution": "critical",
             "sts:GetFederationToken": "high",
         }
