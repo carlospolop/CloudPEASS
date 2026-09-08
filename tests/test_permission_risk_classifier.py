@@ -815,6 +815,28 @@ def test_live_validated_data_plane_disclosures_and_dependencies():
     assert ebs_chain not in sensitive_combinations
 
 
+def test_second_live_validated_data_disclosure_batch_is_high():
+    for permission in (
+        "appsync:GraphQL",
+        "cloudformation:DescribeChangeSet",
+        "codeartifact:GetPackageVersionAsset",
+        "ec2:DescribeInstanceAttribute",
+        "ecs:DescribeTasks",
+        "emr-serverless:GetJobRun",
+        "greengrass:GetComponentVersionArtifact",
+        "ses:GetEmailTemplate",
+        "sqs:ReceiveMessage",
+        "ssm:GetOpsItem",
+        "states:DescribeExecution",
+        "states:GetActivityTask",
+        "states:GetExecutionHistory",
+    ):
+        assert classify_permission(
+            "aws", permission, unknown_default="medium"
+        ) == "high"
+        assert [permission] in sensitive_combinations
+
+
 def test_elastic_beanstalk_configuration_secret_requires_s3_dependencies():
     assert [
         "elasticbeanstalk:DescribeConfigurationSettings",

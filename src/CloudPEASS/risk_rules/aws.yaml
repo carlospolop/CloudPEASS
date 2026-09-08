@@ -66,11 +66,13 @@ high_exact:
   - apigateway:GET
   - athena:GetQueryExecution
   - appconfig:GetHostedConfigurationVersion
+  - appsync:GraphQL
   - appsync:ListApiKeys
   - appstream:CreateStreamingURL
   - autoscaling:DescribeLaunchConfigurations
   - batch:DescribeJobDefinitions
   - cloudformation:DescribeStacks
+  - cloudformation:DescribeChangeSet
   - cloudformation:GetTemplate
   - cloudformation:GetTemplateSummary
   - cloudformation:ListExports
@@ -82,6 +84,7 @@ high_exact:
   - ce:GetCostAndUsage
   - codebuild:BatchGetBuilds
   - codebuild:BatchGetProjects
+  - codeartifact:GetPackageVersionAsset
   - codecommit:GetBlob
   - codecommit:GetCommit
   - codecommit:GetFile
@@ -97,15 +100,19 @@ high_exact:
   - dynamodb:Scan
   - dynamodb:TransactGetItems
   - ec2:DescribeLaunchTemplateVersions
+  - ec2:DescribeInstanceAttribute
   - ebs:GetSnapshotBlock
   - ecr:GetDownloadUrlForLayer
   - ecs:DescribeTaskDefinition
+  - ecs:DescribeTasks
   - emr-serverless:GetApplication
+  - emr-serverless:GetJobRun
   - events:ListTargetsByRule
   - execute-api:Invoke
   - glue:GetConnection
   - glue:GetJob
   - glue:GetWorkflowRunProperties
+  - greengrass:GetComponentVersionArtifact
   - imagebuilder:GetComponent
   - iot:GetThingShadow
   - kinesis:GetRecords
@@ -126,14 +133,20 @@ high_exact:
   - sagemaker:DescribeTrainingJob
   - scheduler:GetSchedule
   - ses:GetSuppressedDestination
+  - ses:GetEmailTemplate
   - ses:ListSuppressedDestinations
   - secretsmanager:PutSecretValue
   - secretsmanager:UpdateSecret
   - sns:ListSubscriptions
   - sns:ListSubscriptionsByTopic
+  - sqs:ReceiveMessage
   - ssm:GetDocument
+  - ssm:GetOpsItem
   - ssm:GetParameterHistory
   - states:DescribeStateMachine
+  - states:DescribeExecution
+  - states:GetActivityTask
+  - states:GetExecutionHistory
   - sts:GetFederationToken
   - tax:GetTaxRegistration
   - tax:ListTaxRegistrations
@@ -148,11 +161,13 @@ high_override_exact:
   - apigateway:GET
   - athena:GetQueryExecution
   - appconfig:GetHostedConfigurationVersion
+  - appsync:GraphQL
   - appsync:ListApiKeys
   - appstream:CreateStreamingURL
   - autoscaling:DescribeLaunchConfigurations
   - batch:DescribeJobDefinitions
   - cloudformation:DescribeStacks
+  - cloudformation:DescribeChangeSet
   - cloudformation:GetTemplate
   - cloudformation:GetTemplateSummary
   - cloudformation:ListExports
@@ -163,6 +178,7 @@ high_override_exact:
   - cloudtrail:LookupEvents
   - ce:GetCostAndUsage
   - codeartifact:GetAuthorizationToken
+  - codeartifact:GetPackageVersionAsset
   - codecommit:GetBlob
   - codecommit:GetCommit
   - codecommit:GetFile
@@ -177,16 +193,20 @@ high_override_exact:
   - dynamodb:Scan
   - dynamodb:TransactGetItems
   - ec2:DescribeLaunchTemplateVersions
+  - ec2:DescribeInstanceAttribute
   - ebs:GetSnapshotBlock
   - ec2:GetPasswordData
   - ecr:GetDownloadUrlForLayer
   - ecs:DescribeTaskDefinition
+  - ecs:DescribeTasks
   - emr-serverless:GetApplication
+  - emr-serverless:GetJobRun
   - events:ListTargetsByRule
   - execute-api:Invoke
   - glue:GetConnection
   - glue:GetJob
   - glue:GetWorkflowRunProperties
+  - greengrass:GetComponentVersionArtifact
   - imagebuilder:GetComponent
   - iot:GetThingShadow
   - kinesis:GetRecords
@@ -199,12 +219,18 @@ high_override_exact:
   - sagemaker:DescribeTrainingJob
   - scheduler:GetSchedule
   - ses:GetSuppressedDestination
+  - ses:GetEmailTemplate
   - ses:ListSuppressedDestinations
   - sns:ListSubscriptions
   - sns:ListSubscriptionsByTopic
+  - sqs:ReceiveMessage
   - ssm:GetDocument
+  - ssm:GetOpsItem
   - ssm:GetParameterHistory
   - states:DescribeStateMachine
+  - states:DescribeExecution
+  - states:GetActivityTask
+  - states:GetExecutionHistory
   - sts:GetDelegatedAccessToken
   - logs:FilterLogEvents
   - logs:GetLogRecord
