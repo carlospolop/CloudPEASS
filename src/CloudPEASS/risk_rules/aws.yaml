@@ -50,6 +50,7 @@ critical_exact:
   - ssm:SendCommand
   - ssm:StartAutomationExecution
   - ssm:StartSession
+  - sqs:SetQueueAttributes
   - sts:GetDelegatedAccessToken
   - sts:GetServiceBearerToken
 

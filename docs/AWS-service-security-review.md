@@ -407,3 +407,24 @@ variables, logs, error messages, or shell history.
 The resource policy was removed before the table was deleted and polled until absent. Both
 disposable IAM users, access keys, and the inline policy were deleted; exact DynamoDB and IAM
 prefix inventories returned empty.
+
+### Amazon SQS (`sqs`) — 2026-09-08
+
+Live validation confirmed that `sqs:SetQueueAttributes` alone can replace a queue's resource policy
+and grant the same-account caller access to message data. A synthetic IAM user had only that action
+on one exact queue and was denied `ReceiveMessage` before the change. A no-permission user was
+independently denied the attribute update.
+
+The restricted user installed a `Policy` attribute naming its exact IAM-user ARN and allowing only
+`sqs:ReceiveMessage`. After propagation, the same user recovered the seeded canary without an
+identity-based receive allow. This permission is Critical: besides arbitrary queue-policy control,
+the same setter can change redrive, retention, visibility, delay, encryption, and other attributes
+that influence confidentiality, integrity, or availability.
+
+The proof requires an owner-account caller because SQS does not permit cross-account callers to use
+`SetQueueAttributes`. A known queue URL is sufficient; when `ListQueues` or `GetQueueUrl` is denied,
+URLs commonly remain in application configuration, Lambda event-source mappings, environment
+variables, IaC, CI files, logs, errors, or shell history.
+
+The policy attribute was cleared before deleting the queue. Both disposable IAM users, access keys,
+and the inline policy were deleted; exact SQS and IAM prefix inventories returned empty.

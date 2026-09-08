@@ -132,6 +132,7 @@ very_sensitive_combinations = [
     ["sns:AddPermission"],
 
     ["sqs:AddPermission"],
+    ["sqs:SetQueueAttributes"],
 
     ["identitystore:CreateGroupMembership"],
     ["sso:PutInlinePolicyToPermissionSet", "sso:ProvisionPermissionSet"],
@@ -608,6 +609,7 @@ live_validated_disclosure_documentation = {
     "sns:ListSubscriptionsByTopic": "aws-services/aws-sns-enum.md",
     "sqs:ReceiveMessage": "aws-post-exploitation/aws-sqs-post-exploitation/README.md",
     "scheduler:GetSchedule": "aws-services/eventbridgescheduler-enum.md",
+    "sqs:SetQueueAttributes": "aws-post-exploitation/aws-sqs-post-exploitation/README.md",
     "pipes:DescribePipe": "aws-services/eventbridgescheduler-enum.md",
     "profile:SearchProfiles": "aws-services/aws-connect-customer-profiles-enum.md",
     "rum:GetAppMonitorData": "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md",
