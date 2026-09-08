@@ -198,6 +198,7 @@ sensitive_combinations = [
     ["Microsoft.Automation/automationAccounts/schedules/write", "Microsoft.Automation/automationAccounts/jobSchedules/write"],
     ["Microsoft.Automation/automationAccounts/sourceControls/write"],
     ["Microsoft.ContainerRegistry/registries/tasks/write"],
+    ["Microsoft.ContainerRegistry/registries/taskruns/write"],
     ["Microsoft.ContainerRegistry/registries/importImage/action"],
     ["Microsoft.ContainerRegistry/registries/tasks/listDetails/action"],
     ["Microsoft.ContainerRegistry/registries/taskruns/listDetails/action"],

@@ -551,6 +551,11 @@ _AZURE_HIGH_EXACT = frozenset(
         # only through listDetails; both no-role controls were denied.
         "microsoft.containerregistry/registries/tasks/listdetails/action",
         "microsoft.containerregistry/registries/taskruns/listdetails/action",
+        # Exact taskruns/write launched attacker-supplied encoded commands and
+        # pushed an attacker-selected build tag into the target registry. ARM
+        # separately enforced tasks/write and managed-identity assign/action
+        # for existing-Task reuse and direct UAMI attachment.
+        "microsoft.containerregistry/registries/taskruns/write",
     }
 )
 
