@@ -41,6 +41,8 @@ def test_direct_compromise_permissions_are_critical(permission):
 @pytest.mark.parametrize(
     "permission",
     [
+        "agentidentity.authProviders.retrieveCredentials",
+        "agentidentity.authProviders.update",
         "bigquery.tables.getData",
         "storage.objects.get",
         "artifactregistry.repositories.downloadArtifacts",

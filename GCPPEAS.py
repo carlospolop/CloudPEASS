@@ -46,6 +46,42 @@ CATALOG_URL = (
 TEST_CHUNK_SIZE = 100
 MAX_DIRECT_GROUP_QUERIES = 1000
 
+# Public Agent Identity auth-manager regions as of 2026-08-28. Keep this
+# fallback because the permission that reveals stored credentials does not
+# itself grant agentidentity.locations.list or authProviders.list. A caller
+# may therefore be able to test a known provider while every discovery call is
+# denied. The locations API is still queried first so newly added/private
+# regions are covered when it is available.
+AGENT_IDENTITY_LOCATIONS = frozenset(
+    {
+        "asia-east1",
+        "asia-east2",
+        "asia-northeast1",
+        "asia-northeast3",
+        "asia-south1",
+        "asia-south2",
+        "asia-southeast1",
+        "asia-southeast2",
+        "australia-southeast2",
+        "europe-southwest1",
+        "europe-west1",
+        "europe-west2",
+        "europe-west3",
+        "europe-west4",
+        "europe-west6",
+        "europe-west8",
+        "me-west1",
+        "northamerica-northeast1",
+        "northamerica-northeast2",
+        "southamerica-east1",
+        "us-central1",
+        "us-east1",
+        "us-east4",
+        "us-west1",
+        "us-west8",
+    }
+)
+
 # The normal paths below obtain a current catalog from Google or the public
 # iam-dataset. This deliberately compact set keeps every supported modern
 # resource useful when both network catalog sources are blocked. Names are
@@ -53,6 +89,11 @@ MAX_DIRECT_GROUP_QUERIES = 1000
 # remain covered by src.gcp.definitions and the sensitive-combination lists.
 BUILTIN_FALLBACK_PERMISSIONS = frozenset(
     {
+        "agentidentity.authProviders.get",
+        "agentidentity.authProviders.list",
+        "agentidentity.authProviders.retrieveCredentials",
+        "agentidentity.authProviders.update",
+        "agentidentity.locations.list",
         "artifactregistry.repositories.deleteArtifacts",
         "artifactregistry.repositories.downloadArtifacts",
         "artifactregistry.repositories.get",
@@ -241,6 +282,7 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
 )
 
 TYPE_PREFIXES = {
+    "auth_provider": ("agentidentity.authProviders.",),
     "vm": ("compute.instances.",),
     "function": ("cloudfunctions.functions.",),
     "storage": ("storage.buckets.", "storage.objects."),
@@ -262,6 +304,7 @@ TYPE_PREFIXES = {
 }
 
 ASSET_TYPE_HINTS = {
+    "agentidentity.googleapis.com/AuthProvider": "auth_provider",
     "compute.googleapis.com/Instance": "vm",
     "cloudfunctions.googleapis.com/CloudFunction": "function",
     "cloudfunctions.googleapis.com/Function": "function",
@@ -284,6 +327,7 @@ ASSET_TYPE_HINTS = {
 }
 
 RESOURCE_HOSTS = {
+    "auth_provider": "agentidentity.googleapis.com",
     "project": "cloudresourcemanager.googleapis.com",
     "folder": "cloudresourcemanager.googleapis.com",
     "organization": "cloudresourcemanager.googleapis.com",
@@ -517,7 +561,26 @@ class GCPPEASS(CloudPEASS):
             return [permission for permission in self.all_gcp_perms if permission not in exclusions]
         prefixes = TYPE_PREFIXES.get(res_type)
         if prefixes:
-            return [permission for permission in self.all_gcp_perms if permission.startswith(prefixes)]
+            permissions = [
+                permission
+                for permission in self.all_gcp_perms
+                if permission.startswith(prefixes)
+            ]
+            if res_type == "auth_provider":
+                # These are checked on projects/*/locations/*, not on an
+                # individual provider. Including either in a provider batch
+                # makes the service reject the whole request with a generic
+                # HTTP 400, masking valid resource-level permissions.
+                permissions = [
+                    permission
+                    for permission in permissions
+                    if permission
+                    not in {
+                        "agentidentity.authProviders.create",
+                        "agentidentity.authProviders.list",
+                    }
+                ]
+            return permissions
         return list(self.all_gcp_perms)
 
     # Resource names and permissionless/local discovery -----------------
@@ -573,6 +636,8 @@ class GCPPEASS(CloudPEASS):
             raw = f"projects/{sa_project}/serviceAccounts/{email}"
         elif raw.startswith("dns-zone:"):
             raw = raw.split(":", 1)[1]
+        elif raw.startswith("agent-auth-provider:"):
+            raw = raw.split(":", 1)[1]
         elif raw.startswith("function-v2:"):
             raw = raw.split(":", 1)[1]
             asset_type = "cloudfunctions.googleapis.com/Function"
@@ -625,6 +690,10 @@ class GCPPEASS(CloudPEASS):
             resource_type, host = "secret", host or "secretmanager.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/locations/[^/]+/services/[^/]+", path):
             resource_type, host = "run_service", "run.googleapis.com"
+        elif re.fullmatch(
+            r"projects/[^/]+/locations/[^/]+/authProviders/[^/]+", path
+        ):
+            resource_type, host = "auth_provider", host or "agentidentity.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/locations/[^/]+/jobs/[^/]+", path):
             resource_type, host = "run_job", "run.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/locations/[^/]+/repositories/[^/]+", path):
@@ -1209,6 +1278,66 @@ class GCPPEASS(CloudPEASS):
             if item.get("name")
         ]
 
+    def _discover_auth_providers(self, project: str) -> List[dict]:
+        """List Agent Identity credential vaults without retrieving credentials."""
+        locations = set(AGENT_IDENTITY_LOCATIONS)
+        first_error = None
+        try:
+            for item in self._paged_items(
+                f"https://agentidentity.googleapis.com/v1/projects/{project}/locations",
+                "locations",
+                params={"pageSize": 1000},
+            ):
+                location = (item.get("name") or "").rsplit("/", 1)[-1]
+                if location:
+                    locations.add(location)
+        except GCPApiError as exc:
+            disabled_message = f"{exc.reason} {exc.message}".lower()
+            if "service_disabled" in disabled_message or (
+                "api" in disabled_message and "disabled" in disabled_message
+            ):
+                raise
+            first_error = exc
+
+        targets = []
+        successful_locations = 0
+        with ThreadPoolExecutor(
+            max_workers=min(self.num_threads, len(locations) or 1)
+        ) as executor:
+            futures = {
+                executor.submit(
+                    self._paged_items,
+                    f"https://agentidentity.googleapis.com/v1/projects/{project}/"
+                    f"locations/{location}/authProviders",
+                    "authProviders",
+                    params={"pageSize": 1000, "showDeleted": False},
+                ): location
+                for location in sorted(locations)
+            }
+            for future in as_completed(futures):
+                try:
+                    items = future.result()
+                    successful_locations += 1
+                except GCPApiError as exc:
+                    first_error = first_error or exc
+                    continue
+                for item in items:
+                    if item.get("deleted") or not item.get("name"):
+                        continue
+                    target = self.normalize_resource(
+                        item["name"], source="Agent Identity auth-provider list"
+                    )
+                    if target:
+                        targets.append(target)
+
+        if locations and not successful_locations and first_error:
+            raise first_error
+        if first_error:
+            self._record_failure(
+                "Agent Identity auth providers in some locations", project, first_error
+            )
+        return targets
+
     def _discover_project_resources(self, project: str) -> List[dict]:
         targets = self._discover_assets(project)
         discoverers = [
@@ -1228,6 +1357,7 @@ class GCPPEASS(CloudPEASS):
             ("Cloud Run jobs", self._discover_run, (project, "jobs")),
             ("Artifact Registry", self._discover_artifacts, (project,)),
             ("Cloud KMS", self._discover_kms, (project,)),
+            ("Agent Identity auth providers", self._discover_auth_providers, (project,)),
         ]
         # Location-bound services are always checked independently. Cloud Asset
         # support and visibility can vary by resource type, so a successful
@@ -1346,6 +1476,7 @@ class GCPPEASS(CloudPEASS):
                 None,
             )
         hosts = {
+            "auth_provider": "agentidentity.googleapis.com/v1",
             "run_service": "run.googleapis.com/v2",
             "run_job": "run.googleapis.com/v2",
             "artifact_repository": "artifactregistry.googleapis.com/v1",
@@ -1519,6 +1650,7 @@ class GCPPEASS(CloudPEASS):
                 body,
             )
         hosts = {
+            "auth_provider": "agentidentity.googleapis.com/v1",
             "service_account": "iam.googleapis.com/v1",
             "run_service": "run.googleapis.com/v2",
             "run_job": "run.googleapis.com/v2",
@@ -1793,6 +1925,28 @@ class GCPPEASS(CloudPEASS):
                 "This requires a known deployment ID, an HTTP add-on, an installed/authorized user, "
                 "and later user interaction; it does not bypass OAuth consent or expose every "
                 "Workspace user's data."
+            )
+        if "agentidentity.authProviders.retrieveCredentials" in permission_set:
+            notes.append(
+                "High credential-vault access: agentidentity.authProviders.retrieveCredentials "
+                "returns the stored API key or OAuth access token even when the principal cannot "
+                "get or list the auth provider. API-key providers accept any non-empty userId; "
+                "3-legged OAuth tokens require the exact, case-sensitive userId that completed "
+                "consent. A Google OAuth provider can therefore expose that user's Workspace data "
+                "within the previously consented scopes, but this does not bypass consent or grant "
+                "access to arbitrary users. GCPPEASS never calls credentials:retrieve. If discovery "
+                "is denied, pass the known provider as --resource "
+                "agent-auth-provider:projects/PROJECT/locations/LOCATION/authProviders/NAME."
+            )
+        if "agentidentity.authProviders.update" in permission_set:
+            notes.append(
+                "High credential-interception path: agentidentity.authProviders.update can replace "
+                "a 3-legged OAuth provider's tokenUrl without provider get/list or credential "
+                "retrieval access. On a later legitimate token refresh, the vault sends the stored "
+                "user refresh token plus the OAuth client ID and client secret to that endpoint. "
+                "This requires an existing 3LO provider, a previously authorized user, and a later "
+                "refresh; it does not immediately expose credentials by itself. GCPPEASS reports "
+                "the permission but never modifies an auth provider."
             )
         if "iam.googleapis.com/workloadIdentityPoolProviders.create" in permission_set:
             notes.append(
@@ -2351,7 +2505,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Known resource name; repeat the option or use commas. Accepts full //service/name "
             "names, canonical projects/... names, gs://bucket, bucket:NAME, service-account:EMAIL, "
-            "and dns-zone:projects/PROJECT/managedZones/ZONE"
+            "dns-zone:projects/PROJECT/managedZones/ZONE, and "
+            "agent-auth-provider:projects/PROJECT/locations/LOCATION/authProviders/NAME"
         ),
     )
 

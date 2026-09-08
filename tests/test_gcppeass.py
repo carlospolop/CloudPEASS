@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from GCPPEAS import (
+    AGENT_IDENTITY_LOCATIONS,
     BUILTIN_FALLBACK_PERMISSIONS,
     TYPE_PREFIXES,
     GCPPEASS,
@@ -101,6 +102,11 @@ def bare_peass():
             "dns-zone:projects/demo-project/managedZones/public-zone",
             "dns_zone",
             "projects/demo-project/managedZones/public-zone",
+        ),
+        (
+            "agent-auth-provider:projects/demo-project/locations/us-central1/authProviders/github",
+            "auth_provider",
+            "projects/demo-project/locations/us-central1/authProviders/github",
         ),
     ],
 )
@@ -467,6 +473,34 @@ def test_addon_fallback_covers_live_tested_workspace_endpoint_takeover():
     assert "gsuiteaddons.deployments.update" in BUILTIN_FALLBACK_PERMISSIONS
 
 
+def test_agent_identity_fallback_covers_vault_permission_and_public_regions():
+    assert TYPE_PREFIXES["auth_provider"] == ("agentidentity.authProviders.",)
+    assert {
+        "agentidentity.authProviders.get",
+        "agentidentity.authProviders.list",
+        "agentidentity.authProviders.retrieveCredentials",
+        "agentidentity.authProviders.update",
+        "agentidentity.locations.list",
+    } <= BUILTIN_FALLBACK_PERMISSIONS
+    assert {"us-central1", "europe-west1", "asia-east1"} <= AGENT_IDENTITY_LOCATIONS
+
+
+def test_agent_identity_resource_catalog_excludes_parent_only_permissions():
+    peass = bare_peass()
+    peass.all_gcp_perms = [
+        "agentidentity.authProviders.create",
+        "agentidentity.authProviders.get",
+        "agentidentity.authProviders.list",
+        "agentidentity.authProviders.retrieveCredentials",
+        "agentidentity.authProviders.update",
+    ]
+    assert peass.get_relevant_permissions("auth_provider") == [
+        "agentidentity.authProviders.get",
+        "agentidentity.authProviders.retrieveCredentials",
+        "agentidentity.authProviders.update",
+    ]
+
+
 def test_testable_catalog_drops_cross_service_permissions():
     peass = bare_peass()
     peass._testable_cache = {}
@@ -596,6 +630,68 @@ def test_cloud_dns_zone_discovery_and_read_only_request_builders():
     assert body == {"permissions": ["dns.changes.create"]}
 
 
+def test_agent_identity_discovery_uses_public_location_fallback_and_skips_deleted():
+    peass = bare_peass()
+    calls = []
+
+    def paged(url, key, params=None):
+        calls.append((url, key, dict(params or {})))
+        if url.endswith("/locations"):
+            raise GCPApiError(403, "Permission denied", url, "IAM_PERMISSION_DENIED")
+        if "/locations/us-central1/authProviders" in url:
+            return [
+                {
+                    "name": "projects/demo-project/locations/us-central1/authProviders/live",
+                },
+                {
+                    "name": "projects/demo-project/locations/us-central1/authProviders/deleted",
+                    "deleted": True,
+                },
+            ]
+        return []
+
+    peass._paged_items = paged
+    targets = peass._discover_auth_providers("demo-project")
+    assert [target["id"] for target in targets] == [
+        "projects/demo-project/locations/us-central1/authProviders/live"
+    ]
+    assert targets[0]["source"] == "Agent Identity auth-provider list"
+    list_calls = [call for call in calls if call[1] == "authProviders"]
+    assert len(list_calls) == len(AGENT_IDENTITY_LOCATIONS)
+    assert all(call[2]["showDeleted"] is False for call in list_calls)
+
+
+def test_agent_identity_disabled_api_does_not_fan_out_to_every_region():
+    peass = bare_peass()
+    calls = []
+
+    def disabled(url, key, params=None):
+        calls.append(url)
+        raise GCPApiError(403, "API is disabled", url, "SERVICE_DISABLED")
+
+    peass._paged_items = disabled
+    with pytest.raises(GCPApiError):
+        peass._discover_auth_providers("demo-project")
+    assert len(calls) == 1
+
+
+def test_agent_identity_policy_and_permission_calls_are_read_only():
+    peass = bare_peass()
+    target = peass.normalize_resource(
+        "//agentidentity.googleapis.com/projects/demo-project/locations/us-central1/"
+        "authProviders/github"
+    )
+    policy_method, policy_url, _, _ = peass._policy_request(target)
+    test_method, test_url, _, body = peass._test_request(
+        target, ["agentidentity.authProviders.retrieveCredentials"]
+    )
+    assert policy_method == "GET"
+    assert test_method == "POST"
+    assert policy_url.endswith("/authProviders/github:getIamPolicy")
+    assert test_url.endswith("/authProviders/github:testIamPermissions")
+    assert body == {"permissions": ["agentidentity.authProviders.retrieveCredentials"]}
+
+
 def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
     peass = bare_peass()
     project = peass.normalize_resource("projects/demo-project")
@@ -621,6 +717,27 @@ def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
     assert "update-only principal" in addon_notes[0]
     assert "installed/authorized user" in addon_notes[0]
     assert "does not bypass OAuth consent" in addon_notes[0]
+
+    auth_provider = peass.normalize_resource(
+        "agent-auth-provider:projects/demo-project/locations/us-central1/authProviders/google"
+    )
+    vault_notes = peass._cross_cloud_pivot_notes(
+        auth_provider,
+        [
+            "agentidentity.authProviders.retrieveCredentials",
+            "agentidentity.authProviders.update",
+        ],
+    )
+    assert len(vault_notes) == 2
+    assert "cannot get or list" in vault_notes[0]
+    assert "exact, case-sensitive userId" in vault_notes[0]
+    assert "does not bypass consent" in vault_notes[0]
+    assert "GCPPEASS never calls credentials:retrieve" in vault_notes[0]
+    assert "replace" in vault_notes[1]
+    assert "refresh token" in vault_notes[1]
+    assert "client secret" in vault_notes[1]
+    assert "later refresh" in vault_notes[1]
+    assert "never modifies" in vault_notes[1]
 
     sa = peass.normalize_resource(
         "service-account:runner@demo-project.iam.gserviceaccount.com"

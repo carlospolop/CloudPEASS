@@ -51,6 +51,8 @@ critical_exact:
 high_suffixes: []
 
 high_exact:
+  - agentidentity.authProviders.retrieveCredentials
+  - agentidentity.authProviders.update
   - apikeys.keys.create
   - artifactregistry.repositories.uploadArtifacts
   - artifactregistry.repositories.downloadArtifacts
@@ -145,7 +147,6 @@ high_exact:
 # Exact overrides for names that contain security-looking words but disclose
 # only metadata or perform ordinary lifecycle operations.
 medium_exact:
-  - agentidentity.authProviders.retrieveCredentials
   - alloydb.instances.executeSql
   - apikeys.keys.undelete
   - artifactregistry.files.download

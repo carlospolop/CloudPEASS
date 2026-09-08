@@ -111,6 +111,8 @@ very_sensitive_combinations = [
 
 sensitive_combinations = [
     # Credentials or identity-related changes that usually need more context.
+    ["agentidentity.authProviders.retrieveCredentials"],
+    ["agentidentity.authProviders.update"],
     ["apikeys.keys.create"],
     ["artifactregistry.repositories.uploadArtifacts"],
     ["iam.serviceAccounts.getOpenIdToken"],
@@ -212,6 +214,14 @@ sensitive_combinations = [
 # concrete abuse or data-access procedure; tests prevent adding an unreferenced
 # high-severity permission by accident.
 risk_documentation = (
+    (
+        "agentidentity.authProviders.retrieveCredentials",
+        "gcp-to-workspace-pivoting/gcp-agent-identity-auth-manager-privesc.md",
+    ),
+    (
+        "agentidentity.authProviders.update",
+        "gcp-to-workspace-pivoting/gcp-agent-identity-auth-manager-privesc.md",
+    ),
     (
         "iam.serviceAccounts.getAccessToken",
         "gcp-to-workspace-pivoting/README.md",
