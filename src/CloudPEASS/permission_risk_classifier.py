@@ -305,9 +305,14 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.apimanagement/service/backends/read",
         "microsoft.apimanagement/service/authorizationservers/listsecrets/action",
         "microsoft.apimanagement/service/openidconnectproviders/listsecrets/action",
+        "microsoft.apimanagement/service/identityproviders/listsecrets/action",
+        "microsoft.apimanagement/service/tenant/listsecrets/action",
+        "microsoft.apimanagement/service/gateways/generatetoken/action",
         # Live tests used the returned or renewed credentials against each
         # service's data plane instead of trusting credential-shaped names.
+        "microsoft.containerregistry/registries/listcredentials/action",
         "microsoft.containerregistry/registries/regeneratecredential/action",
+        "microsoft.app/containerapps/listsecrets/action",
         "microsoft.servicebus/namespaces/authorizationrules/listkeys/action",
         "microsoft.servicebus/namespaces/authorizationrules/regeneratekeys/action",
         "microsoft.servicebus/namespaces/queues/authorizationrules/listkeys/action",
@@ -320,6 +325,7 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.eventhub/namespaces/eventhubs/authorizationrules/regeneratekeys/action",
         "microsoft.appconfiguration/configurationstores/regeneratekey/action",
         "microsoft.batch/batchaccounts/listkeys/action",
+        "microsoft.batch/batchaccounts/regeneratekeys/action",
         "microsoft.cache/redisenterprise/databases/listkeys/action",
         "microsoft.cache/redisenterprise/databases/regeneratekey/action",
         "microsoft.documentdb/databaseaccounts/listkeys/action",
@@ -337,6 +343,18 @@ _AZURE_CRITICAL_EXACT = frozenset(
         "microsoft.notificationhubs/namespaces/authorizationrules/regeneratekeys/action",
         "microsoft.notificationhubs/namespaces/notificationhubs/authorizationrules/listkeys/action",
         "microsoft.notificationhubs/namespaces/notificationhubs/authorizationrules/regeneratekeys/action",
+        # Geo-DR alias keys were used to receive a seeded Service Bus message
+        # and publish an Event Hubs event through the alias host.
+        "microsoft.servicebus/namespaces/disasterrecoveryconfigs/authorizationrules/listkeys/action",
+        "microsoft.eventhub/namespaces/disasterrecoveryconfigs/authorizationrules/listkeys/action",
+        # Fluid Relay tenant keys created and reopened a collaboration
+        # container. Quantum workspace keys listed jobs directly through the
+        # data plane; those job records can include input/output container SAS
+        # URIs, and the same keys authorize job submission.
+        "microsoft.fluidrelay/fluidrelayservers/listkeys/action",
+        "microsoft.fluidrelay/fluidrelayservers/regeneratekey/action",
+        "microsoft.quantum/workspaces/listkeys/action",
+        "microsoft.quantum/workspaces/regeneratekey/action",
     }
 )
 
@@ -377,6 +395,9 @@ _AZURE_HIGH_EXACT = frozenset(
         # downstream impact is configuration-dependent, so keep them High.
         "microsoft.maps/accounts/listkeys/action",
         "microsoft.maps/accounts/regeneratekey/action",
+        # Purview account keys authenticated to its protected managed Event
+        # Hubs namespace and injected a canary into the atlas_hook stream.
+        "microsoft.purview/accounts/listkeys/action",
         "microsoft.botservice/botservices/channels/listchannelwithkeys/action",
         "microsoft.apimanagement/service/subscriptions/listsecrets/action",
         "microsoft.logic/integrationaccounts/listcallbackurl/action",
@@ -455,6 +476,10 @@ _AZURE_MEDIUM_EXACT = frozenset(
         "microsoft.storage/storageaccounts/blobservices/containers/blobs/permanentdelete/action",
         "microsoft.storage/storageaccounts/blobservices/containers/blobs/tags/read",
         "microsoft.storage/storageaccounts/blobservices/containers/blobs/tags/write",
+        # APIM documents these as credential metadata operations: secret
+        # values are intentionally not returned.
+        "microsoft.apimanagement/service/modelproviders/listcredentials/action",
+        "microsoft.apimanagement/service/workspaces/modelproviders/listcredentials/action",
     }
 )
 

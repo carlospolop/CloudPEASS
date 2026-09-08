@@ -235,7 +235,12 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.ApiManagement/service/backends/read": "critical",
             "Microsoft.ApiManagement/service/authorizationServers/listSecrets/action": "critical",
             "Microsoft.ApiManagement/service/openidConnectProviders/listSecrets/action": "critical",
+            "Microsoft.ApiManagement/service/identityProviders/listSecrets/action": "critical",
+            "Microsoft.ApiManagement/service/tenant/listSecrets/action": "critical",
+            "Microsoft.ApiManagement/service/gateways/generateToken/action": "critical",
+            "Microsoft.ContainerRegistry/registries/listCredentials/action": "critical",
             "Microsoft.ContainerRegistry/registries/regenerateCredential/action": "critical",
+            "Microsoft.App/containerApps/listSecrets/action": "critical",
             "Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action": "critical",
             "Microsoft.ServiceBus/namespaces/authorizationRules/regenerateKeys/action": "critical",
             "Microsoft.ServiceBus/namespaces/queues/authorizationRules/listKeys/action": "critical",
@@ -248,6 +253,13 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.EventHub/namespaces/eventhubs/authorizationRules/regenerateKeys/action": "critical",
             "Microsoft.AppConfiguration/configurationStores/RegenerateKey/action": "critical",
             "Microsoft.Batch/batchAccounts/listkeys/action": "critical",
+            "Microsoft.Batch/batchAccounts/regeneratekeys/action": "critical",
+            "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs/authorizationRules/listkeys/action": "critical",
+            "Microsoft.EventHub/namespaces/disasterRecoveryConfigs/authorizationRules/listkeys/action": "critical",
+            "Microsoft.FluidRelay/fluidRelayServers/listKeys/action": "critical",
+            "Microsoft.FluidRelay/fluidRelayServers/regenerateKey/action": "critical",
+            "Microsoft.Quantum/Workspaces/listKeys/action": "critical",
+            "Microsoft.Quantum/Workspaces/regenerateKey/action": "critical",
             "Microsoft.Cache/redisEnterprise/databases/listKeys/action": "critical",
             "Microsoft.Cache/redisEnterprise/databases/regenerateKey/action": "critical",
             "Microsoft.CognitiveServices/accounts/regenerateKey/action": "critical",
@@ -255,6 +267,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Search/searchServices/listAdminKeys/action": "critical",
             "Microsoft.Maps/accounts/listKeys/action": "high",
             "Microsoft.Maps/accounts/regenerateKey/action": "high",
+            "Microsoft.Purview/accounts/listkeys/action": "high",
             "Microsoft.BotService/botServices/channels/listchannelwithkeys/action": "high",
             "Microsoft.ApiManagement/service/subscriptions/listSecrets/action": "high",
             "Microsoft.Logic/integrationAccounts/listCallbackUrl/action": "high",
@@ -401,6 +414,25 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         self.assertEqual(
             self.classify(
                 "Microsoft.SignalRService/WebPubSub/clientConnection/generateToken/action"
+            ),
+            "medium",
+        )
+        # A live Azure Blob API Connection rejected this management action
+        # with OperationNotAllowed; its credential-shaped name is not enough
+        # evidence to claim reusable data-plane access.
+        self.assertEqual(
+            self.classify("Microsoft.Web/connections/listConnectionKeys/action"),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.ApiManagement/service/modelProviders/listCredentials/action"
+            ),
+            "medium",
+        )
+        self.assertEqual(
+            self.classify(
+                "Microsoft.ApiManagement/service/workspaces/modelProviders/listCredentials/action"
             ),
             "medium",
         )
