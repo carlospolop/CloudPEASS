@@ -94,6 +94,7 @@ high_exact:
   - amplify:GetArtifactUrl
   - amplify:GetJob
   - apigateway:GET
+  - apigateway:PATCH
   - athena:GetQueryExecution
   - appconfig:GetHostedConfigurationVersion
   - appsync:GraphQL
@@ -227,6 +228,7 @@ high_override_exact:
   - amplify:GetArtifactUrl
   - amplify:GetJob
   - apigateway:GET
+  - apigateway:PATCH
   - athena:GetQueryExecution
   - appconfig:GetHostedConfigurationVersion
   - appsync:GraphQL

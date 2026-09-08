@@ -61,7 +61,6 @@ pass the evidence gate before it can change a permission severity or appear in H
 | Q04 | CodeConnections | Use an installed connection through an existing or synthetic consumer to determine whether `UseConnection` exposes or executes otherwise inaccessible private repository content. |
 | Q05 | IAM Roles Anywhere | Mutate a trust anchor used by an existing profile and role, then attempt a certificate-backed session; retain the exact role trust and profile prerequisites. |
 | Q07 | AWS Batch | Register and submit attacker code against existing job and execution roles; remove each `iam:PassRole` and Batch dependency independently. |
-| Q08 | API Gateway | Mutate an integration or deployment to intercept backend data or reuse stored credentials, separating control-plane changes from invoke permission. |
 | Q09 | ACM Private CA | Issue a certificate from a CA trusted for workload mTLS and prove impersonation at a synthetic relying service; test template and CA-policy boundaries. |
 | Q10 | EKS | Create an access entry and attach an EKS access policy, then prove Kubernetes authorization rather than treating accepted IAM APIs as impact. |
 | Q11 | OpenSearch | Change a domain access policy or another authorization surface and prove new data-plane access with a denied-before control. |
@@ -321,3 +320,29 @@ The notebook was stopped and deleted, followed by its lifecycle configuration, p
 bucket and object, execution role and policy, two disposable IAM users, and both access keys.
 Exact prefix inventories returned no remaining SageMaker notebook, lifecycle configuration, S3
 bucket, IAM user, or IAM role.
+
+### Amazon API Gateway Management (`apigateway`) — 2026-09-08
+
+Live validation confirmed that `apigateway:PATCH` alone can redirect an existing HTTP API
+integration and intercept requests when its stage has automatic deployment enabled. The synthetic
+`$default` stage initially routed `POST /submit` to a benign Lambda and returned `benign`; no proof
+object existed. A restricted user knew the API and integration IDs but had no API Gateway list/get
+permissions, deployment permission, Lambda invocation, or `iam:PassRole`.
+
+A no-permission user was denied `UpdateIntegration`, and the restricted user was denied direct
+invocation of the collector Lambda. The restricted user then changed only the existing
+integration's URI with `apigateway:PATCH`. The next request was received by the collector, whose
+private proof object contained the exact JSON body, bearer `Authorization` header, and custom
+sensitive header. No `apigateway:POST` deployment action was needed because auto-deploy published
+the integration update.
+
+The action is High based on the independently observed request and token disclosure. Whether it
+becomes privilege escalation or Critical depends on the affected route, its authorization model,
+the secrets carried by clients, and whether the replacement endpoint is accepted. Without list or
+get permissions, IDs may still be recovered from invoke URLs, OpenAPI/IaC files, CI configuration,
+SDK settings, logs, cached CLI output, errors, or shell history. Stages without auto-deploy require
+a separate deployment path.
+
+The HTTP API, stage, route and integration, both Lambda functions and their policies, private proof
+bucket and object, execution role, two disposable IAM users, both access keys, and local deployment
+ZIP were deleted. Exact prefix inventories returned no API Gateway, Lambda, S3, or IAM resource.

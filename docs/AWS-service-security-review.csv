@@ -3,7 +3,7 @@
 "P0","blocked","account-access","Account access manager","2026-09-08","","Management-account lab has no IAM Identity Center instance; enabling the organization-wide prerequisite solely for this test would exceed safe reversible scope."
 "P0","queued","acm","AWS Certificate Manager","","",""
 "P0","queued","acm-pca","AWS Private Certificate Authority","","","Hypothesis Q09: test IssueCertificate + GetCertificate against a CA trusted for workload mTLS identity, including template and CA-policy constraints."
-"P0","queued","apigateway","Amazon API Gateway Management / Amazon API Gateway Management V2","","","Hypothesis Q08: test integration mutation and deployment against an existing API execution role for backend credential/data interception."
+"P0","validated","apigateway","Amazon API Gateway Management / Amazon API Gateway Management V2","2026-09-08","apigateway:PATCH alone redirected an existing HTTP API AWS_PROXY integration under a $default auto-deploy stage; the next request's body, bearer token, and custom sensitive header reached the synthetic collector.","The benign baseline produced no proof. A no-permission update and direct collector-Lambda invocation were denied. No deployment permission, execution role, or iam:PassRole was used; requires a mutable integration, an auto-deploy stage, and an attacker-reachable or resource-policy-authorized target."
 "P0","queued","appstream","Amazon AppStream 2.0","","",""
 "P0","queued","athena","Amazon Athena","","",""
 "P0","queued","autoscaling","Amazon EC2 Auto Scaling","","",""

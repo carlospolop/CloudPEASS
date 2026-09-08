@@ -477,6 +477,7 @@ live_validated_disclosure_documentation = {
     "amplify:GetArtifactUrl": "aws-privilege-escalation/aws-amplify-privesc/README.md",
     "amplify:GetJob": "aws-privilege-escalation/aws-amplify-privesc/README.md",
     "apigateway:GET": "aws-services/aws-api-gateway-enum.md",
+    "apigateway:PATCH": "aws-post-exploitation/aws-api-gateway-post-exploitation/README.md",
     "athena:GetQueryExecution": "aws-services/aws-s3-athena-and-glacier-enum.md",
     "appstream:CreateStreamingURL": "aws-services/aws-workspaces-enum.md",
     "appconfig:GetHostedConfigurationVersion": "aws-services/aws-appconfig-enum.md",

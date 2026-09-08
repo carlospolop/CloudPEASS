@@ -13,6 +13,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "amplify:GetArtifactUrl",
     "amplify:GetJob",
     "apigateway:GET",
+    "apigateway:PATCH",
     "athena:GetQueryExecution",
     "appstream:CreateStreamingURL",
     "appconfig:GetHostedConfigurationVersion",
