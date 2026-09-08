@@ -101,6 +101,7 @@ high_exact:
   - codecommit:GetFile
   - codecommit:GitPull
   - codepipeline:PollForJobs
+  - connect:GetAttachedFile
   - connect:GetFederationToken
   - cognito-idp:AdminGetUser
   - cognito-idp:DescribeUserPoolClient
@@ -210,6 +211,7 @@ high_override_exact:
   - codecommit:GetCommit
   - codecommit:GetFile
   - codepipeline:PollForJobs
+  - connect:GetAttachedFile
   - connect:GetFederationToken
   - cognito-idp:AdminGetUser
   - cognito-idp:DescribeUserPoolClient

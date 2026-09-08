@@ -40,6 +40,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "codecommit:GetFile",
     "codecommit:GitPull",
     "codepipeline:PollForJobs",
+    "connect:GetAttachedFile",
     "connect:GetFederationToken",
     "cognito-idp:AdminGetUser",
     "cognito-idp:DescribeUserPoolClient",
