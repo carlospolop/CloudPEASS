@@ -462,6 +462,36 @@ class PermissionModelTests(unittest.TestCase):
             ("high", PermissionKey("create", resource="bindings")),
             ("high", PermissionKey("get", resource="services", subresource="proxy")),
             ("high", PermissionKey("patch", resource="nodes", subresource="status")),
+            (
+                "high",
+                PermissionKey(
+                    "patch", group="apps", resource="daemonsets", subresource="status"
+                ),
+            ),
+            (
+                "high",
+                PermissionKey(
+                    "patch",
+                    group="policy",
+                    resource="poddisruptionbudgets",
+                    subresource="status",
+                ),
+            ),
+            (
+                "high",
+                PermissionKey(
+                    "patch",
+                    group="apiextensions.k8s.io",
+                    resource="customresourcedefinitions",
+                    subresource="status",
+                ),
+            ),
+            (
+                "high",
+                PermissionKey(
+                    "patch", group="apps", resource="replicasets", subresource="status"
+                ),
+            ),
             ("high", PermissionKey("create", group="apps", resource="daemonsets")),
             (
                 "medium",
@@ -584,6 +614,24 @@ class PermissionModelTests(unittest.TestCase):
             PermissionKey("patch", resource="services", subresource="status"),
             PermissionKey("patch", resource="nodes", subresource="status"),
             PermissionKey("patch", resource="namespaces", subresource="status"),
+            PermissionKey(
+                "patch", group="apps", resource="daemonsets", subresource="status"
+            ),
+            PermissionKey(
+                "patch",
+                group="policy",
+                resource="poddisruptionbudgets",
+                subresource="status",
+            ),
+            PermissionKey(
+                "patch",
+                group="apiextensions.k8s.io",
+                resource="customresourcedefinitions",
+                subresource="status",
+            ),
+            PermissionKey(
+                "patch", group="apps", resource="replicasets", subresource="status"
+            ),
             PermissionKey(
                 "patch",
                 group="networking.k8s.io",

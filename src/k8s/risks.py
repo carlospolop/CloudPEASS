@@ -257,6 +257,32 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
             "Can change Node status and metadata, including scheduler-visible capacity, "
             "conditions, and labels that influence workload placement.",
         )
+    if (
+        (full == "daemonsets/status" and _group_is(group, "apps", "extensions"))
+        or (
+            full == "poddisruptionbudgets/status"
+            and _group_is(group, "policy", "extensions")
+        )
+        or (
+            full == "customresourcedefinitions/status"
+            and _group_is(group, "apiextensions.k8s.io")
+        )
+    ) and verb in {"update", "patch", "*"}:
+        return (
+            "high",
+            "Can mutate owner references through a legacy status endpoint and cause the "
+            "garbage collector to delete the object and its dependents.",
+        )
+    if (
+        full == "replicasets/status"
+        and _group_is(group, "apps", "extensions")
+        and verb in {"update", "patch", "*"}
+    ):
+        return (
+            "high",
+            "Can forge ReplicaSet availability consumed by a Deployment and defeat rollout "
+            "availability guarantees when the target belongs to an active rollout.",
+        )
     if resource in {
         "selfsubjectaccessreviews",
         "selfsubjectrulesreviews",

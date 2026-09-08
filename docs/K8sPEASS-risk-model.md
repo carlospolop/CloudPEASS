@@ -65,6 +65,10 @@ control-plane modification, or a strong conditional escalation primitive:
   NodeRestriction adds extra label protection for kubelet identities.
 - Ingress status update/patch when an active controller consumes mutable
   annotations as routing or exposure configuration.
+- Legacy DaemonSet, PodDisruptionBudget, CustomResourceDefinition, and Namespace
+  status update/patch because accepted owner references can make garbage
+  collection delete the object and its dependents. ReplicaSet status is also
+  High when an active Deployment rollout consumes forged availability.
 - Ingress create/patch when an active controller accepts the object.
   Create can expose an internal Service through a new host/path; patch can
   redirect a trusted route to another Service.
