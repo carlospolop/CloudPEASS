@@ -67,7 +67,7 @@
 "P0","validated","states","AWS Step Functions","2026-09-08","Existing live-validation registry and regression coverage: states:DescribeExecution; states:DescribeStateMachine; states:GetActivityTask; states:GetExecutionHistory.","Reconciled from tested evidence already documented in HackTricks: aws-post-exploitation/aws-stepfunctions-post-exploitation/README.md. No infrastructure was created by this tracker reconciliation."
 "P0","queued","storagegateway","AWS Storage Gateway","","",""
 "P0","queued","sts","AWS Security Token Service","","",""
-"P0","queued","tag","Amazon Resource Group Tagging API","","",""
+"P0","no_new_positive","tag","Amazon Resource Group Tagging API","2026-09-08","TagResources alone could not alter a synthetic Secrets Manager resource tag: the API returned HTTP success but FailedResourcesMap reported AccessDeniedException and the original tag remained unchanged.","AWS requires both tag:TagResources and the resource service's own tagging permission. The service-specific action already changes the tag directly, so the generic action did not create an independent ABAC bypass. Both synthetic secrets, users, every access key, and policies from the conditional-read and isolated-negative runs were deleted; exact inventories returned empty."
 "P0","queued","workspaces","Amazon WorkSpaces","","",""
 "P0","queued","workspaces-web","Amazon WorkSpaces Secure Browser","","",""
 "P1","queued","a2c","AWS App2Container","","",""

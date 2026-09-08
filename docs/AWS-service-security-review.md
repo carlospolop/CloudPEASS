@@ -580,6 +580,27 @@ and client configuration commonly expose it. Neither run changed the registered 
 sets of disposable users, every access key, and inline policies were deleted; exact IAM prefix
 inventory returned empty.
 
+### Amazon Resource Groups Tagging API (`tag`) — 2026-09-08
+
+No new independent escalation primitive was found for `tag:TagResources`. The first hypothesis
+gave a user a latent `secretsmanager:GetSecretValue` allow conditioned on
+`aws:ResourceTag/Access=allowed` plus only the generic tagging action. Its pre-tag secret read and
+resource enumeration were denied, and a no-tagging control could not call the API. Although the
+candidate `TagResources` request returned HTTP success, the secret remained untagged and the
+conditional read stayed denied; the harness correctly rejected the result.
+
+A second isolated run captured the response's per-resource result. `FailedResourcesMap` reported
+`AccessDeniedException`, and an administrator read confirmed the original synthetic tag was
+unchanged. This matches the CLI/API requirement: the caller needs `tag:TagResources` **and** the
+resource-owning service's tagging permission—for example `secretsmanager:TagResource`. That
+service-specific permission can already make the same tag change directly, so adding the generic
+action does not unlock a separate ABAC path. Consumers must inspect `FailedResourcesMap`; a zero
+exit status or HTTP 200 alone is a false positive.
+
+Both synthetic secrets were force-deleted and polled until absent. All three disposable users,
+every access key, and inline policy were deleted; exact Secrets Manager and IAM inventories
+returned empty. No HackTricks attack entry or permission-severity promotion was made.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
