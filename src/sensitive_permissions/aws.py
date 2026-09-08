@@ -10,6 +10,12 @@ very_sensitive_combinations = [
 
     ["imagebuilder:CreateComponent", "imagebuilder:StartImagePipelineExecution"],
 
+    [
+        "codedeploy:CreateDeployment",
+        "codedeploy:GetDeploymentConfig",
+        "codedeploy:RegisterApplicationRevision",
+    ],
+
     ["codebuild:StartBuild"],
     ["codebuild:StartBuildBatch"],
 
@@ -462,6 +468,9 @@ live_validated_disclosure_documentation = {
     "servicecatalog:ProvisionProduct": "aws-privilege-escalation/aws-service-catalog-privesc/README.md",
     "imagebuilder:CreateComponent": "aws-privilege-escalation/aws-ec2-image-builder-privesc/README.md",
     "imagebuilder:StartImagePipelineExecution": "aws-privilege-escalation/aws-ec2-image-builder-privesc/README.md",
+    "codedeploy:CreateDeployment": "aws-privilege-escalation/aws-codedeploy-privesc/README.md",
+    "codedeploy:GetDeploymentConfig": "aws-privilege-escalation/aws-codedeploy-privesc/README.md",
+    "codedeploy:RegisterApplicationRevision": "aws-privilege-escalation/aws-codedeploy-privesc/README.md",
     "batch:DescribeJobDefinitions": "aws-services/aws-batch-enum.md",
     "bedrock:Retrieve": "aws-services/aws-bedrock-enum.md",
     "bedrock-agentcore:GetWorkloadAccessTokenForUserId": "aws-services/aws-bedrock-enum.md",

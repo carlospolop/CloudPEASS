@@ -262,6 +262,30 @@ def test_live_validated_image_builder_wildcard_component_escalation_requires_pai
         )
 
 
+def test_live_validated_codedeploy_instance_profile_escalation_requires_chain():
+    combination = (
+        "codedeploy:CreateDeployment",
+        "codedeploy:GetDeploymentConfig",
+        "codedeploy:RegisterApplicationRevision",
+    )
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert combination in critical
+    for action in combination:
+        assert (action,) not in critical
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-privilege-escalation/aws-codedeploy-privesc/README.md"
+        )
+    assert classify_permission(
+        "aws", combination[0], unknown_default="medium"
+    ) == "medium"
+    assert classify_permission(
+        "aws", combination[1], unknown_default="medium"
+    ) == "low"
+    assert classify_permission(
+        "aws", combination[2], unknown_default="medium"
+    ) == "medium"
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

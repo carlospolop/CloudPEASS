@@ -144,3 +144,27 @@ pipeline, image record, recipe, both component versions, infrastructure configur
 groups, proof objects and bucket, test roles, and instance profile were deleted. Exact-prefix checks
 returned no active Image Builder, IAM, S3, CloudWatch Logs, EC2, EBS, AMI, or snapshot resources.
 The account's Image Builder service-linked role dates from 2020 and was deliberately left untouched.
+
+### AWS CodeDeploy (`codedeploy`) — 2026-09-08
+
+Live validation confirmed that a controlled S3 revision plus `codedeploy:CreateDeployment` can
+execute lifecycle hooks as root on an existing EC2 deployment-group target and inherit its instance
+profile. AWS enforced `codedeploy:GetDeploymentConfig` on the group's deployment configuration and
+`codedeploy:RegisterApplicationRevision` on the application as dependent permissions of the create
+request. The caller did not need to make a separate register call.
+
+The synthetic caller could write one revision object and read three proof objects, but had no
+`iam:PassRole`, EC2, SSM, or direct `organizations:DescribeOrganization`. The revision's
+`AfterInstall` hook returned `uid=0(root)`, the exact assumed instance-role ARN, and organization
+metadata. A policy containing only `CreateDeployment` failed on `GetDeploymentConfig`; adding that
+failed on `RegisterApplicationRevision`; adding all three succeeded. A final control removed
+`CreateDeployment` while retaining both dependencies and was denied without creating a second
+deployment.
+
+The chain is conditional critical: the application and EC2/on-premises deployment group must
+already exist, the caller must control an accessible revision source, and at least one reachable
+agent target must expose useful host or instance-profile privilege. The successful deployment was
+deleted with its group/application; the only EC2 target was terminated, its volume and no-ingress
+security group deleted, and all test IAM, instance-profile, S3, and local bundle resources removed.
+Authoritative inventories returned no active prefix-matching resource; the Resource Groups Tagging
+API temporarily retained tombstones for the terminated instance and deleted volume.

@@ -16,7 +16,7 @@
 "P0","queued","codebuild","AWS CodeBuild","","",""
 "P0","queued","codecommit","AWS CodeCommit","","",""
 "P0","queued","codeconnections","AWS CodeConnections","","",""
-"P0","queued","codedeploy","AWS CodeDeploy","","",""
+"P0","validated","codedeploy","AWS CodeDeploy","2026-09-08","CreateDeployment + enforced GetDeploymentConfig and RegisterApplicationRevision dependencies deployed an attacker-controlled S3 revision to an existing EC2 group; its hook ran as root under the target instance profile without caller iam:PassRole.","Caller was denied Organizations access but read hook output containing uid=0, the instance-role ARN, and organization metadata. Removing each required action denied the request. Requires revision-source control, a reachable group target with the agent, and a useful instance profile or host privilege."
 "P0","queued","codepipeline","AWS CodePipeline","","",""
 "P0","queued","cognito-identity","Amazon Cognito Identity","","",""
 "P0","queued","cognito-idp","Amazon Cognito User Pools","","",""
