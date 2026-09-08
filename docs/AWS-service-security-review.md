@@ -754,6 +754,27 @@ execution role and policy, object and bucket were deleted. The failure occurred 
 reader users were created. Exact Object Lambda access-point, S3 access-point/bucket, Lambda, IAM
 user/role inventories returned empty, and the local source and ZIP were removed.
 
+### Amazon OpenSearch Service (`es`) — 2026-09-08
+
+`es:UpdateDomainConfig` alone was validated as a domain resource-policy takeover. A synthetic
+public HTTPS domain initially allowed only the lab administrator, which inserted a randomized
+canary. The least-privilege test user had only `UpdateDomainConfig` on the exact domain ARN: a
+signed data-plane request returned HTTP 403 before the change, `ListDomainNames` was denied, and an
+empty-permission control could not update the domain. The test user then replaced the access policy
+with one granting its own ARN only `es:ESHttpGet` on that domain's subresources. After processing
+completed, the same signed request returned HTTP 200 and the exact canary.
+
+The result requires a known domain name and a reachable endpoint; VPC placement, fine-grained
+access control, explicit denies, and customer-managed KMS authorization can impose additional
+boundaries. One preliminary harness failed on an empty Bash-array expansion before creating users
+or a canary; that domain was also deleted. Both domains reached deletion, every test user, access
+key, and policy was removed, and exact-prefix domain and user inventories returned empty.
+
+The catalog's separate `opensearch` IAM prefix is for OpenSearch Applications, direct query, and
+auto-optimize operations; it is not an alias for `es`. `ListApplications` returned empty in both
+`eu-west-1` and `us-east-1`, so application login/query hypotheses remain blocked without a
+disposable application. The validated managed-domain result is attributed only to `es`.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

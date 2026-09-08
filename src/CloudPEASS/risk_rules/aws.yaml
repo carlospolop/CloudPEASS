@@ -27,6 +27,7 @@ critical_exact:
   - ecr-public:GetAuthorizationToken
   - ecr:GetAuthorizationToken
   - ecs:ExecuteCommand
+  - es:UpdateDomainConfig
   - events:RetrieveConnectionCredentials
   - iam:CreateAccessKey
   - iam:PassRole
