@@ -415,6 +415,13 @@ _AZURE_HIGH_EXACT = frozenset(
         # Authorization header that the ordinary resource GET redacted.
         "microsoft.apimanagement/service/apikeys/listsecrets/action",
         "microsoft.apimanagement/service/workspaces/toolservers/listsecrets/action",
+        # Both portal generations returned hidden delegation validation keys.
+        # The recovered key produced an HMAC accepted by Microsoft's reference
+        # verifier. The media-content variants returned a live dlrw SAS that
+        # listed, uploaded, downloaded, and deleted a canary blob.
+        "microsoft.apimanagement/service/portalconfigs/listdelegationsecrets/action",
+        "microsoft.apimanagement/service/portalconfigs/listmediacontentsecrets/action",
+        "microsoft.apimanagement/service/portalsettings/listsecrets/action",
         "microsoft.logic/integrationaccounts/listcallbackurl/action",
         "microsoft.logic/integrationaccounts/agreements/listcontentcallbackurl/action",
         "microsoft.logic/integrationaccounts/assemblies/listcontentcallbackurl/action",
