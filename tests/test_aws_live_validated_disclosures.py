@@ -61,6 +61,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "datazone:GetEnvironmentCredentials",
     "ec2:DescribeLaunchTemplateVersions",
     "ec2:DescribeInstanceAttribute",
+    "elasticloadbalancing:ModifyListener",
     "ebs:GetSnapshotBlock",
     "ecr:GetDownloadUrlForLayer",
     "ecs:DescribeTaskDefinition",
@@ -484,6 +485,18 @@ def test_live_validated_route53_existing_zone_record_takeover():
     ) == "high"
     assert live_validated_disclosure_documentation[action] == (
         "aws-services/aws-route53-enum.md"
+    )
+
+
+def test_live_validated_elbv2_listener_redirect_takeover():
+    action = "elasticloadbalancing:ModifyListener"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md"
     )
 
 

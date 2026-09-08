@@ -500,6 +500,28 @@ Cleanup first deleted the exact altered record and then the synthetic hosted zon
 their access keys, and the inline policy were deleted. Exact Route 53 and IAM prefix inventories
 returned empty; no existing account-owned zone was modified.
 
+### AWS Elastic Load Balancing V2 (`elasticloadbalancing`) — 2026-09-08
+
+Validated `elasticloadbalancing:ModifyListener` as an Application Load Balancer traffic-redirection
+primitive. A synthetic internet-facing ALB listener initially returned the literal body `benign`.
+The attacking user had only the candidate permission on the exact listener ARN, could not call
+`DescribeListeners`, and knew the listener ARN. A separate no-permission user was denied the same
+modification. The attacker replaced the default action with an HTTPS redirect to
+`attacker.invalid`; a real request to the ALB then returned the exact attacker-selected `Location`.
+
+No target group, backend, service role, `iam:PassRole`, or ELB list/read permission was required for
+the tested redirect. The permission is High because it can divert requests away from an existing
+listener, although TLS behavior, client redirect handling, and the listener's traffic determine
+whether secrets are exposed. Listener ARNs and ALB names can be recovered without ELB listing from
+IaC state, CloudTrail, deployment output, CI/CD configuration, application inventories, logs,
+errors, metrics dimensions, and console URLs.
+
+Cleanup deleted the listener and ALB, waited for load-balancer deletion, and retried the security
+group deletion until delayed ENI detachment completed. Both IAM users, every access key, and the
+inline policy were deleted. Exact-prefix ALB, security-group, and IAM inventories returned empty.
+Two earlier harness-only failures—the CLI shorthand parser and a non-portable case-insensitive
+`awk` expression—also ran full cleanup and did not count as security results.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

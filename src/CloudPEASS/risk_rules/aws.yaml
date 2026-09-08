@@ -148,6 +148,7 @@ high_exact:
   - datazone:GetEnvironmentCredentials
   - ec2:DescribeLaunchTemplateVersions
   - ec2:DescribeInstanceAttribute
+  - elasticloadbalancing:ModifyListener
   - ebs:GetSnapshotBlock
   - ecr:GetDownloadUrlForLayer
   - ecs:DescribeTaskDefinition
