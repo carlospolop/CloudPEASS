@@ -21,6 +21,7 @@ critical_exact:
   - dynamodb:PutResourcePolicy
   - ec2:AssociateIamInstanceProfile
   - ec2:GetPasswordData
+  - ec2:ModifyInstanceAttribute
   - ec2:ReplaceIamInstanceProfileAssociation
   - ecr-public:GetAuthorizationToken
   - ecr:GetAuthorizationToken

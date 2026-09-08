@@ -542,6 +542,7 @@ live_validated_disclosure_documentation = {
     "deadline:AssumeQueueRoleForRead": "aws-services/aws-deadline-cloud-enum.md",
     "deadline:AssumeQueueRoleForUser": "aws-services/aws-deadline-cloud-enum.md",
     "datazone:GetEnvironmentCredentials": "aws-services/aws-datazone-enum.md",
+    "ec2:ModifyInstanceAttribute": "aws-privilege-escalation/aws-ec2-privesc/README.md",
     "ec2:DescribeLaunchTemplateVersions": "aws-privilege-escalation/aws-ec2-privesc/README.md",
     "ec2:DescribeInstanceAttribute": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "ebs:GetSnapshotBlock": "aws-privilege-escalation/aws-ebs-privesc/README.md",

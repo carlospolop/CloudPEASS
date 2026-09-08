@@ -543,6 +543,27 @@ Cleanup deleted the identity pool, role and inline policy, S3 object and bucket,
 access key, and the candidate policy. Exact Cognito pool, IAM user/role, and S3 bucket inventories
 returned empty.
 
+### Amazon EC2 (`ec2`) — `ModifyInstanceAttribute` network exposure — 2026-09-08
+
+Validated that `ec2:ModifyInstanceAttribute` alone can replace the security groups on a known
+running instance's primary network interface. A synthetic instance ran an HTTP service containing
+an exact canary while its initial security group had no ingress. The request timed out before the
+change. The attacking user had only the candidate action, could not describe the instance, and a
+separate no-permission user was denied modification. After the attacker supplied the ID of a
+synthetic security group allowing TCP/8080, the same public-IP request returned the exact canary.
+
+The `groups` path did not require stopping or starting the instance, modifying the network
+interface directly, reading EC2 inventory, passing a role, or changing user data. It requires a
+known instance ID and replacement security-group ID. Those identifiers commonly appear in IMDS,
+hostnames, DNS, IaC state, deployment and CI/CD output, CloudTrail, Systems Manager, monitoring,
+logs, errors, and console URLs. The action is Critical because it can expose otherwise unreachable
+administrative or data services; actual reachability still depends on routing, NACLs, the service
+bind address, and other network controls.
+
+Cleanup terminated the instance and waited for the terminal state; its delete-on-termination root
+volume disappeared. Both security groups, both IAM users, all access keys, and the inline policy
+were deleted. Exact instance, volume, security-group, and IAM prefix inventories returned empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
