@@ -218,6 +218,13 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.ApiManagement/service/apis/operations/policies/read": "high",
             "Microsoft.ApiManagement/service/products/policies/read": "high",
             "Microsoft.Network/vpnServerConfigurations/listAllRadiusServersSecrets/action": "high",
+            "Microsoft.Network/virtualNetworkGateways/listAllRadiusServersSecrets/action": "high",
+            "Microsoft.Network/connections/sharedkey/action": "high",
+            "Microsoft.Network/connections/sharedKey/read": "high",
+            "Microsoft.Web/sites/config/snapshots/listsecrets/action": "high",
+            "Microsoft.Web/sites/slots/config/snapshots/listsecrets/action": "high",
+            "Microsoft.ApiManagement/service/apiKeys/listSecrets/action": "high",
+            "Microsoft.ApiManagement/service/workspaces/toolServers/listSecrets/action": "high",
             "Microsoft.AppConfiguration/configurationStores/ListKeyValue/action": "high",
             "Microsoft.AppConfiguration/configurationStores/keyValues/read": "high",
             "Microsoft.Web/staticSites/listSecrets/action": "critical",
@@ -286,6 +293,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         for permission, expected in tested_sensitive_data_credentials.items():
             with self.subTest(permission=permission):
                 self.assertEqual(self.classify(permission), expected)
+
         self.assertEqual(
             self.classify("Microsoft.Compute/virtualMachines/runCommands/write"),
             "critical",
@@ -392,6 +400,22 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         for permission, expected in tested_credential_actions.items():
             with self.subTest(permission=permission):
                 self.assertEqual(self.classify(permission), expected)
+
+    def test_aigateway_key_rotation_without_key_disclosure_stays_medium(self) -> None:
+        for permission in (
+            "Microsoft.ApiManagement/service/apiKeys/regeneratePrimaryKey/action",
+            "Microsoft.ApiManagement/service/apiKeys/regenerateSecondaryKey/action",
+        ):
+            with self.subTest(permission=permission):
+                self.assertEqual(self.classify(permission), "medium")
+
+    def test_unusable_azure_ml_notebook_credentials_stay_medium(self) -> None:
+        for permission in (
+            "Microsoft.MachineLearningServices/workspaces/listNotebookAccessToken/read",
+            "Microsoft.MachineLearningServices/workspaces/listNotebookKeys/read",
+        ):
+            with self.subTest(permission=permission):
+                self.assertEqual(self.classify(permission), "medium")
 
     def test_unvalidated_credential_like_action_is_not_automatically_critical(self) -> None:
         self.assertEqual(

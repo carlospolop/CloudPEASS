@@ -410,6 +410,11 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.purview/accounts/listkeys/action",
         "microsoft.botservice/botservices/channels/listchannelwithkeys/action",
         "microsoft.apimanagement/service/subscriptions/listsecrets/action",
+        # AIGateway API keys authenticated to the runtime after an unauthenticated
+        # request was rejected. Tool Server listSecrets returned a stored
+        # Authorization header that the ordinary resource GET redacted.
+        "microsoft.apimanagement/service/apikeys/listsecrets/action",
+        "microsoft.apimanagement/service/workspaces/toolservers/listsecrets/action",
         "microsoft.logic/integrationaccounts/listcallbackurl/action",
         "microsoft.logic/integrationaccounts/agreements/listcontentcallbackurl/action",
         "microsoft.logic/integrationaccounts/assemblies/listcontentcallbackurl/action",
@@ -461,9 +466,17 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.apimanagement/service/apis/policies/read",
         "microsoft.apimanagement/service/apis/operations/policies/read",
         "microsoft.apimanagement/service/products/policies/read",
-        # The normal VPN configuration GET redacts RADIUS secrets; this
-        # dedicated action returned the exact configured shared secret.
+        # Normal App Service snapshot reads redacted app settings. These
+        # dedicated actions returned the exact historical canaries for both a
+        # production app and a deployment slot.
+        "microsoft.web/sites/config/snapshots/listsecrets/action",
+        "microsoft.web/sites/slots/config/snapshots/listsecrets/action",
+        # Normal VPN resource GETs redact RADIUS and connection shared secrets;
+        # the dedicated operations returned the exact configured canaries.
         "microsoft.network/vpnserverconfigurations/listallradiusserverssecrets/action",
+        "microsoft.network/virtualnetworkgateways/listallradiusserverssecrets/action",
+        "microsoft.network/connections/sharedkey/action",
+        "microsoft.network/connections/sharedkey/read",
         # Both ARM paths returned a seeded cleartext application secret from
         # a Free App Configuration store, without requiring data-plane RBAC.
         "microsoft.appconfiguration/configurationstores/listkeyvalue/action",
@@ -495,6 +508,17 @@ _AZURE_MEDIUM_EXACT = frozenset(
         # values are intentionally not returned.
         "microsoft.apimanagement/service/modelproviders/listcredentials/action",
         "microsoft.apimanagement/service/workspaces/modelproviders/listcredentials/action",
+        # Live AIGateway tests confirmed these rotate a key and invalidate the
+        # old value, but their responses do not disclose the replacement key.
+        "microsoft.apimanagement/service/apikeys/regenerateprimarykey/action",
+        "microsoft.apimanagement/service/apikeys/regeneratesecondarykey/action",
+        # A prepared Azure ML workspace returned empty access/refresh tokens
+        # across supported API versions. listNotebookKeys returned two opaque
+        # values, but neither authenticated to the notebook host using the
+        # documented bearer/key patterns. Keep both visible without claiming a
+        # validated credential attack.
+        "microsoft.machinelearningservices/workspaces/listnotebookaccesstoken/read",
+        "microsoft.machinelearningservices/workspaces/listnotebookkeys/read",
     }
 )
 
