@@ -60,7 +60,6 @@ pass the evidence gate before it can change a permission severity or appear in H
 | Q04 | CodeConnections | Use an installed connection through an existing or synthetic consumer to determine whether `UseConnection` exposes or executes otherwise inaccessible private repository content. |
 | Q05 | IAM Roles Anywhere | Mutate a trust anchor used by an existing profile and role, then attempt a certificate-backed session; retain the exact role trust and profile prerequisites. |
 | Q07 | AWS Batch | Register and submit attacker code against existing job and execution roles; remove each `iam:PassRole` and Batch dependency independently. |
-| Q09 | ACM Private CA | Issue a certificate from a CA trusted for workload mTLS and prove impersonation at a synthetic relying service; test template and CA-policy boundaries. |
 | Q10 | EKS | Create an access entry and attach an EKS access policy, then prove Kubernetes authorization rather than treating accepted IAM APIs as impact. |
 | Q11 | OpenSearch | Change a domain access policy or another authorization surface and prove new data-plane access with a denied-before control. |
 | Q12 | RDS | Share, copy, or restore an unencrypted snapshot and read a canary without source-instance access; record customer-managed KMS blockers separately. |
@@ -451,3 +450,21 @@ subscriptions, IaC, CI files, logs, errors, or shell history.
 The subscription was removed before deleting the topic and queue. Both disposable IAM users,
 access keys, inline policy, and queue policy were deleted; exact SNS, SQS, and IAM inventories
 returned empty.
+
+### AWS KMS (`kms`) — 2026-09-08
+
+The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
+authorized region currently contains only AWS-managed keys; customers cannot manage grants or key
+policies on those keys. Creating a customer-managed test key would leave it in `PendingDeletion`
+for AWS's mandatory 7–30-day waiting period, so it could not be destroyed in this review session.
+No KMS key, alias, ciphertext, grant, user, or policy was created. Existing documented KMS attack
+paths remain classified, but this pass makes no new live-validation claim.
+
+### AWS Private Certificate Authority (`acm-pca`) — 2026-09-08
+
+The planned certificate-issuance and mTLS impersonation test is also blocked by cleanup semantics.
+There is no existing private CA in the authorized region. A newly created private CA that reaches
+`PENDING_CERTIFICATE` or `DISABLED` remains in a restorable `DELETED` state for a mandatory 7–30
+days. Creating it would therefore violate the requirement to remove all infrastructure before the
+test completes. No CA, certificate, role, user, policy, or relying service was created, and no
+issuance-impact claim is added from this pass.
