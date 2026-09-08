@@ -461,7 +461,7 @@ class PermissionModelTests(unittest.TestCase):
             ("medium", PermissionKey("create", resource="pods", subresource="eviction")),
             ("high", PermissionKey("create", resource="bindings")),
             ("high", PermissionKey("get", resource="services", subresource="proxy")),
-            ("medium", PermissionKey("patch", resource="nodes", subresource="status")),
+            ("high", PermissionKey("patch", resource="nodes", subresource="status")),
             ("high", PermissionKey("create", group="apps", resource="daemonsets")),
             (
                 "medium",
@@ -582,6 +582,20 @@ class PermissionModelTests(unittest.TestCase):
             ),
             PermissionKey("patch", resource="pods", subresource="status"),
             PermissionKey("patch", resource="services", subresource="status"),
+            PermissionKey("patch", resource="nodes", subresource="status"),
+            PermissionKey("patch", resource="namespaces", subresource="status"),
+            PermissionKey(
+                "patch",
+                group="networking.k8s.io",
+                resource="ingresses",
+                subresource="status",
+            ),
+            PermissionKey(
+                "update",
+                group="networking.k8s.io",
+                resource="ingresses",
+                subresource="status",
+            ),
             PermissionKey(
                 "delete",
                 group="admissionregistration.k8s.io",

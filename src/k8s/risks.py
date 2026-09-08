@@ -244,11 +244,18 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
         and group in CORE_GROUPS
         and verb in {"update", "patch", "*"}
     ):
-        return "high", f"Can redirect traffic by changing controller-observed state through {full}."
+        if full == "pods/status":
+            return (
+                "high",
+                "Can alter controller-observed Pod state and metadata, including labels used "
+                "for traffic and policy decisions.",
+            )
+        return "high", "Can redirect traffic by changing Service status or metadata."
     if full == "nodes/status" and group in CORE_GROUPS and verb in {"update", "patch", "*"}:
         return (
-            "medium",
-            "Can change Node capacity or conditions; no portable privilege path is assumed.",
+            "high",
+            "Can change Node status and metadata, including scheduler-visible capacity, "
+            "conditions, and labels that influence workload placement.",
         )
     if resource in {
         "selfsubjectaccessreviews",
@@ -346,6 +353,16 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
             "Can change admission configuration; elevate only after reproducing "
             "the enforced policy path.",
         )
+    if full == "namespaces/status" and group in CORE_GROUPS and verb in {
+        "update",
+        "patch",
+        "*",
+    }:
+        return (
+            "high",
+            "Can mutate Namespace metadata through the status endpoint, including labels and "
+            "owner references used by admission, policy selectors, and garbage collection.",
+        )
     if resource == "namespaces" and group in CORE_GROUPS and verb in {
         "create",
         "update",
@@ -416,6 +433,16 @@ def classify_permission(key: PermissionKey) -> tuple[str, str]:
         and verb in {"create", "update", "patch", "*"}
     ):
         return "high", "Can create or redirect backends for a selectorless Service."
+    if (
+        full == "ingresses/status"
+        and _group_is(group, "networking.k8s.io", "extensions")
+        and verb in {"update", "patch", "*"}
+    ):
+        return (
+            "high",
+            "Can mutate Ingress metadata through the status endpoint; active controllers may "
+            "consume those annotations as routing configuration.",
+        )
     if (
         resource == "ingresses"
         and _group_is(group, "networking.k8s.io", "extensions")

@@ -59,6 +59,12 @@ control-plane modification, or a strong conditional escalation primitive:
   reproduced by changing an existing trusted ClusterIP Service into an alias
   for an attacker Service: the same client hostname then sent its Authorization
   header to the attacker backend.
+- Node status update/patch because legacy status updates include metadata and
+  can change scheduler-visible capacity, conditions, and labels. Pod status
+  update/patch can likewise change labels used by traffic and policy controls;
+  NodeRestriction adds extra label protection for kubelet identities.
+- Ingress status update/patch when an active controller consumes mutable
+  annotations as routing or exposure configuration.
 - Ingress create/patch when an active controller accepts the object.
   Create can expose an internal Service through a new host/path; patch can
   redirect a trusted route to another Service.
@@ -95,7 +101,7 @@ normally cross an authorization boundary alone. Examples include Pod logs,
 kubelet stats or config reads, reads of workloads, ConfigMaps, identities,
 RBAC, topology, traffic, and storage metadata, review oracles for supplied
 subjects, RBAC object writes without matching bind/escalate, Pod delete/eviction,
-Node status, CSR status, Signer `sign`/`attest`, group/UID/user-extra
+CSR status, Signer `sign`/`attest`, group/UID/user-extra
 impersonation grants that lack user impersonation,
 controller `status`/`scale` subresource writes without the correlated
 single-backend fail-open admission case,
