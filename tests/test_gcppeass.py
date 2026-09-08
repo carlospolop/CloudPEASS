@@ -10,6 +10,7 @@ import pytest
 from GCPPEAS import (
     AGENT_IDENTITY_LOCATIONS,
     BUILTIN_FALLBACK_PERMISSIONS,
+    CONNECTOR_LOCATIONS,
     TYPE_PREFIXES,
     GCPPEASS,
     _build_parser,
@@ -107,6 +108,11 @@ def bare_peass():
             "agent-auth-provider:projects/demo-project/locations/us-central1/authProviders/github",
             "auth_provider",
             "projects/demo-project/locations/us-central1/authProviders/github",
+        ),
+        (
+            "integration-connector:projects/demo-project/locations/us-central1/connections/drive",
+            "connector_connection",
+            "projects/demo-project/locations/us-central1/connections/drive",
         ),
     ],
 )
@@ -501,6 +507,29 @@ def test_agent_identity_resource_catalog_excludes_parent_only_permissions():
     ]
 
 
+def test_connector_fallback_and_resource_catalog_cover_data_plane_permissions():
+    assert {"us-central1", "europe-west1", "asia-east1"} <= CONNECTOR_LOCATIONS
+    assert {
+        "connectors.actions.execute",
+        "connectors.connections.list",
+        "connectors.entities.get",
+        "connectors.entities.list",
+    } <= BUILTIN_FALLBACK_PERMISSIONS
+    peass = bare_peass()
+    peass.all_gcp_perms = [
+        "connectors.actions.execute",
+        "connectors.connections.create",
+        "connectors.connections.get",
+        "connectors.connections.list",
+        "connectors.entities.get",
+    ]
+    assert peass.get_relevant_permissions("connector_connection") == [
+        "connectors.actions.execute",
+        "connectors.connections.get",
+        "connectors.entities.get",
+    ]
+
+
 def test_testable_catalog_drops_cross_service_permissions():
     peass = bare_peass()
     peass._testable_cache = {}
@@ -675,6 +704,46 @@ def test_agent_identity_disabled_api_does_not_fan_out_to_every_region():
     assert len(calls) == 1
 
 
+def test_connector_discovery_uses_region_fallback_without_reading_auth_config():
+    peass = bare_peass()
+    calls = []
+
+    def paged(url, key, params=None):
+        calls.append((url, key, params))
+        if key == "locations":
+            raise GCPApiError(403, "Permission denied", url, "IAM_PERMISSION_DENIED")
+        if "/locations/us-central1/connections" in url:
+            return [
+                {
+                    "name": "projects/demo-project/locations/us-central1/connections/drive",
+                }
+            ]
+        return []
+
+    peass._paged_items = paged
+    targets = peass._discover_connector_connections("demo-project")
+    assert [target["id"] for target in targets] == [
+        "projects/demo-project/locations/us-central1/connections/drive"
+    ]
+    connection_calls = [call for call in calls if call[1] == "connections"]
+    assert len(connection_calls) == len(CONNECTOR_LOCATIONS)
+    assert all(call[2]["view"] == "BASIC" for call in connection_calls)
+
+
+def test_connector_disabled_api_does_not_fan_out_to_every_region():
+    peass = bare_peass()
+    calls = []
+
+    def disabled(url, key, params=None):
+        calls.append(url)
+        raise GCPApiError(403, "API is disabled", url, "SERVICE_DISABLED")
+
+    peass._paged_items = disabled
+    with pytest.raises(GCPApiError):
+        peass._discover_connector_connections("demo-project")
+    assert len(calls) == 1
+
+
 def test_agent_identity_policy_and_permission_calls_are_read_only():
     peass = bare_peass()
     target = peass.normalize_resource(
@@ -690,6 +759,24 @@ def test_agent_identity_policy_and_permission_calls_are_read_only():
     assert policy_url.endswith("/authProviders/github:getIamPolicy")
     assert test_url.endswith("/authProviders/github:testIamPermissions")
     assert body == {"permissions": ["agentidentity.authProviders.retrieveCredentials"]}
+
+
+def test_connector_policy_and_permission_calls_are_read_only():
+    peass = bare_peass()
+    target = peass.normalize_resource(
+        "//connectors.googleapis.com/projects/demo-project/locations/us-central1/"
+        "connections/drive"
+    )
+    policy_method, policy_url, _, policy_body = peass._policy_request(target)
+    test_method, test_url, _, body = peass._test_request(
+        target, ["connectors.actions.execute"]
+    )
+    assert policy_method == "GET"
+    assert policy_body is None
+    assert test_method == "POST"
+    assert policy_url.endswith("/connections/drive:getIamPolicy")
+    assert test_url.endswith("/connections/drive:testIamPermissions")
+    assert body == {"permissions": ["connectors.actions.execute"]}
 
 
 def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
@@ -738,6 +825,16 @@ def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
     assert "client secret" in vault_notes[1]
     assert "later refresh" in vault_notes[1]
     assert "never modifies" in vault_notes[1]
+
+    integration_notes = peass._cross_cloud_pivot_notes(
+        project, ["integrations.integrations.invoke"]
+    )
+    assert len(integration_notes) == 1
+    assert "integration list/get" in integration_notes[0]
+    assert "Gmail, Drive, Google Workspace" in integration_notes[0]
+    assert "not access to every Workspace user" in integration_notes[0]
+    assert "stored API key" in integration_notes[0]
+    assert "never invokes an integration" in integration_notes[0]
 
     sa = peass.normalize_resource(
         "service-account:runner@demo-project.iam.gserviceaccount.com"

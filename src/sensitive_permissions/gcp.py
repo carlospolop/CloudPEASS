@@ -113,6 +113,7 @@ sensitive_combinations = [
     # Credentials or identity-related changes that usually need more context.
     ["agentidentity.authProviders.retrieveCredentials"],
     ["agentidentity.authProviders.update"],
+    ["integrations.integrations.invoke"],
     ["apikeys.keys.create"],
     ["artifactregistry.repositories.uploadArtifacts"],
     ["iam.serviceAccounts.getOpenIdToken"],
@@ -241,6 +242,10 @@ risk_documentation = (
     (
         "gsuiteaddons.deployments.update",
         "gcp-to-workspace-pivoting/gcp-workspace-addons-privesc.md",
+    ),
+    (
+        "integrations.integrations.invoke",
+        "gcp-to-workspace-pivoting/gcp-application-integration-privesc.md",
     ),
     (
         "iam.googleapis.com/workloadIdentityPoolProviders.create",

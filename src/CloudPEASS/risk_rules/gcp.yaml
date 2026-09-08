@@ -107,6 +107,7 @@ high_exact:
   - healthcare.hl7V2Messages.get
   - healthcare.hl7V2Messages.ingest
   - iam.serviceAccounts.getOpenIdToken
+  - integrations.integrations.invoke
   - monitoring.alertPolicies.delete
   - monitoring.notificationChannels.delete
   - pubsub.snapshots.seek

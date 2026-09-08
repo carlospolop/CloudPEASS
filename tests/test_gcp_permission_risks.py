@@ -53,6 +53,7 @@ def test_direct_compromise_permissions_are_critical(permission):
         "cloudtasks.tasks.get",
         "cloudtasks.tasks.list",
         "gsuiteaddons.deployments.update",
+        "integrations.integrations.invoke",
         "pubsub.subscriptions.consume",
         "run.routes.invoke",
         "secretmanager.versions.add",

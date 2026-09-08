@@ -82,6 +82,51 @@ AGENT_IDENTITY_LOCATIONS = frozenset(
     }
 )
 
+# Integration Connectors locations published by Google on 2026-08-26. The
+# locations API is queried first, but a caller can have connections.list in a
+# project without connectors.locations.list. Keep a local fallback so that
+# per-connection permission checks still work in that least-privilege case.
+CONNECTOR_LOCATIONS = frozenset(
+    {
+        "asia-east1",
+        "asia-east2",
+        "asia-northeast1",
+        "asia-northeast2",
+        "asia-northeast3",
+        "asia-south1",
+        "asia-south2",
+        "asia-southeast1",
+        "asia-southeast2",
+        "australia-southeast1",
+        "australia-southeast2",
+        "europe-central2",
+        "europe-north1",
+        "europe-west1",
+        "europe-west10",
+        "europe-west12",
+        "europe-west2",
+        "europe-west3",
+        "europe-west4",
+        "europe-west8",
+        "europe-west9",
+        "me-central1",
+        "me-central2",
+        "me-west1",
+        "northamerica-northeast1",
+        "northamerica-northeast2",
+        "southamerica-east1",
+        "southamerica-west1",
+        "us-central1",
+        "us-east1",
+        "us-east5",
+        "us-south1",
+        "us-west1",
+        "us-west2",
+        "us-west3",
+        "us-west4",
+    }
+)
+
 # The normal paths below obtain a current catalog from Google or the public
 # iam-dataset. This deliberately compact set keeps every supported modern
 # resource useful when both network catalog sources are blocked. Names are
@@ -162,6 +207,20 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
         "cloudkms.keyRings.getIamPolicy",
         "cloudkms.keyRings.list",
         "cloudkms.keyRings.setIamPolicy",
+        "connectors.actions.execute",
+        "connectors.actions.list",
+        "connectors.connections.executeSqlQuery",
+        "connectors.connections.get",
+        "connectors.connections.getIamPolicy",
+        "connectors.connections.list",
+        "connectors.entities.create",
+        "connectors.entities.delete",
+        "connectors.entities.deleteEntitiesWithConditions",
+        "connectors.entities.get",
+        "connectors.entities.list",
+        "connectors.entities.update",
+        "connectors.entities.updateEntitiesWithConditions",
+        "connectors.entityTypes.list",
         "dns.changes.create",
         "dns.changes.get",
         "dns.changes.list",
@@ -178,6 +237,7 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
         "dns.resourceRecordSets.list",
         "dns.resourceRecordSets.update",
         "gsuiteaddons.deployments.update",
+        "integrations.integrations.invoke",
         "iam.serviceAccountKeys.create",
         "iam.serviceAccountKeys.delete",
         "iam.serviceAccountKeys.disable",
@@ -283,6 +343,12 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
 
 TYPE_PREFIXES = {
     "auth_provider": ("agentidentity.authProviders.",),
+    "connector_connection": (
+        "connectors.actions.",
+        "connectors.connections.",
+        "connectors.entities.",
+        "connectors.entityTypes.",
+    ),
     "vm": ("compute.instances.",),
     "function": ("cloudfunctions.functions.",),
     "storage": ("storage.buckets.", "storage.objects."),
@@ -305,6 +371,7 @@ TYPE_PREFIXES = {
 
 ASSET_TYPE_HINTS = {
     "agentidentity.googleapis.com/AuthProvider": "auth_provider",
+    "connectors.googleapis.com/Connection": "connector_connection",
     "compute.googleapis.com/Instance": "vm",
     "cloudfunctions.googleapis.com/CloudFunction": "function",
     "cloudfunctions.googleapis.com/Function": "function",
@@ -328,6 +395,7 @@ ASSET_TYPE_HINTS = {
 
 RESOURCE_HOSTS = {
     "auth_provider": "agentidentity.googleapis.com",
+    "connector_connection": "connectors.googleapis.com",
     "project": "cloudresourcemanager.googleapis.com",
     "folder": "cloudresourcemanager.googleapis.com",
     "organization": "cloudresourcemanager.googleapis.com",
@@ -580,6 +648,19 @@ class GCPPEASS(CloudPEASS):
                         "agentidentity.authProviders.list",
                     }
                 ]
+            elif res_type == "connector_connection":
+                # Creation and listing apply to the regional parent. Sending
+                # either in a connection-level batch can make the service
+                # reject otherwise valid data-plane permission checks.
+                permissions = [
+                    permission
+                    for permission in permissions
+                    if permission
+                    not in {
+                        "connectors.connections.create",
+                        "connectors.connections.list",
+                    }
+                ]
             return permissions
         return list(self.all_gcp_perms)
 
@@ -638,6 +719,8 @@ class GCPPEASS(CloudPEASS):
             raw = raw.split(":", 1)[1]
         elif raw.startswith("agent-auth-provider:"):
             raw = raw.split(":", 1)[1]
+        elif raw.startswith("integration-connector:") or raw.startswith("connector:"):
+            raw = raw.split(":", 1)[1]
         elif raw.startswith("function-v2:"):
             raw = raw.split(":", 1)[1]
             asset_type = "cloudfunctions.googleapis.com/Function"
@@ -694,6 +777,10 @@ class GCPPEASS(CloudPEASS):
             r"projects/[^/]+/locations/[^/]+/authProviders/[^/]+", path
         ):
             resource_type, host = "auth_provider", host or "agentidentity.googleapis.com"
+        elif re.fullmatch(
+            r"projects/[^/]+/locations/[^/]+/connections/[^/]+", path
+        ):
+            resource_type, host = "connector_connection", host or "connectors.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/locations/[^/]+/jobs/[^/]+", path):
             resource_type, host = "run_job", "run.googleapis.com"
         elif re.fullmatch(r"projects/[^/]+/locations/[^/]+/repositories/[^/]+", path):
@@ -1338,6 +1425,64 @@ class GCPPEASS(CloudPEASS):
             )
         return targets
 
+    def _discover_connector_connections(self, project: str) -> List[dict]:
+        """List Integration Connector connections without reading stored auth."""
+        locations = set(CONNECTOR_LOCATIONS)
+        first_error = None
+        try:
+            for item in self._paged_items(
+                f"https://connectors.googleapis.com/v1/projects/{project}/locations",
+                "locations",
+                params={"pageSize": 1000},
+            ):
+                location = (item.get("name") or "").rsplit("/", 1)[-1]
+                if location:
+                    locations.add(location)
+        except GCPApiError as exc:
+            disabled_message = f"{exc.reason} {exc.message}".lower()
+            if "service_disabled" in disabled_message or (
+                "api" in disabled_message and "disabled" in disabled_message
+            ):
+                raise
+            first_error = exc
+
+        targets = []
+        successful_locations = 0
+        with ThreadPoolExecutor(
+            max_workers=min(self.num_threads, len(locations) or 1)
+        ) as executor:
+            futures = {
+                executor.submit(
+                    self._paged_items,
+                    f"https://connectors.googleapis.com/v1/projects/{project}/"
+                    f"locations/{location}/connections",
+                    "connections",
+                    params={"pageSize": 1000, "view": "BASIC"},
+                ): location
+                for location in sorted(locations)
+            }
+            for future in as_completed(futures):
+                try:
+                    items = future.result()
+                    successful_locations += 1
+                except GCPApiError as exc:
+                    first_error = first_error or exc
+                    continue
+                for item in items:
+                    target = self.normalize_resource(
+                        item.get("name", ""), source="Integration Connectors list"
+                    )
+                    if target:
+                        targets.append(target)
+
+        if locations and not successful_locations and first_error:
+            raise first_error
+        if first_error:
+            self._record_failure(
+                "Integration Connectors in some locations", project, first_error
+            )
+        return targets
+
     def _discover_project_resources(self, project: str) -> List[dict]:
         targets = self._discover_assets(project)
         discoverers = [
@@ -1358,6 +1503,7 @@ class GCPPEASS(CloudPEASS):
             ("Artifact Registry", self._discover_artifacts, (project,)),
             ("Cloud KMS", self._discover_kms, (project,)),
             ("Agent Identity auth providers", self._discover_auth_providers, (project,)),
+            ("Integration Connector connections", self._discover_connector_connections, (project,)),
         ]
         # Location-bound services are always checked independently. Cloud Asset
         # support and visibility can vary by resource type, so a successful
@@ -1477,6 +1623,7 @@ class GCPPEASS(CloudPEASS):
             )
         hosts = {
             "auth_provider": "agentidentity.googleapis.com/v1",
+            "connector_connection": "connectors.googleapis.com/v1",
             "run_service": "run.googleapis.com/v2",
             "run_job": "run.googleapis.com/v2",
             "artifact_repository": "artifactregistry.googleapis.com/v1",
@@ -1651,6 +1798,7 @@ class GCPPEASS(CloudPEASS):
             )
         hosts = {
             "auth_provider": "agentidentity.googleapis.com/v1",
+            "connector_connection": "connectors.googleapis.com/v1",
             "service_account": "iam.googleapis.com/v1",
             "run_service": "run.googleapis.com/v2",
             "run_job": "run.googleapis.com/v2",
@@ -1947,6 +2095,20 @@ class GCPPEASS(CloudPEASS):
                 "This requires an existing 3LO provider, a previously authorized user, and a later "
                 "refresh; it does not immediately expose credentials by itself. GCPPEASS reports "
                 "the permission but never modifies an auth provider."
+            )
+        if "integrations.integrations.invoke" in permission_set:
+            notes.append(
+                "High conditional stored-credential workflow access: "
+                "integrations.integrations.invoke can invoke a known Application Integration API "
+                "trigger even when integration list/get, Integration Connectors, Secret Manager, "
+                "and service-account permissions are denied. If that workflow exposes a Gmail, "
+                "Drive, Google Workspace, or other credentialed connector action, the caller can "
+                "reach only the account, scopes, action, and inputs already exposed by that "
+                "workflow; it is not access to every Workspace user. In a live exact-permission "
+                "test, a caller-controlled HTTP connector URL received the connection's stored "
+                "API key. A known integration name and trigger ID are enough, so denied discovery "
+                "is not a defense. GCPPEASS only tests IAM and never invokes an integration or "
+                "connector action."
             )
         if "iam.googleapis.com/workloadIdentityPoolProviders.create" in permission_set:
             notes.append(
@@ -2506,7 +2668,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "Known resource name; repeat the option or use commas. Accepts full //service/name "
             "names, canonical projects/... names, gs://bucket, bucket:NAME, service-account:EMAIL, "
             "dns-zone:projects/PROJECT/managedZones/ZONE, and "
-            "agent-auth-provider:projects/PROJECT/locations/LOCATION/authProviders/NAME"
+            "agent-auth-provider:projects/PROJECT/locations/LOCATION/authProviders/NAME or "
+            "integration-connector:projects/PROJECT/locations/LOCATION/connections/NAME"
         ),
     )
 
