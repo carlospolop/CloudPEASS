@@ -623,6 +623,7 @@ live_validated_disclosure_documentation = {
     "rum:GetAppMonitorData": "aws-services/aws-security-and-detection-services/aws-cloudwatch-enum.md",
     "rolesanywhere:UpdateTrustAnchor": "aws-privilege-escalation/aws-sts-privesc/README.md",
     "route53:ChangeResourceRecordSets": "aws-services/aws-route53-enum.md",
+    "route53domains:GetDomainDetail": "aws-privilege-escalation/aws-route53-domains-privesc/README.md",
     "ssm:GetDocument": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "ssm:GetOpsItem": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
     "ssm:StartAutomationExecution": "aws-privilege-escalation/aws-ssm-privesc/README.md",

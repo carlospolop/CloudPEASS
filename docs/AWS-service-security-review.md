@@ -564,6 +564,22 @@ Cleanup terminated the instance and waited for the terminal state; its delete-on
 volume disappeared. Both security groups, both IAM users, all access keys, and the inline policy
 were deleted. Exact instance, volume, security-group, and IAM prefix inventories returned empty.
 
+### Amazon Route 53 Domains (`route53domains`) — 2026-09-08
+
+Validated `route53domains:GetDomainDetail` as a registration-data disclosure. A disposable user
+with only that action could not call `ListDomains`, while a separate no-permission user was denied
+the detail request. For one known domain, the candidate call returned 33 nonempty fields across the
+registrant, administrative, and technical contacts plus a status entry. The harness counted fields
+in memory and did not print or persist any names, addresses, email addresses, telephone numbers,
+nameservers, or other response values.
+
+The API authorizes the action against `Resource: "*"`; a first per-domain-ARN attempt was denied
+against resource `*`, then fully cleaned. The domain name itself needs no AWS permission to
+discover because DNS, certificate-transparency records, application URLs, emails, public source,
+and client configuration commonly expose it. Neither run changed the registered domain. Both
+sets of disposable users, every access key, and inline policies were deleted; exact IAM prefix
+inventory returned empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

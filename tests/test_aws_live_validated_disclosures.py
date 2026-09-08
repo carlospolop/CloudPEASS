@@ -112,6 +112,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "pipes:DescribePipe",
     "profile:SearchProfiles",
     "rum:GetAppMonitorData",
+    "route53domains:GetDomainDetail",
     "ses:GetSuppressedDestination",
     "ses:GetEmailTemplate",
     "ses:ListSuppressedDestinations",
@@ -521,6 +522,18 @@ def test_live_validated_ec2_security_group_replacement():
     ) == "critical"
     assert live_validated_disclosure_documentation[action] == (
         "aws-privilege-escalation/aws-ec2-privesc/README.md"
+    )
+
+
+def test_live_validated_route53_domain_registration_disclosure():
+    action = "route53domains:GetDomainDetail"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-privilege-escalation/aws-route53-domains-privesc/README.md"
     )
 
 
