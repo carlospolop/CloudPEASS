@@ -162,6 +162,64 @@ def test_live_validated_iot_mqtt_read_requires_full_broker_path():
         )
 
 
+def test_live_validated_backup_restore_requires_passrole():
+    combination = ("backup:StartRestoreJob", "iam:PassRole")
+    combinations = {tuple(candidate) for candidate in sensitive_combinations}
+    assert combination in combinations
+    assert (combination[0],) not in combinations
+    assert classify_permission(
+        "aws", combination[0], unknown_default="medium"
+    ) == "medium"
+    assert classify_permission(
+        "aws", combination[1], unknown_default="medium"
+    ) == "critical"
+    assert live_validated_disclosure_documentation[combination[0]] == (
+        "aws-post-exploitation/aws-backup-post-exploitation/README.md"
+    )
+
+
+def test_live_validated_backup_vault_policy_self_grant_and_deletion():
+    policy_action = "backup:PutBackupVaultAccessPolicy"
+    deletion_action = "backup:DeleteRecoveryPoint"
+    assert [policy_action] in very_sensitive_combinations
+    assert [deletion_action] in sensitive_combinations
+    assert classify_permission(
+        "aws", policy_action, unknown_default="medium"
+    ) == "critical"
+    assert classify_permission(
+        "aws", deletion_action, unknown_default="medium"
+    ) == "high"
+
+
+def test_live_validated_backup_access_point_requires_full_policy_chain():
+    combination = (
+        "backup:CreateBackupAccessPoint",
+        "backup:DescribeBackupAccessPoint",
+        "s3:CreateAccessPoint",
+        "s3:GetAccessPoint",
+        "s3:PutAccessPointPolicy",
+    )
+    sensitive = {tuple(candidate) for candidate in sensitive_combinations}
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert combination in sensitive
+    assert ("s3:PutAccessPointPolicy",) in critical
+    assert ("backup:CreateBackupAccessPoint",) not in sensitive
+    assert ("backup:DescribeBackupAccessPoint",) not in sensitive
+    assert classify_permission(
+        "aws", "backup:CreateBackupAccessPoint", unknown_default="medium"
+    ) == "medium"
+    assert classify_permission(
+        "aws", "backup:DescribeBackupAccessPoint", unknown_default="medium"
+    ) == "low"
+    assert classify_permission(
+        "aws", "s3:PutAccessPointPolicy", unknown_default="medium"
+    ) == "critical"
+    for action in combination:
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-post-exploitation/aws-backup-post-exploitation/README.md"
+        )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

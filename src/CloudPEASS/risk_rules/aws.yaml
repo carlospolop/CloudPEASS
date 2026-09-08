@@ -15,6 +15,7 @@ provider: aws
 ## Exact action names that must always be classified as `critical`.
 ## Matching is case-insensitive in the classifier.
 critical_exact:
+  - backup:PutBackupVaultAccessPolicy
   - codeartifact:GetAuthorizationToken
   - ec2:AssociateIamInstanceProfile
   - ec2:GetPasswordData
@@ -31,6 +32,7 @@ critical_exact:
   - lambda:UpdateFunctionCode
   - lambda:UpdateFunctionConfiguration
   - s3:PutBucketPolicy
+  - s3:PutAccessPointPolicy
   # S3 boundary-changing ACL operations (treat as critical via exact match)
   - s3:PutBucketAcl
   - s3:PutObjectAcl
@@ -50,8 +52,13 @@ critical_exact:
 ## EVIDENCE-BACKED DOWNGRADES
 ## =====================
 
-## Upstream critical entries that have no supported caller-facing attack API.
+## Exact actions that are only medium in isolation. Their documented companion
+## permissions can still form high-impact combinations.
 medium_override_exact:
+  # The caller also needs iam:PassRole, a capable restore role, and access to
+  # the restored target before this becomes a sensitive-data path.
+  - backup:StartRestoreJob
+  # No supported caller-facing API exposes connection credentials directly.
   - events:RetrieveConnectionCredentials
 
 ## =====================
@@ -71,6 +78,7 @@ high_exact:
   - appsync:ListApiKeys
   - appstream:CreateStreamingURL
   - autoscaling:DescribeLaunchConfigurations
+  - backup:DeleteRecoveryPoint
   - batch:DescribeJobDefinitions
   - bedrock:Retrieve
   - bedrock-agentcore:GetWorkloadAccessTokenForUserId
@@ -181,6 +189,7 @@ high_override_exact:
   - appsync:ListApiKeys
   - appstream:CreateStreamingURL
   - autoscaling:DescribeLaunchConfigurations
+  - backup:DeleteRecoveryPoint
   - batch:DescribeJobDefinitions
   - bedrock:Retrieve
   - bedrock-agentcore:GetWorkloadAccessTokenForUserId

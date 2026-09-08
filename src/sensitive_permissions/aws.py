@@ -4,6 +4,8 @@ very_sensitive_combinations = [
     ["[*]"],
     ["iam:PassRole"],
 
+    ["backup:PutBackupVaultAccessPolicy"],
+
     ["codebuild:StartBuild"],
     ["codebuild:StartBuildBatch"],
 
@@ -125,6 +127,7 @@ very_sensitive_combinations = [
 
     ["s3:PutBucketPolicy"],
     ["s3:PutBucketAcl"],
+    ["s3:PutAccessPointPolicy"],
     ["s3:PutObjectAcl"],
     ["s3:PutObjectVersionAcl"],
 
@@ -162,6 +165,15 @@ sensitive_combinations = [
     ["appstream:CreateStreamingURL"],
     ["athena:GetQueryExecution"],
     ["autoscaling:DescribeLaunchConfigurations"],
+    ["backup:DeleteRecoveryPoint"],
+    ["backup:StartRestoreJob", "iam:PassRole"],
+    [
+        "backup:CreateBackupAccessPoint",
+        "backup:DescribeBackupAccessPoint",
+        "s3:CreateAccessPoint",
+        "s3:GetAccessPoint",
+        "s3:PutAccessPointPolicy",
+    ],
     ["batch:DescribeJobDefinitions"],
     ["bedrock:Retrieve"],
     ["bedrock-agentcore:GetWorkloadAccessTokenForUserId"],
@@ -408,10 +420,13 @@ sensitive_combinations = [
 # evidence. Keep this deliberately narrow: documentation-only candidates do
 # not belong here.
 tested_risk_documentation = {
+    "backup:DeleteRecoveryPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
+    "backup:PutBackupVaultAccessPolicy": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "iot:OpenTunnel": "aws-services/aws-iot-core-enum.md",
     "iot:Publish": "aws-services/aws-iot-core-enum.md",
     "lambda:GetFunction": "aws-privilege-escalation/aws-lambda-privesc/README.md",
     "route53domains:GetDomainDetail": "aws-privilege-escalation/aws-route53-domains-privesc/README.md",
+    "s3:PutAccessPointPolicy": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "sts:GetFederationToken": "aws-privilege-escalation/aws-sts-privesc/README.md",
 }
 
@@ -430,6 +445,9 @@ live_validated_disclosure_documentation = {
     "appsync:GraphQL": "aws-services/aws-appsync-enum.md",
     "appsync:ListApiKeys": "aws-services/aws-appsync-enum.md",
     "autoscaling:DescribeLaunchConfigurations": "aws-services/aws-ec2-ebs-elb-ssm-vpc-and-vpn-enum/README.md",
+    "backup:CreateBackupAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
+    "backup:DescribeBackupAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
+    "backup:StartRestoreJob": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "batch:DescribeJobDefinitions": "aws-services/aws-batch-enum.md",
     "bedrock:Retrieve": "aws-services/aws-bedrock-enum.md",
     "bedrock-agentcore:GetWorkloadAccessTokenForUserId": "aws-services/aws-bedrock-enum.md",
@@ -503,6 +521,9 @@ live_validated_disclosure_documentation = {
     "sagemaker:DescribeModel": "aws-services/aws-sagemaker-enum/README.md",
     "sagemaker:DescribeTrainingJob": "aws-services/aws-sagemaker-enum/README.md",
     "s3:GetDataAccess": "aws-services/aws-s3-athena-and-glacier-enum.md",
+    "s3:CreateAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
+    "s3:GetAccessPoint": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
+    "s3:PutAccessPointPolicy": "aws-post-exploitation/aws-backup-post-exploitation/README.md",
     "s3vectors:GetVectors": "aws-services/aws-bedrock-enum.md",
     "s3vectors:ListVectors": "aws-services/aws-bedrock-enum.md",
     "s3vectors:QueryVectors": "aws-services/aws-bedrock-enum.md",

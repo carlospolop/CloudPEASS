@@ -670,10 +670,13 @@ class AwsRiskClassificationTest(unittest.TestCase):
 
     def test_live_validated_high_impact_paths_have_evidence(self) -> None:
         expected = {
+            "backup:DeleteRecoveryPoint": "high",
+            "backup:PutBackupVaultAccessPolicy": "critical",
             "iot:OpenTunnel": "critical",
             "iot:Publish": "high",
             "lambda:GetFunction": "high",
             "route53domains:GetDomainDetail": "high",
+            "s3:PutAccessPointPolicy": "critical",
             "sts:GetFederationToken": "high",
         }
         self.assertEqual(set(tested_risk_documentation), set(expected))
