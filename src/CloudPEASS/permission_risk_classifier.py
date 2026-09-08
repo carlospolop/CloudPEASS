@@ -461,6 +461,14 @@ _AZURE_HIGH_EXACT = frozenset(
         # event. Notification Hubs returned a seeded PNS credential verbatim.
         # Both impacts depend on target configuration, so they remain High.
         "microsoft.insights/components/apikeys/action",
+        # The generated Live Metrics token changed the same data-plane request
+        # from HTTP 401 to HTTP 200 and can expose real-time requests, traces,
+        # dependencies, exceptions, and events from the target component.
+        "microsoft.insights/generatelivetoken/read",
+        # Health Bot listSecrets returned its API, authentication, and web-chat
+        # secrets. A JWT signed with the recovered API secret authenticated to
+        # the target bot's scenario-management endpoint.
+        "microsoft.healthbot/healthbots/listsecrets/action",
         "microsoft.notificationhubs/namespaces/notificationhubs/pnscredentials/action",
         "microsoft.apimanagement/service/policies/read",
         "microsoft.apimanagement/service/apis/policies/read",

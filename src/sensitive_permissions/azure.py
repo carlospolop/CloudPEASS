@@ -263,6 +263,8 @@ sensitive_combinations = [
     ["Microsoft.Insights/actionGroups/read"],
     ["Microsoft.Insights/webtests/read"],
     ["Microsoft.Insights/Components/ApiKeys/Action"],
+    ["Microsoft.Insights/generateLiveToken/read"],
+    ["Microsoft.HealthBot/healthBots/listSecrets/action"],
     ["Microsoft.NotificationHubs/Namespaces/NotificationHubs/pnsCredentials/action"],
     ["Microsoft.ContainerRegistry/registries/webhooks/getCallbackConfig/action"],
     ["Microsoft.ApiManagement/service/policies/read"],

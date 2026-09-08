@@ -280,6 +280,8 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Purview/accounts/listkeys/action": "high",
             "Microsoft.BotService/botServices/channels/listchannelwithkeys/action": "high",
             "Microsoft.Insights/Components/ApiKeys/Action": "high",
+            "Microsoft.Insights/generateLiveToken/read": "high",
+            "Microsoft.HealthBot/healthBots/listSecrets/action": "high",
             "Microsoft.NotificationHubs/Namespaces/NotificationHubs/pnsCredentials/action": "high",
             "Microsoft.ApiManagement/service/subscriptions/listSecrets/action": "high",
             "Microsoft.Logic/integrationAccounts/listCallbackUrl/action": "high",
