@@ -697,13 +697,63 @@ def test_workdocs_document_metadata_is_not_a_sensitive_data_finding():
 
 def test_unexecuted_euc_write_candidates_are_not_promoted():
     for permission in (
-        "appstream:CreateStreamingURL",
         "workmail:AssumeImpersonationRole",
         "workmail:StartMailboxExportJob",
     ):
         assert classify_permission(
             "aws", permission, unknown_default="medium"
         ) == "medium"
+
+
+def test_live_validated_appstream_streaming_url_is_high():
+    assert classify_permission(
+        "aws", "appstream:CreateStreamingURL", unknown_default="medium"
+    ) == "high"
+    assert ["appstream:CreateStreamingURL"] in sensitive_combinations
+
+
+def test_live_validated_low_cost_configuration_disclosures_are_high():
+    for permission in (
+        "autoscaling:DescribeLaunchConfigurations",
+        "appconfig:GetHostedConfigurationVersion",
+        "appsync:ListApiKeys",
+        "batch:DescribeJobDefinitions",
+        "cloudformation:DescribeStacks",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ListExports",
+        "events:ListTargetsByRule",
+        "glue:GetConnection",
+        "glue:GetJob",
+        "glue:GetWorkflowRunProperties",
+        "emr-serverless:GetApplication",
+        "imagebuilder:GetComponent",
+        "kinesisanalytics:DescribeApplication",
+        "pipes:DescribePipe",
+        "sagemaker:DescribeModel",
+        "scheduler:GetSchedule",
+        "ssm:GetDocument",
+        "states:DescribeStateMachine",
+    ):
+        assert classify_permission(
+            "aws", permission, unknown_default="medium"
+        ) == "high"
+        assert [permission] in sensitive_combinations
+
+
+def test_elastic_beanstalk_configuration_secret_requires_s3_dependencies():
+    assert [
+        "elasticbeanstalk:DescribeConfigurationSettings",
+        "s3:CreateBucket",
+        "s3:GetBucketLocation",
+        "s3:GetObject",
+        "s3:ListBucket",
+    ] in sensitive_combinations
+    assert classify_permission(
+        "aws",
+        "elasticbeanstalk:DescribeConfigurationSettings",
+        unknown_default="medium",
+    ) == "low"
 
 
 def test_workspaces_control_plane_reads_remain_low_without_data_evidence():
@@ -716,6 +766,12 @@ def test_workspaces_control_plane_reads_remain_low_without_data_evidence():
         assert classify_permission(
             "aws", permission, unknown_default="medium"
         ) == "low"
+
+
+def test_synthetics_get_canary_stays_low_when_environment_values_are_omitted():
+    assert classify_permission(
+        "aws", "synthetics:GetCanary", unknown_default="medium"
+    ) == "low"
 
 
 if __name__ == "__main__":

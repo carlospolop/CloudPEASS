@@ -64,6 +64,15 @@ high_exact:
   - amplify:GetApp
   - amplify:GetJob
   - apigateway:GET
+  - appconfig:GetHostedConfigurationVersion
+  - appsync:ListApiKeys
+  - appstream:CreateStreamingURL
+  - autoscaling:DescribeLaunchConfigurations
+  - batch:DescribeJobDefinitions
+  - cloudformation:DescribeStacks
+  - cloudformation:GetTemplate
+  - cloudformation:GetTemplateSummary
+  - cloudformation:ListExports
   - cloudfront:GetDistribution
   - cloudfront:GetDistributionConfig
   - cloudfront:GetFunction
@@ -88,6 +97,13 @@ high_exact:
   - ec2:DescribeLaunchTemplateVersions
   - ecr:GetDownloadUrlForLayer
   - ecs:DescribeTaskDefinition
+  - emr-serverless:GetApplication
+  - events:ListTargetsByRule
+  - glue:GetConnection
+  - glue:GetJob
+  - glue:GetWorkflowRunProperties
+  - imagebuilder:GetComponent
+  - kinesisanalytics:DescribeApplication
   - lambda:GetFunction
   - lambda:GetFunctionConfiguration
   - lambda:GetLayerVersion
@@ -96,15 +112,20 @@ high_exact:
   - invoicing:BatchGetInvoiceProfile
   - invoicing:GetInvoicePDF
   - invoicing:ListInvoiceSummaries
+  - pipes:DescribePipe
   - route53domains:GetDomainDetail
+  - sagemaker:DescribeModel
   - sagemaker:DescribeTrainingJob
+  - scheduler:GetSchedule
   - ses:GetSuppressedDestination
   - ses:ListSuppressedDestinations
   - secretsmanager:PutSecretValue
   - secretsmanager:UpdateSecret
   - sns:ListSubscriptions
   - sns:ListSubscriptionsByTopic
+  - ssm:GetDocument
   - ssm:GetParameterHistory
+  - states:DescribeStateMachine
   - sts:GetFederationToken
   - tax:GetTaxRegistration
   - tax:ListTaxRegistrations
@@ -116,6 +137,15 @@ high_override_exact:
   - amplify:GetApp
   - amplify:GetJob
   - apigateway:GET
+  - appconfig:GetHostedConfigurationVersion
+  - appsync:ListApiKeys
+  - appstream:CreateStreamingURL
+  - autoscaling:DescribeLaunchConfigurations
+  - batch:DescribeJobDefinitions
+  - cloudformation:DescribeStacks
+  - cloudformation:GetTemplate
+  - cloudformation:GetTemplateSummary
+  - cloudformation:ListExports
   - cloudfront:GetDistribution
   - cloudfront:GetDistributionConfig
   - cloudfront:GetFunction
@@ -139,15 +169,27 @@ high_override_exact:
   - ec2:GetPasswordData
   - ecr:GetDownloadUrlForLayer
   - ecs:DescribeTaskDefinition
+  - emr-serverless:GetApplication
+  - events:ListTargetsByRule
+  - glue:GetConnection
+  - glue:GetJob
+  - glue:GetWorkflowRunProperties
+  - imagebuilder:GetComponent
+  - kinesisanalytics:DescribeApplication
   - invoicing:BatchGetInvoiceProfile
   - invoicing:GetInvoicePDF
   - invoicing:ListInvoiceSummaries
+  - pipes:DescribePipe
+  - sagemaker:DescribeModel
   - sagemaker:DescribeTrainingJob
+  - scheduler:GetSchedule
   - ses:GetSuppressedDestination
   - ses:ListSuppressedDestinations
   - sns:ListSubscriptions
   - sns:ListSubscriptionsByTopic
+  - ssm:GetDocument
   - ssm:GetParameterHistory
+  - states:DescribeStateMachine
   - sts:GetDelegatedAccessToken
   - logs:FilterLogEvents
   - sts:GetFederationToken
@@ -213,7 +255,6 @@ low_exact:
   - aoss:BatchGetCollection
   - amplifybackend:GetToken
   - aoss:BatchGetLifecyclePolicy
-  - appconfig:GetHostedConfigurationVersion
   - appconfig:ListConfigurationProfiles
   - appconfig:ListHostedConfigurationVersions
   - appfabric:GetAppAuthorization
@@ -236,6 +277,7 @@ low_exact:
   - logs:PutLogEvents
   - route53:GetGeoLocation
   - route53:ListGeoLocations
+  - synthetics:GetCanary
   - sts:GetCallerIdentity
   - sts:GetSessionToken
   # Metadata only. Document bytes require GetDocumentVersion with Fields=SOURCE.
