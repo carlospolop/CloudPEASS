@@ -38,6 +38,11 @@ very_sensitive_combinations = [
     # the corresponding public endpoint served the injected canary.
     ["Microsoft.Web/sites/sitecontainers/write"],
     ["Microsoft.Web/sites/slots/sitecontainers/write"],
+    # Live validated independently on production and a deployment slot: each
+    # exact action redirected deployment to an attacker-controlled public Git
+    # repository and the corresponding endpoint served the injected canary.
+    ["Microsoft.Web/sites/sourcecontrols/write"],
+    ["Microsoft.Web/sites/slots/sourcecontrols/write"],
 
     ["Microsoft.Automation/automationAccounts/runbooks/draft/write", "Microsoft.Automation/automationAccounts/runbooks/draft/content/write", "Microsoft.Automation/automationAccounts/runbooks/draft/testJob/write"],
     ["Microsoft.Automation/automationAccounts/runbooks/draft/write", "Microsoft.Automation/automationAccounts/runbooks/draft/content/write", "Microsoft.Automation/automationAccounts/runbooks/publish/action", "Microsoft.Automation/automationAccounts/jobs/write"],

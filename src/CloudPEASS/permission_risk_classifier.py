@@ -276,6 +276,11 @@ _AZURE_CRITICAL_EXACT = frozenset(
         # identity, environment, filesystem, and network context.
         "microsoft.web/sites/sitecontainers/write",
         "microsoft.web/sites/slots/sitecontainers/write",
+        # Exact-role live tests redirected production/slot deployment to an
+        # attacker-controlled public Git branch. The deployed code then served
+        # a distinct canary from each target endpoint.
+        "microsoft.web/sites/sourcecontrols/write",
+        "microsoft.web/sites/slots/sourcecontrols/write",
         "microsoft.web/sites/slots/publishxml/action",
         "microsoft.web/sites/slots/config/list/action",
         # Live validation confirmed that start/action accepts a per-execution

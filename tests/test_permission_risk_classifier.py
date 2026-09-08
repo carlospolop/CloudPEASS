@@ -250,6 +250,8 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.Web/sites/slots/publish/action": "critical",
             "Microsoft.Web/sites/sitecontainers/write": "critical",
             "Microsoft.Web/sites/slots/sitecontainers/write": "critical",
+            "Microsoft.Web/sites/sourcecontrols/write": "critical",
+            "Microsoft.Web/sites/slots/sourcecontrols/write": "critical",
             "Microsoft.CognitiveServices/accounts/connections/listsecrets/action": "critical",
             "Microsoft.CognitiveServices/accounts/projects/connections/listsecrets/action": "critical",
             "Microsoft.ApiManagement/service/namedValues/listValue/action": "critical",
