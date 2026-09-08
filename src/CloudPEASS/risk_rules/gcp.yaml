@@ -80,6 +80,12 @@ high_exact:
   - cloudtasks.tasks.list
   - gsuiteaddons.deployments.update
   - compute.instances.getSerialPortOutput
+  - compute.projects.get
+  - compute.instanceSettings.get
+  - compute.instances.get
+  - compute.instances.list
+  - compute.instanceTemplates.get
+  - compute.instanceTemplates.list
   - compute.instances.setServiceAccount
   - container.clusters.getCredentials
   - container.pods.attach

@@ -143,6 +143,12 @@ sensitive_combinations = [
     ["cloudsql.instances.connect"],
     ["cloudsql.instances.export"],
     ["cloudsql.instances.executeSql", "cloudsql.instances.login"],
+    ["compute.projects.get"],
+    ["compute.instanceSettings.get"],
+    ["compute.instances.get"],
+    ["compute.instances.list"],
+    ["compute.instanceTemplates.get"],
+    ["compute.instanceTemplates.list"],
     ["compute.instances.getSerialPortOutput"],
     ["datastore.entities.create"],
     ["datastore.entities.delete"],
@@ -295,6 +301,30 @@ risk_documentation = (
     ("composer.*", "gcp-privilege-escalation/gcp-composer-privesc.md"),
     (
         "compute.instances.getSerialPortOutput",
+        "gcp-post-exploitation/gcp-compute-post-exploitation.md",
+    ),
+    (
+        "compute.projects.get",
+        "gcp-post-exploitation/gcp-compute-post-exploitation.md",
+    ),
+    (
+        "compute.instanceSettings.get",
+        "gcp-post-exploitation/gcp-compute-post-exploitation.md",
+    ),
+    (
+        "compute.instances.get",
+        "gcp-post-exploitation/gcp-compute-post-exploitation.md",
+    ),
+    (
+        "compute.instances.list",
+        "gcp-post-exploitation/gcp-compute-post-exploitation.md",
+    ),
+    (
+        "compute.instanceTemplates.get",
+        "gcp-post-exploitation/gcp-compute-post-exploitation.md",
+    ),
+    (
+        "compute.instanceTemplates.list",
         "gcp-post-exploitation/gcp-compute-post-exploitation.md",
     ),
     ("compute.*", "gcp-privilege-escalation/gcp-compute-privesc/README.md"),
