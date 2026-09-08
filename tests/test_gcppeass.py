@@ -530,6 +530,13 @@ def test_connector_fallback_and_resource_catalog_cover_data_plane_permissions():
     ]
 
 
+def test_application_integration_fallback_covers_tested_credential_paths():
+    assert {
+        "integrations.authConfigs.get",
+        "integrations.integrations.invoke",
+    } <= BUILTIN_FALLBACK_PERMISSIONS
+
+
 def test_testable_catalog_drops_cross_service_permissions():
     peass = bare_peass()
     peass._testable_cache = {}
@@ -835,6 +842,17 @@ def test_cross_cloud_notes_cover_validated_workspace_trust_edges():
     assert "not access to every Workspace user" in integration_notes[0]
     assert "stored API key" in integration_notes[0]
     assert "never invokes an integration" in integration_notes[0]
+
+    auth_config_notes = peass._cross_cloud_pivot_notes(
+        project, ["integrations.authConfigs.get"]
+    )
+    assert len(auth_config_notes) == 1
+    assert "returns the decrypted authentication profile" in auth_config_notes[0]
+    assert "OAuth access and refresh tokens" in auth_config_notes[0]
+    assert "get-only principal" in auth_config_notes[0]
+    assert "authConfigs.list remained denied" in auth_config_notes[0]
+    assert "not automatic domain-wide access" in auth_config_notes[0]
+    assert "never calls authConfigs.get" in auth_config_notes[0]
 
     sa = peass.normalize_resource(
         "service-account:runner@demo-project.iam.gserviceaccount.com"

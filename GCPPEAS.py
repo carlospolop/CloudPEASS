@@ -237,6 +237,7 @@ BUILTIN_FALLBACK_PERMISSIONS = frozenset(
         "dns.resourceRecordSets.list",
         "dns.resourceRecordSets.update",
         "gsuiteaddons.deployments.update",
+        "integrations.authConfigs.get",
         "integrations.integrations.invoke",
         "iam.serviceAccountKeys.create",
         "iam.serviceAccountKeys.delete",
@@ -2109,6 +2110,20 @@ class GCPPEASS(CloudPEASS):
                 "API key. A known integration name and trigger ID are enough, so denied discovery "
                 "is not a defense. GCPPEASS only tests IAM and never invokes an integration or "
                 "connector action."
+            )
+        if "integrations.authConfigs.get" in permission_set:
+            notes.append(
+                "Critical Application Integration credential-vault disclosure: "
+                "integrations.authConfigs.get returns the decrypted authentication profile, not "
+                "just metadata. Depending on the profile, the response can contain a raw bearer "
+                "token, OAuth access and refresh tokens, an OAuth client secret, a username and "
+                "password, JWT signing material, or service-account configuration. A get-only "
+                "principal was live-tested successfully while authConfigs.list remained denied. "
+                "For a Google OAuth profile, the token reaches only the authorized Workspace user "
+                "and scopes; it is not automatic domain-wide access. If list is denied, recover a "
+                "known auth-config UUID from integration source, Terraform state, logs, or Cloud "
+                "Asset Inventory. GCPPEASS detects the IAM permission at project scope and never "
+                "calls authConfigs.get, because doing so would retrieve secrets."
             )
         if "iam.googleapis.com/workloadIdentityPoolProviders.create" in permission_set:
             notes.append(

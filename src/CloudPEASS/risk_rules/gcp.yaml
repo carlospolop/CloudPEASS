@@ -39,6 +39,7 @@ critical_exact:
   - iam.googleapis.com/workloadIdentityPoolProviders.update
   - iam.googleapis.com/workloadIdentityPools.undelete
   - iam.googleapis.com/workloadIdentityPools.update
+  - integrations.authConfigs.get
   - osconfig.patchJobs.exec
   - resourcemanager.folders.setIamPolicy
   - resourcemanager.organizations.setIamPolicy

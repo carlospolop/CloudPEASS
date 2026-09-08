@@ -26,6 +26,7 @@ from src.sensitive_permissions.gcp import (
         "iam.googleapis.com/workloadIdentityPoolProviders.update",
         "iam.googleapis.com/workloadIdentityPools.undelete",
         "iam.googleapis.com/workloadIdentityPools.update",
+        "integrations.authConfigs.get",
         "container.pods.exec",
         "container.nodes.proxy",
         "container.serviceAccounts.createToken",

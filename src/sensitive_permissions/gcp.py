@@ -29,6 +29,7 @@ very_sensitive_combinations = [
     ["apikeys.keys.getKeyString"],
     ["cloudkms.cryptoKeyVersions.useToDecrypt"],
     ["cloudkms.cryptoKeyVersions.useToDecryptViaDelegation"],
+    ["integrations.authConfigs.get"],
     ["secretmanager.versions.access"],
     ["storage.hmacKeys.create"],
 
@@ -245,6 +246,10 @@ risk_documentation = (
     ),
     (
         "integrations.integrations.invoke",
+        "gcp-to-workspace-pivoting/gcp-application-integration-privesc.md",
+    ),
+    (
+        "integrations.authConfigs.get",
         "gcp-to-workspace-pivoting/gcp-application-integration-privesc.md",
     ),
     (
