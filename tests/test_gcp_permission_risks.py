@@ -71,6 +71,8 @@ def test_direct_compromise_permissions_are_critical(permission):
         "compute.instances.list",
         "compute.instanceTemplates.get",
         "compute.instanceTemplates.list",
+        "compute.machineImages.get",
+        "compute.machineImages.list",
         "compute.instances.getSerialPortOutput",
         "healthcare.dicomStores.dicomWebDelete",
         "healthcare.dicomStores.dicomWebRead",

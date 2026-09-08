@@ -149,6 +149,8 @@ sensitive_combinations = [
     ["compute.instances.list"],
     ["compute.instanceTemplates.get"],
     ["compute.instanceTemplates.list"],
+    ["compute.machineImages.get"],
+    ["compute.machineImages.list"],
     ["compute.instances.getSerialPortOutput"],
     ["datastore.entities.create"],
     ["datastore.entities.delete"],
@@ -325,6 +327,14 @@ risk_documentation = (
     ),
     (
         "compute.instanceTemplates.list",
+        "gcp-post-exploitation/gcp-compute-post-exploitation.md",
+    ),
+    (
+        "compute.machineImages.get",
+        "gcp-post-exploitation/gcp-compute-post-exploitation.md",
+    ),
+    (
+        "compute.machineImages.list",
         "gcp-post-exploitation/gcp-compute-post-exploitation.md",
     ),
     ("compute.*", "gcp-privilege-escalation/gcp-compute-privesc/README.md"),

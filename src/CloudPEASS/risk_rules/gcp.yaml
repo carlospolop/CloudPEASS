@@ -86,6 +86,8 @@ high_exact:
   - compute.instances.list
   - compute.instanceTemplates.get
   - compute.instanceTemplates.list
+  - compute.machineImages.get
+  - compute.machineImages.list
   - compute.instances.setServiceAccount
   - container.clusters.getCredentials
   - container.pods.attach
