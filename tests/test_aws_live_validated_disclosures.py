@@ -79,6 +79,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "emr-serverless:GetApplication",
     "emr-serverless:GetJobRun",
     "events:ListTargetsByRule",
+    "firehose:UpdateDestination",
     "execute-api:Invoke",
     "glue:GetConnection",
     "glue:GetJob",
@@ -820,6 +821,18 @@ def test_live_validated_grafana_admin_token_minting():
         assert live_validated_disclosure_documentation[action] == (
             "aws-services/aws-managed-grafana-enum.md"
         )
+
+
+def test_live_validated_firehose_destination_redirect_reuses_delivery_role():
+    action = "firehose:UpdateDestination"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-kinesis-data-firehose-enum.md"
+    )
 
 
 def test_dlm_create_lifecycle_policy_is_not_high_without_passrole():

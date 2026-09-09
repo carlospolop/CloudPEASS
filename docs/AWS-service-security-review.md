@@ -1117,6 +1117,40 @@ roles, including their inline policies, were deleted and exact policy/role inven
 over a useful DLM role, but that is not a high-impact singleton and the accepted API configuration
 alone would not prove snapshot access.
 
+### AWS Data Exchange and Data Pipeline — 2026-09-09
+
+AWS Data Exchange had zero datasets and zero jobs in both tested Regions. The official API
+authorization matrix requires `dataexchange:GetAsset` in addition to `StartJob` for both S3 and
+signed-URL asset exports. Jobs can be created, started, cancelled, and inspected, but the API has
+no delete operation. A synthetic job would therefore leave history without testing an access
+bypass, so no job or dataset was created and the service remains blocked pending a disposable
+existing asset/job.
+
+AWS Data Pipeline likewise returned zero pipelines in both Regions. It is unavailable to new
+customers, so this account cannot safely validate the established create/define/activate plus
+PassRole execution chain. No pipeline was created or modified. The existing documented path
+remains applicable to grandfathered accounts, but this review does not upgrade it from literature
+to live evidence.
+
+### Amazon Data Firehose (`firehose`) — 2026-09-09
+
+`firehose:UpdateDestination` was validated as a conditional live-stream exfiltration primitive.
+A direct-put stream initially delivered to a private source bucket through a dedicated delivery
+role. The exact-stream candidate submitted an `ExtendedS3DestinationUpdate` containing only a new
+`BucketARN`; it deliberately omitted `RoleARN` and had no `iam:PassRole`. Firehose merged the
+partial update, retained the existing role, and moved to a new active version pointing at the
+replacement bucket. A destination-read-only control was denied the update.
+
+After the update settled, the administrator wrote a unique private record to simulate the next
+producer event. Firehose delivered it to the replacement bucket and the candidate's exact-object
+read returned the canary. The candidate could not describe the stream and had no list permission;
+the known stream name, version, and destination ID were supplied to the test. Exploitation requires
+the retained delivery role's S3 policy and, for cross-account delivery, the replacement bucket
+policy to authorize writes. A narrowly scoped role therefore prevents arbitrary redirection.
+
+The stream and delivered object, both buckets, delivery role, candidate/control roles, and every
+inline policy were deleted. Exact stream, bucket, and role inventories returned empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

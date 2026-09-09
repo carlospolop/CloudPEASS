@@ -180,6 +180,7 @@ high_exact:
   - emr-serverless:GetApplication
   - emr-serverless:GetJobRun
   - events:ListTargetsByRule
+  - firehose:UpdateDestination
   - execute-api:Invoke
   - glue:GetConnection
   - glue:GetJob
