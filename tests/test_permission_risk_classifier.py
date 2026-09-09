@@ -200,6 +200,8 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.App/sandboxGroups/sandboxes/executeShellCommand/action": "high",
             "Microsoft.App/agents/listSecrets/action": "high",
             "Microsoft.App/agents/dataconnectors/listSecrets/action": "high",
+            "Microsoft.Automation/automationAccounts/jobs/streams/read": "high",
+            "Microsoft.Automation/automationAccounts/variables/read": "high",
             "Microsoft.App/jobs/start/action": "critical",
             "Microsoft.App/jobs/listSecrets/action": "critical",
             "Microsoft.App/managedEnvironments/daprComponents/listSecrets/action": "critical",

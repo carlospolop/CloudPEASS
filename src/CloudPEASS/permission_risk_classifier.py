@@ -429,6 +429,11 @@ _AZURE_HIGH_EXACT = frozenset(
         # Scope and downstream privileges depend on the target configuration.
         "microsoft.app/agents/listsecrets/action",
         "microsoft.app/agents/dataconnectors/listsecrets/action",
+        # Exact-role live validation recovered historical runbook output from
+        # four stream types and an unencrypted secret-like variable value.
+        # Encrypted Automation variable values remained hidden.
+        "microsoft.automation/automationaccounts/jobs/streams/read",
+        "microsoft.automation/automationaccounts/variables/read",
         # These live-tested credentials or signed callbacks reached only the
         # configured API, bot, map service, artifact, or workflow. Their exact
         # downstream impact is configuration-dependent, so keep them High.

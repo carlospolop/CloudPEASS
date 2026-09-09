@@ -205,6 +205,11 @@ sensitive_combinations = [
     ["Microsoft.ManagedIdentity/userAssignedIdentities/assign/action"],
     ["Microsoft.Automation/automationAccounts/schedules/write", "Microsoft.Automation/automationAccounts/jobSchedules/write"],
     ["Microsoft.Automation/automationAccounts/sourceControls/write"],
+    # Live validated with exact roles. Job streams exposed output, error,
+    # warning, and verbose canaries; variable reads exposed an unencrypted
+    # secret-like value while correctly keeping the encrypted value hidden.
+    ["Microsoft.Automation/automationAccounts/jobs/streams/read"],
+    ["Microsoft.Automation/automationAccounts/variables/read"],
     ["Microsoft.ContainerRegistry/registries/tasks/write"],
     ["Microsoft.ContainerRegistry/registries/taskruns/write"],
     ["Microsoft.ContainerRegistry/registries/scheduleRun/action"],
