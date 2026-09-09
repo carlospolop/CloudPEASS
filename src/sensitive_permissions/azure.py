@@ -210,6 +210,10 @@ sensitive_combinations = [
     # secret-like value while correctly keeping the encrypted value hidden.
     ["Microsoft.Automation/automationAccounts/jobs/streams/read"],
     ["Microsoft.Automation/automationAccounts/variables/read"],
+    # Live validated with an exact role: the action minted an AML endpoint
+    # bearer token that invoked a deployed scoring service after an
+    # unauthenticated request was rejected.
+    ["Microsoft.MachineLearningServices/workspaces/onlineEndpoints/token/action"],
     ["Microsoft.ContainerRegistry/registries/tasks/write"],
     ["Microsoft.ContainerRegistry/registries/taskruns/write"],
     ["Microsoft.ContainerRegistry/registries/scheduleRun/action"],

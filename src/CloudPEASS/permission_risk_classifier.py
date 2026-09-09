@@ -434,6 +434,10 @@ _AZURE_HIGH_EXACT = frozenset(
         # Encrypted Automation variable values remained hidden.
         "microsoft.automation/automationaccounts/jobs/streams/read",
         "microsoft.automation/automationaccounts/variables/read",
+        # Exact-role live validation minted a scoped AML endpoint bearer token
+        # and used it to invoke a deployed scoring service. Impact depends on
+        # the model behind the selected endpoint, so keep this High.
+        "microsoft.machinelearningservices/workspaces/onlineendpoints/token/action",
         # These live-tested credentials or signed callbacks reached only the
         # configured API, bot, map service, artifact, or workflow. Their exact
         # downstream impact is configuration-dependent, so keep them High.
