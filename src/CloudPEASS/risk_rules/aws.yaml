@@ -32,6 +32,8 @@ critical_exact:
   - eks-auth:AssumeRoleForPodIdentity
   - es:UpdateDomainConfig
   - events:RetrieveConnectionCredentials
+  - grafana:CreateWorkspaceApiKey
+  - grafana:CreateWorkspaceServiceAccountToken
   - iam:CreateAccessKey
   - iam:PassRole
   - iot:OpenTunnel

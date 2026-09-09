@@ -806,6 +806,22 @@ def test_live_validated_datasync_delegated_copy_requires_destination_access():
     )
 
 
+def test_live_validated_grafana_admin_token_minting():
+    actions = (
+        "grafana:CreateWorkspaceApiKey",
+        "grafana:CreateWorkspaceServiceAccountToken",
+    )
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    for action in actions:
+        assert (action,) in critical
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "critical"
+        assert live_validated_disclosure_documentation[action] == (
+            "aws-services/aws-managed-grafana-enum.md"
+        )
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

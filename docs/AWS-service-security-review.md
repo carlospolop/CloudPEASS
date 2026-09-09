@@ -1076,6 +1076,32 @@ produce an immediate synthetic investigation dataset. Application Discovery Serv
 returned zero agents in both Regions and has no external host or imported dataset from which to
 prove configuration or network disclosure. None of these checks changed service state.
 
+### Amazon Managed Grafana (`grafana`) — 2026-09-09
+
+Two plaintext bearer-token operations were independently validated on the exact workspace ARN.
+`grafana:CreateWorkspaceApiKey` let its role choose `ADMIN`, returned the key once, and that key
+read the exact canary from a private dashboard over the workspace HTTP API. For current Grafana
+versions, `grafana:CreateWorkspaceServiceAccountToken` alone minted a token for a known existing
+admin service-account ID, and that token independently read the same dashboard. The latter action
+does not create or elevate the service account: its existing Grafana role is therefore a material
+prerequisite.
+
+The empty-permission role was denied both token creations. The API-key candidate could not list
+workspaces, and the service-account-token candidate could not list service accounts. A known
+workspace ID/ARN is therefore required for both, and a known service-account ID for the newer path.
+The current API also warns that legacy workspace API keys will be removed in favor of service
+accounts, so both forms are recorded rather than treating the deprecated operation as complete
+coverage.
+
+The first workspace proved the API-key path with wildcard resource scope. A later combined run
+attached both policies to the exact returned workspace ARN before its several-minute provisioning
+phase, eliminating IAM propagation ambiguity and validating both paths with resource scoping. An
+intermediate same-parameter create was rejected by idempotency before creating a workspace; another
+run exposed the too-late policy attachment and cleaned up normally. All three created workspaces,
+private dashboards, API keys, service account/token, customer-managed workspace roles,
+candidate/control roles, and inline policies were deleted. Exact workspace and role inventories
+returned empty; no Identity Center instance or service-linked role was created.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

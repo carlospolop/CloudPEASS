@@ -134,7 +134,7 @@
 "P1","queued","emr-containers","Amazon EMR on EKS (EMR Containers)","","",""
 "P1","validated","emr-serverless","Amazon EMR Serverless","2026-09-08","Existing live-validation registry and regression coverage: emr-serverless:GetApplication; emr-serverless:GetJobRun.","Reconciled from tested evidence already documented in HackTricks: aws-services/aws-emr-enum.md. No infrastructure was created by this tracker reconciliation."
 "P1","queued","firehose","Amazon Kinesis Firehose","","",""
-"P1","queued","grafana","Amazon Managed Grafana","","",""
+"P1","validated","grafana","Amazon Managed Grafana","2026-09-09","grafana:CreateWorkspaceApiKey; grafana:CreateWorkspaceServiceAccountToken","Each exact-workspace singleton returned an admin bearer token and read the private dashboard canary; empty/list controls denied; workspace/service account/keys/roles deleted."
 "P1","validated","greengrass","AWS IoT Greengrass / AWS IoT Greengrass V2","2026-09-08","Existing live-validation registry and regression coverage: greengrass:GetComponentVersionArtifact.","Reconciled from tested evidence already documented in HackTricks: aws-services/aws-greengrass-enum.md. No infrastructure was created by this tracker reconciliation."
 "P1","queued","guardduty","Amazon GuardDuty","","",""
 "P1","queued","health","AWS Health APIs and Notifications","","",""

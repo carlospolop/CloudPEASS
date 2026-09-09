@@ -68,6 +68,9 @@ very_sensitive_combinations = [
 
     ["gamelift:RequestUploadCredentials"],
 
+    ["grafana:CreateWorkspaceApiKey"],
+    ["grafana:CreateWorkspaceServiceAccountToken"],
+
     ["glue:UpdateDevEndpoint"],
     ["glue:UpdateJob"],
 
@@ -613,6 +616,8 @@ live_validated_disclosure_documentation = {
     "glue:GetWorkflowRunProperties": "aws-post-exploitation/aws-glue-post-exploitation/README.md",
     "geo:GetDevicePosition": "aws-services/aws-location-service-enum.md",
     "geo:GetDevicePositionHistory": "aws-services/aws-location-service-enum.md",
+    "grafana:CreateWorkspaceApiKey": "aws-services/aws-managed-grafana-enum.md",
+    "grafana:CreateWorkspaceServiceAccountToken": "aws-services/aws-managed-grafana-enum.md",
     "greengrass:GetComponentVersionArtifact": "aws-services/aws-greengrass-enum.md",
     "healthlake:ReadResource": "aws-services/aws-healthlake-enum.md",
     "healthlake:SearchEverything": "aws-services/aws-healthlake-enum.md",
