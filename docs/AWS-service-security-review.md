@@ -1275,6 +1275,62 @@ operations, and the current SDK no longer exposes that API family. Both now rema
 isolation; contextual multi-permission chains can still be security-critical. No cluster, step,
 role, Studio, notebook, EC2 instance, or network resource was created or changed.
 
+### Amazon EMR on EKS (`emr-containers`) — 2026-09-09
+
+An all-region inventory found zero virtual clusters and zero managed endpoints across the 27
+Regions exposed by the EMR Containers SDK. A separate all-region EKS inventory found zero EKS
+clusters across 34 SDK Regions. Creating the prerequisite would require a complete EKS cluster,
+compatible managed-node or Karpenter capacity, namespace integration, private networking, load
+balancer controller, execution role, and managed endpoint rather than a small isolated fixture.
+
+AWS's current authorization reference explicitly lists `iam:PassRole` as a dependent action for
+`StartJobRun`. `GetManagedEndpointSessionCredentials` remains a high-value future test: it returns
+a token used to authenticate to a private Jupyter gateway, accepts an `executionRoleArn`, and does
+not list PassRole as a dependent action. End-to-end testing must establish whether an exact-endpoint
+caller can select a role broader than its own and whether kernels actually use that role. Without
+an endpoint and data-plane connection, the token shape alone is not evidence of privilege
+escalation, so no severity or HackTricks attack entry was added. No resource or role was created or
+changed.
+
+### Amazon GuardDuty (`guardduty`) — 2026-09-09
+
+eu-west-1 contains one preserved detector created in 2023, but it is `DISABLED`, has zero findings,
+and has zero associated members; us-east-1 has no detector. `GetFindings` can disclose detailed
+security context when a finding ID is known, but this account has no such target. Creating sample
+findings would leave finding history retained by the service for 90 days and would not satisfy the
+same-session cleanup requirement.
+
+The existing documentation already covers suspending monitoring, suppression filters, trusted-IP
+sets, and publishing-destination deletion. Those actions are defense evasion or availability
+changes, not standalone privilege escalation or sensitive-data access, so they were not promoted
+to High/Critical. Enabling, deleting, or otherwise mutating the preserved detector merely to test
+authorization would change a pre-existing security control. No detector, finding, filter, member,
+IP set, threat-intelligence set, or publishing destination was created or changed.
+
+### AWS Health (`health`) — 2026-09-09
+
+The global us-east-1 Health endpoint rejected `DescribeEvents` with
+`SubscriptionRequiredException`. The account lacks the support-plan prerequisite, so there is no
+event ARN or affected-entity target on which to test incident-detail or resource-identifier
+disclosure. Health incidents cannot be safely manufactured for the lab. No event, subscription,
+role, or resource was created or changed, and the service remains blocked rather than classified
+from response schemas.
+
+### AWS Identity Sync and Identity Store Auth — 2026-09-09
+
+IAM Identity Center still reports zero instances, and current Botocore exposes neither an
+`identity-sync` nor `identitystore-auth` client. Identity Sync's authorization reference defines
+profile, filter, target, start, and stop operations, but there is no identity source or target in
+this account; creating a profile also depends on Directory Service authorization. That service is
+blocked pending an existing synchronized identity environment.
+
+Identity Store Auth is a firmer negative boundary: its official authorization reference states
+that it has no directly invocable API operation. `BatchDeleteSession`, `BatchGetSession`, and
+`ListSessions` are permission-only IAM actions for AWS-managed flows. Without a caller-facing API,
+they do not provide a direct post-exploitation primitive merely because they appear in a policy.
+The prefix is therefore `no_new_positive`. No instance, profile, target, filter, session, role, or
+permission was created or changed.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
