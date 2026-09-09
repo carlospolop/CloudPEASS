@@ -872,6 +872,18 @@ def test_live_validated_elasticache_modify_user_password_takeover():
     )
 
 
+def test_live_validated_memorydb_update_user_password_takeover():
+    action = "memorydb:UpdateUser"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-memorydb-enum.md"
+    )
+
+
 def test_dlm_create_lifecycle_policy_is_not_high_without_passrole():
     action = "dlm:CreateLifecyclePolicy"
     high = {tuple(candidate) for candidate in sensitive_combinations}

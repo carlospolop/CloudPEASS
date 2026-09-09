@@ -1331,6 +1331,90 @@ they do not provide a direct post-exploitation primitive merely because they app
 The prefix is therefore `no_new_positive`. No instance, profile, target, filter, session, role, or
 permission was created or changed.
 
+### Amazon Inspector2 (`inspector2`) — 2026-09-09
+
+The account reports Inspector as `DISABLED` for EC2, ECR, Lambda, Lambda code, and code-repository
+scanning. `ListFindings` and `ListFilters` returned empty inventories, and CIS configuration
+enumeration was rejected because the invoking account is not enabled. There is consequently no
+finding, report, SBOM, scan, or suppression-rule target for a scoped permission test.
+
+`CreateFindingsReport` remains a concrete sensitive-context exfiltration candidate because the
+caller chooses the destination S3 bucket and KMS key, including suitably configured resources in
+another account. A valid test still needs enabled Inspector and at least one private finding.
+Enabling a security service solely for this review would create charges and scan/finding history
+that cannot be erased in the same session, so the candidate remains blocked rather than promoted
+from API shape or documentation alone. Filter, disable, and organization-configuration mutations
+are defense evasion, not standalone privilege escalation or access to protected workload data, and
+therefore do not meet this campaign's High/Critical criterion. No Inspector setting or resource was
+created or changed.
+
+### Retired IoT Analytics, IoT Events, and Fleet Hub services — 2026-09-09
+
+AWS's current General Reference lists all three services in full shutdown: AWS IoT Analytics since
+15 December 2025, Fleet Hub for AWS IoT Device Management since 18 October 2025, and AWS IoT
+Events since 20 May 2026. A full shutdown means the service is removed from the AWS portfolio and
+is unavailable in any capacity.
+
+Current calls corroborate that boundary. IoT Analytics `ListChannels` could not connect to either
+the eu-west-1 or us-east-1 service endpoint, IoT Events `ListDetectorModels` could not connect to
+its eu-west-1 endpoint, and the current AWS CLI/Botocore distribution no longer exposes an
+`iotfleethub` client. Historical permissions such as IoT Analytics `GetDatasetContent` and
+`SampleChannelData`, IoT Events detector/input mutations, and Fleet Hub application management
+cannot now reach a service resource. The three prefixes are `no_new_positive`; no legacy
+resource, setting, role, or endpoint was created or changed.
+
+### AWS IoT FleetWise (`iotfleetwise`) — 2026-09-09
+
+The current SDK advertises FleetWise only in ap-south-1, eu-central-1, and us-east-1.
+`GetRegisterAccountStatus` was rejected by the service with `AccessDeniedException` in all three
+Regions even for the lab administrator. The account is therefore not registered and provides no
+signal catalog, model or decoder manifest, vehicle, fleet, campaign, or edge-agent data path.
+
+Creating or approving a campaign that routes existing vehicle signals to an attacker-readable
+destination remains a concrete future data-exfiltration hypothesis. A meaningful validation
+requires a registered account, the complete model/decoder/signal hierarchy, a fleet with a real
+vehicle or Edge agent, and generated private telemetry. Those prerequisites cannot be inferred
+from campaign request fields or safely synthesized through an account rejected by the service.
+No account setting, campaign, vehicle, fleet, IAM role, or destination was created or changed.
+
+### AWS IoT Managed Integrations (`iotmanagedintegrations`) — 2026-09-09
+
+The reachable eu-west-1 endpoint returned zero customer managed things, cloud-connector
+destinations, credential lockers, custom destinations, endpoints, provisioning profiles, device
+discoveries, account associations, OTA tasks/configurations, notifications, event-log
+configurations, or hub configuration. The only listed cloud connector is AWS's catalog entry for
+TP-Link, and default encryption is AWS managed.
+
+`CreateProvisioningProfile` is superficially credential-like: it returns a claim certificate and
+private key. AWS documents those materials as inputs for onboarding a new device, however; they do
+not authenticate as an existing managed thing or expose its state. A custom endpoint and
+subsequent device provisioning are still required. Existing-thing `GetManagedThingState`,
+`GetManagedThingCertificate`, `SendManagedThingCommand`, and connector association/token-refresh
+paths have no target in this account. Creating an unowned physical-device ecosystem would not
+validate compromise of existing data or privilege, so the service remains blocked and nothing was
+created or changed.
+
+### Amazon MemoryDB (`memorydb`) — 2026-09-09
+
+`memorydb:UpdateUser` was validated as a standalone conditional ACL-user credential-takeover
+primitive. A one-node, zero-replica TLS cluster used a custom ACL containing only one
+password-authenticated user with full key and command access. Unauthenticated access was rejected,
+and the original password stored and read a unique canary. An empty-permission role was denied the
+password update.
+
+The candidate role held only `UpdateUser` on the exact user ARN. It replaced the user's complete
+password set, was independently denied `DescribeUsers`, and waited for the user to return to
+`active`. The replacement password then opened a fresh verified-TLS connection and read the exact
+protected canary. No MemoryDB list/describe permission, existing password, cluster-control
+permission, or IAM pass-role permission was used.
+
+The impact is constrained by the target user's existing access string and still requires a known
+user name, endpoint, network reachability, and a useful attached ACL. It is therefore High rather
+than Critical. The first calibration cluster exposed only an SSH quoting error before the data
+plane was contacted; it was completely deleted. The successful cluster, ACL, user, subnet group,
+candidate/control roles and policy, service endpoint, snapshots, and newly created service-linked
+role were also deleted. Final exact-prefix inventories returned zero.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

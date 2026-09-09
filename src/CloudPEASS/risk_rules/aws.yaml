@@ -198,6 +198,7 @@ high_exact:
   - imagebuilder:GetComponent
   - iot:GetThingShadow
   - iot:Publish
+  - memorydb:UpdateUser
   - iotwireless:GetWirelessDevice
   - iotsitewise:BatchGetAssetPropertyAggregates
   - iotsitewise:BatchGetAssetPropertyValue
