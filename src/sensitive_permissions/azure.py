@@ -214,6 +214,10 @@ sensitive_combinations = [
     # Live validated with an exact DataAction: code submitted under a known
     # session identifier read a retained file created by a different caller.
     ["Microsoft.App/sessionPools/executions/action"],
+    # Live validated independently: the direct-process action returned the
+    # victim environment, and the shell action returned victim file/env data.
+    ["Microsoft.App/sandboxGroups/sandboxes/executeCommand/action"],
+    ["Microsoft.App/sandboxGroups/sandboxes/executeShellCommand/action"],
     ["Microsoft.App/containerApps/getAuthToken/action"],
     ["Microsoft.App/jobs/write"],
     ["Microsoft.Web/staticSites/createInvitation/action"],

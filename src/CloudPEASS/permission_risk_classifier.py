@@ -580,6 +580,11 @@ _AZURE_HIGH_EXACT = frozenset(
         # egress-disabled pool. Reusing a known identifier returned a retained
         # file seeded through the same session by a separate principal.
         "microsoft.app/sessionpools/executions/action",
+        # Independently assigned exact DataActions reached an existing ACA
+        # sandbox. Direct-process execution exposed its environment; shell
+        # execution read both its retained file and environment canaries.
+        "microsoft.app/sandboxgroups/sandboxes/executecommand/action",
+        "microsoft.app/sandboxgroups/sandboxes/executeshellcommand/action",
     }
 )
 
