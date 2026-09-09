@@ -424,6 +424,11 @@ _AZURE_HIGH_EXACT = frozenset(
         "microsoft.signalrservice/signalr/regeneratekey/action",
         "microsoft.signalrservice/webpubsub/listkeys/action",
         "microsoft.signalrservice/webpubsub/regeneratekey/action",
+        # Exact-role live validation recovered an SRE Agent OAuth signing
+        # private key and cleartext custom-header credentials from a connector.
+        # Scope and downstream privileges depend on the target configuration.
+        "microsoft.app/agents/listsecrets/action",
+        "microsoft.app/agents/dataconnectors/listsecrets/action",
         # These live-tested credentials or signed callbacks reached only the
         # configured API, bot, map service, artifact, or workflow. Their exact
         # downstream impact is configuration-dependent, so keep them High.

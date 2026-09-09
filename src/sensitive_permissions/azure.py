@@ -218,6 +218,11 @@ sensitive_combinations = [
     # victim environment, and the shell action returned victim file/env data.
     ["Microsoft.App/sandboxGroups/sandboxes/executeCommand/action"],
     ["Microsoft.App/sandboxGroups/sandboxes/executeShellCommand/action"],
+    # Live validated with exact roles. Agent listSecrets returned the
+    # platform-generated OAuth private key, while connector listSecrets
+    # returned cleartext custom-header API credentials hidden by ordinary GET.
+    ["Microsoft.App/agents/listSecrets/action"],
+    ["Microsoft.App/agents/dataconnectors/listSecrets/action"],
     ["Microsoft.App/containerApps/getAuthToken/action"],
     ["Microsoft.App/jobs/write"],
     ["Microsoft.Web/staticSites/createInvitation/action"],

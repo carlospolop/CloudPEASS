@@ -198,6 +198,8 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.App/sessionPools/executions/action": "high",
             "Microsoft.App/sandboxGroups/sandboxes/executeCommand/action": "high",
             "Microsoft.App/sandboxGroups/sandboxes/executeShellCommand/action": "high",
+            "Microsoft.App/agents/listSecrets/action": "high",
+            "Microsoft.App/agents/dataconnectors/listSecrets/action": "high",
             "Microsoft.App/jobs/start/action": "critical",
             "Microsoft.App/jobs/listSecrets/action": "critical",
             "Microsoft.App/managedEnvironments/daprComponents/listSecrets/action": "critical",
@@ -322,6 +324,16 @@ class AzureWildcardClassificationTest(unittest.TestCase):
         for permission, expected in tested_sensitive_data_credentials.items():
             with self.subTest(permission=permission):
                 self.assertEqual(self.classify(permission), expected)
+
+        # The provider advertises these operation names, but neither resource
+        # type was publicly deployable in the live test subscription. Keep the
+        # conservative credential-name fallback until actual impact is proved.
+        for permission in (
+            "Microsoft.App/artifactApps/listSecrets/action",
+            "Microsoft.App/artifacts/listSecrets/action",
+        ):
+            with self.subTest(permission=permission):
+                self.assertEqual(self.classify(permission), "medium")
 
         self.assertEqual(
             self.classify("Microsoft.Compute/virtualMachines/runCommands/write"),
