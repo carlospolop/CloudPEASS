@@ -1151,6 +1151,33 @@ policy to authorize writes. A narrowly scoped role therefore prevents arbitrary 
 The stream and delivered object, both buckets, delivery role, candidate/control roles, and every
 inline policy were deleted. Exact stream, bucket, and role inventories returned empty.
 
+### AWS Database Migration Service (`dms`) — 2026-09-09
+
+`dms:ModifyEndpoint` was validated as a conditional S3-target redirection primitive. A synthetic
+full-load task connected a protected S3 source to an initially private S3 target through a DMS
+service-access role. The exact-endpoint candidate submitted only a replacement `BucketName` and
+`BucketFolder`. DMS retained the stored `ServiceAccessRoleArn`, accepted the update without
+`iam:PassRole`, and automatically re-tested the modified endpoint successfully. A destination-read-
+only control was denied the same update.
+
+The administrator then started the already-created task to model its next legitimate execution.
+DMS copied the one-row source dataset to the replacement bucket, and the candidate's exact-prefix
+`s3:GetObject` recovered the private canary. The candidate had no source S3 permission, DMS list or
+describe action, `dms:TestConnection`, `dms:StartReplicationTask`, or PassRole. This is not an
+arbitrary-bucket primitive: the retained role must already authorize writes to the replacement
+bucket, a cross-account bucket must trust that role, and the task must be stopped/ready for the
+endpoint change and later started. A configured expected bucket owner can further constrain S3
+destinations.
+
+The first isolated endpoint-only run proved the partial update and cleaned an asynchronously
+deleting endpoint. Four guarded end-to-end iterations then resolved the minimum classic-DMS
+requirements: `dms.t3.small` was the smallest available class; DMS 3.4.7+ required public S3 egress
+or a VPC endpoint; original connections had to test successfully; `TestConnection` authorizes both
+endpoint and replication-instance ARNs; and `ModifyEndpoint` itself initiates the replacement
+connection test. Every iteration deleted its task, endpoints/connections, instance, subnet group,
+three buckets and contents, service/candidate/control roles, inline policies, and temporary
+`dms-vpc-role`. Independent exact inventories returned empty.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

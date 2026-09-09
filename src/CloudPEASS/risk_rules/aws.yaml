@@ -170,6 +170,7 @@ high_exact:
   - deadline:AssumeQueueRoleForUser
   - datazone:GetEnvironmentCredentials
   - datasync:StartTaskExecution
+  - dms:ModifyEndpoint
   - ec2:DescribeLaunchTemplateVersions
   - ec2:DescribeInstanceAttribute
   - elasticloadbalancing:ModifyListener

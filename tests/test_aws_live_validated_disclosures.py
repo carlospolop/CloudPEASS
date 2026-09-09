@@ -69,6 +69,7 @@ LIVE_VALIDATED_HIGH_ACTIONS = {
     "deadline:AssumeQueueRoleForRead",
     "deadline:AssumeQueueRoleForUser",
     "datazone:GetEnvironmentCredentials",
+    "dms:ModifyEndpoint",
     "ec2:DescribeLaunchTemplateVersions",
     "ec2:DescribeInstanceAttribute",
     "elasticloadbalancing:ModifyListener",
@@ -832,6 +833,18 @@ def test_live_validated_firehose_destination_redirect_reuses_delivery_role():
     ) == "high"
     assert live_validated_disclosure_documentation[action] == (
         "aws-services/aws-kinesis-data-firehose-enum.md"
+    )
+
+
+def test_live_validated_dms_s3_endpoint_redirect_reuses_access_role():
+    action = "dms:ModifyEndpoint"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-dms-enum.md"
     )
 
 
