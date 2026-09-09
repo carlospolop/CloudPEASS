@@ -38,6 +38,8 @@ very_sensitive_combinations = [
 
     ["ds:ResetUserPassword"],
 
+    ["docdb-elastic:UpdateCluster"],
+
     ["dynamodb:PutResourcePolicy"],
 
     ["ec2:ModifyInstanceAttribute"],
@@ -589,6 +591,7 @@ live_validated_disclosure_documentation = {
     "dynamodb:Query": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
     "dynamodb:Scan": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
     "dynamodb:TransactGetItems": "aws-post-exploitation/aws-dynamodb-post-exploitation/README.md",
+    "docdb-elastic:UpdateCluster": "aws-services/aws-documentdb-enum/README.md",
     "deadline:AssumeQueueRoleForRead": "aws-services/aws-deadline-cloud-enum.md",
     "deadline:AssumeQueueRoleForUser": "aws-services/aws-deadline-cloud-enum.md",
     "datazone:GetEnvironmentCredentials": "aws-services/aws-datazone-enum.md",

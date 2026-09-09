@@ -848,6 +848,18 @@ def test_live_validated_dms_s3_endpoint_redirect_reuses_access_role():
     )
 
 
+def test_live_validated_docdb_elastic_admin_password_takeover():
+    action = "docdb-elastic:UpdateCluster"
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    assert (action,) in critical
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "critical"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-documentdb-enum/README.md"
+    )
+
+
 def test_live_validated_elasticache_modify_user_password_takeover():
     action = "elasticache:ModifyUser"
     high = {tuple(candidate) for candidate in sensitive_combinations}

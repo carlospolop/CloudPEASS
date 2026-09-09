@@ -20,6 +20,7 @@ critical_exact:
   - backup:PutBackupVaultAccessPolicy
   - codeartifact:GetAuthorizationToken
   - cognito-identity:UpdateIdentityPool
+  - docdb-elastic:UpdateCluster
   - dynamodb:PutResourcePolicy
   - ec2:AssociateIamInstanceProfile
   - ec2:GetPasswordData

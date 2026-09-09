@@ -1178,6 +1178,29 @@ connection test. Every iteration deleted its task, endpoints/connections, instan
 three buckets and contents, service/candidate/control roles, inline policies, and temporary
 `dms-vpc-role`. Independent exact inventories returned empty.
 
+### Amazon DocumentDB Elastic Clusters (`docdb-elastic`) — 2026-09-09
+
+`docdb-elastic:UpdateCluster` was validated as a standalone administrator-credential takeover.
+A one-shard `PLAIN_TEXT` elastic cluster stored a unique document through its original administrator
+password. An empty-permission control was denied the password update. The candidate role held only
+`UpdateCluster` on the exact cluster ARN and supplied the required `PLAIN_TEXT` authentication type
+with a replacement administrator password. After the cluster returned to active, that password
+opened a new TLS connection and read the exact protected canary. The candidate was denied
+`GetCluster` and held no list or data-read IAM action.
+
+The path requires a known cluster ARN, endpoint, administrator user name, VPC network reachability,
+and a cluster using plain-text password authentication. It provides database-administrator access
+to protected data and is therefore Critical. The request does not need the existing password, and
+neither `GetCluster` nor list permission is an authorization prerequisite.
+
+Five isolated iterations established the exact boundary. The first exposed a classic-CA versus
+Elastic public-certificate mismatch; the second established direct `mongos` topology; the third
+proved baseline access but showed that `UpdateCluster` requires `authType` alongside the password;
+the fourth accepted the update but was stopped before broad cleanup could overlap a concurrent
+fixture; and the locked final run completed the read. Every cluster, snapshot, service endpoint,
+service-linked role, candidate/control role, and inline policy from all attempts was removed, and
+the final exact inventories were empty.
+
 ### AWS Directory Service (`ds` and `ds-data`) — 2026-09-09
 
 A fresh inventory queried all 32 Regions exposed by the Directory Service SDK. Every reachable
