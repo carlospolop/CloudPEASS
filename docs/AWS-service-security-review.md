@@ -1178,6 +1178,43 @@ connection test. Every iteration deleted its task, endpoints/connections, instan
 three buckets and contents, service/candidate/control roles, inline policies, and temporary
 `dms-vpc-role`. Independent exact inventories returned empty.
 
+### AWS Directory Service (`ds` and `ds-data`) — 2026-09-09
+
+A fresh inventory queried all 32 Regions exposed by the Directory Service SDK. Every reachable
+Region returned zero directories; disabled opt-in Regions returned authorization errors, and one
+disabled endpoint timed out. There is consequently no existing AWS Managed Microsoft AD, Simple
+AD, or AD Connector target on which to exercise either control-plane or Directory Service Data
+mutations. Creating a managed multi-AZ directory solely for this review is not a small disposable
+prerequisite.
+
+The existing documented `ds:ResetUserPassword` path remains High because resetting a known
+resettable directory user's password can take over that AD identity and any applications or AWS
+console roles already assigned to it. Directory Service Data's `ResetUserPassword`,
+`AddGroupMember`, `CreateUser`, and `UpdateUser` are also concrete candidates for credential or
+group-based escalation, but their effect depends on Directory Service Data being enabled, known
+user/group identifiers, and the directory's effective AD authorization. Those candidates remain
+blocked rather than being promoted from API shape alone. No directory, user, group, password,
+role, subnet, or security group was created or changed.
+
+### Amazon ElastiCache (`elasticache`) — 2026-09-09
+
+`elasticache:ModifyUser` was validated as a standalone conditional Redis RBAC credential-takeover
+primitive. A minimal serverless Redis cache used a user group containing a disabled replacement
+default user and one password-authenticated user with access to all keys and commands. From the
+private VPC runner, unauthenticated access was denied and the original password stored a unique
+canary. An empty-permission control was denied `ModifyUser`.
+
+The candidate role had only `elasticache:ModifyUser` on the exact user ARN. It replaced that
+user's password, waited for asynchronous propagation, then opened a new TLS connection with the
+replacement credential and read the exact protected canary. The role was denied `DescribeUsers`
+and had no cache describe/list action. Exploitation still requires a known user ID, an endpoint,
+network reachability, and a target user whose existing access string authorizes useful keys and
+commands; the action is therefore High rather than Critical.
+
+The serverless cache and service-managed endpoint, user group, password user, disabled default
+user, candidate/control roles, inline policy, and any attributable snapshot were deleted. Exact
+inventories and endpoint deltas were empty after teardown.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

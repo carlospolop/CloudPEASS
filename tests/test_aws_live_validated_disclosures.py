@@ -848,6 +848,18 @@ def test_live_validated_dms_s3_endpoint_redirect_reuses_access_role():
     )
 
 
+def test_live_validated_elasticache_modify_user_password_takeover():
+    action = "elasticache:ModifyUser"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "high"
+    assert live_validated_disclosure_documentation[action] == (
+        "aws-services/aws-elasticache.md"
+    )
+
+
 def test_dlm_create_lifecycle_policy_is_not_high_without_passrole():
     action = "dlm:CreateLifecyclePolicy"
     high = {tuple(candidate) for candidate in sensitive_combinations}

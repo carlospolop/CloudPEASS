@@ -173,6 +173,7 @@ high_exact:
   - dms:ModifyEndpoint
   - ec2:DescribeLaunchTemplateVersions
   - ec2:DescribeInstanceAttribute
+  - elasticache:ModifyUser
   - elasticloadbalancing:ModifyListener
   - ebs:GetSnapshotBlock
   - ecr:GetDownloadUrlForLayer
