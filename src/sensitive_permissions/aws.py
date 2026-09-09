@@ -489,7 +489,6 @@ sensitive_combinations = [
     ["workdocs:AddResourcePermissions"],
     ["workdocs:AddUserToGroup"],
 
-    ["dlm:CreateLifecyclePolicy"]
 ]
 
 

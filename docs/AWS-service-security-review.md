@@ -1102,6 +1102,21 @@ private dashboards, API keys, service account/token, customer-managed workspace 
 candidate/control roles, and inline policies were deleted. Exact workspace and role inventories
 returned empty; no Identity Center instance or service-linked role was created.
 
+### Amazon Data Lifecycle Manager (`dlm`) — 2026-09-09
+
+The previously listed singleton `dlm:CreateLifecyclePolicy` high-risk entry was not supported by
+live authorization behavior and has been removed. A syntactically valid untagged snapshot-policy
+request named a disposable DLM service role and targeted an unused synthetic tag. A role with only
+`CreateLifecyclePolicy` was denied specifically for missing `iam:PassRole`; an empty-permission
+control was denied for missing the DLM action. An earlier tagged request correctly stopped first on
+the separate `dlm:TagResource` permission and created nothing.
+
+No lifecycle policy or snapshot was created in either run. The service role and both candidate
+roles, including their inline policies, were deleted and exact policy/role inventories were empty.
+`CreateLifecyclePolicy` may still participate in a path when the caller also has pass-role authority
+over a useful DLM role, but that is not a high-impact singleton and the accepted API configuration
+alone would not prove snapshot access.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

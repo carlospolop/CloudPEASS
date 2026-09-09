@@ -121,7 +121,7 @@
 "P1","blocked","dbqms","Database Query Metadata Service","2026-09-09","No SDK/CLI model or known Query Editor session object","Console-only query tabs/history need a real favorite/history/tab identifier; no disposable session or protocol endpoint was available, so GetQueryString impact is not claimed."
 "P1","blocked","detective","Amazon Detective","2026-09-09","ListGraphs returned zero in eu-west-1 and us-east-1","Creating a graph changes the account-wide security service and needs ingested findings before SearchGraph/investigation data impact can be observed; no graph was enabled."
 "P1","blocked","discovery","AWS Application Discovery Service","2026-09-09","DescribeAgents returned zero in eu-west-1 and us-east-1","Server/configuration/network disclosures require an installed agent or imported discovery dataset; no external host/agent/import source exists and no resource was created."
-"P1","queued","dlm","Amazon Data Lifecycle Manager","","",""
+"P1","no_new_positive","dlm","Amazon Data Lifecycle Manager","2026-09-09","dlm:CreateLifecyclePolicy singleton rejected","Valid untagged policy request with exact action failed on iam:PassRole; empty control failed on dlm action; no policy/snapshot created and all three roles deleted; unsupported High entry removed."
 "P1","queued","dms","AWS Database Migration Service","","",""
 "P1","queued","docdb-elastic","Amazon DocumentDB Elastic Clusters","","",""
 "P1","queued","ds","AWS Directory Service","","",""
