@@ -1259,6 +1259,22 @@ CloudFormation, and Auto Scaling orchestration. A duplicated `autoscaling:Suspen
 in the multi-action legacy chain was also removed. No new attack entry or severity promotion was
 made.
 
+### Amazon EMR (`elasticmapreduce`) — 2026-09-09
+
+An all-region review queried 34 SDK Regions and found zero active classic EMR clusters, Studios,
+or notebook executions in every reachable Region. The current Botocore EMR model exposes no
+legacy operation containing `Editor`. There is therefore no safe existing target on which to test
+whether `AddJobFlowSteps` can execute an inline `command-runner.jar` step under a useful EC2
+instance profile, or whether any legacy notebook flow remains reachable.
+
+Two unsupported singleton severities were removed. `RunJobFlow` documents `iam:PassRole` as a
+dependent action when selecting the EMR service role and EC2 instance profile, so it is not a
+standalone High escalation primitive. `OpenEditorInConsole` was marked Critical in the legacy list
+even though the existing documentation requires a compatible editor and surrounding editor
+operations, and the current SDK no longer exposes that API family. Both now remain Medium in
+isolation; contextual multi-permission chains can still be security-critical. No cluster, step,
+role, Studio, notebook, EC2 instance, or network resource was created or changed.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The

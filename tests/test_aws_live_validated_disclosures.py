@@ -890,6 +890,20 @@ def test_elasticbeanstalk_rebuild_is_not_high_without_code_control():
     ) == "medium"
 
 
+def test_emr_launch_and_legacy_editor_actions_are_not_high_alone():
+    critical = {tuple(candidate) for candidate in very_sensitive_combinations}
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    for action in (
+        "elasticmapreduce:OpenEditorInConsole",
+        "elasticmapreduce:RunJobFlow",
+    ):
+        assert (action,) not in critical
+        assert (action,) not in high
+        assert classify_permission(
+            "aws", action, unknown_default="medium"
+        ) == "medium"
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

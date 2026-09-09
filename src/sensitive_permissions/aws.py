@@ -66,8 +66,6 @@ very_sensitive_combinations = [
     ["elasticfilesystem:DeleteFileSystemPolicy"],
     ["elasticfilesystem:PutFileSystemPolicy"],
 
-    ["elasticmapreduce:OpenEditorInConsole"],
-
     ["gamelift:RequestUploadCredentials"],
 
     ["grafana:CreateWorkspaceApiKey"],
@@ -424,8 +422,6 @@ sensitive_combinations = [
     ["elasticbeanstalk:CreateApplicationVersion", "elasticbeanstalk:UpdateEnvironment", "cloudformation:GetTemplate", "cloudformation:DescribeStackResources", "cloudformation:DescribeStackResource", "autoscaling:DescribeAutoScalingGroups", "autoscaling:SuspendProcesses"],
     ["elasticbeanstalk:DescribeConfigurationSettings", "s3:CreateBucket", "s3:GetBucketLocation", "s3:GetObject", "s3:ListBucket"],
 
-    ["elasticmapreduce:RunJobFlow"],
-    
     ["scheduler:CreateSchedule", "scheduler:UpdateSchedule"],
 
     ["glue:CreateDevEndpoint"],
