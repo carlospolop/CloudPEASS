@@ -195,6 +195,7 @@ class AzureWildcardClassificationTest(unittest.TestCase):
             "Microsoft.DataFactory/factories/pipelines/createRun/action": "high",
             "Microsoft.ContainerRegistry/registries/taskruns/write": "high",
             "Microsoft.ContainerRegistry/registries/scheduleRun/action": "high",
+            "Microsoft.App/sessionPools/executions/action": "high",
             "Microsoft.App/jobs/start/action": "critical",
             "Microsoft.App/jobs/listSecrets/action": "critical",
             "Microsoft.App/managedEnvironments/daprComponents/listSecrets/action": "critical",

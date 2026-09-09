@@ -211,6 +211,9 @@ sensitive_combinations = [
     ["Microsoft.ContainerRegistry/registries/importImage/action"],
     ["Microsoft.ContainerRegistry/registries/tasks/listDetails/action"],
     ["Microsoft.ContainerRegistry/registries/taskruns/listDetails/action"],
+    # Live validated with an exact DataAction: code submitted under a known
+    # session identifier read a retained file created by a different caller.
+    ["Microsoft.App/sessionPools/executions/action"],
     ["Microsoft.App/containerApps/getAuthToken/action"],
     ["Microsoft.App/jobs/write"],
     ["Microsoft.Web/staticSites/createInvitation/action"],

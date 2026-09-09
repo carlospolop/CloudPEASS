@@ -576,6 +576,10 @@ _AZURE_HIGH_EXACT = frozenset(
         # build, then pushed the selected tag. Existing-Task identity reuse
         # was separately blocked by a linked tasks/write requirement.
         "microsoft.containerregistry/registries/schedulerun/action",
+        # An exact DataAction executed attacker-supplied Python in an
+        # egress-disabled pool. Reusing a known identifier returned a retained
+        # file seeded through the same session by a separate principal.
+        "microsoft.app/sessionpools/executions/action",
     }
 )
 
