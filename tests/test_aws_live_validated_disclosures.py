@@ -881,6 +881,15 @@ def test_dlm_create_lifecycle_policy_is_not_high_without_passrole():
     ) == "medium"
 
 
+def test_elasticbeanstalk_rebuild_is_not_high_without_code_control():
+    action = "elasticbeanstalk:RebuildEnvironment"
+    high = {tuple(candidate) for candidate in sensitive_combinations}
+    assert (action,) not in high
+    assert classify_permission(
+        "aws", action, unknown_default="medium"
+    ) == "medium"
+
+
 def test_live_validated_lex_export_disclosure_requires_export_workflow():
     combination = ("lex:CreateExport", "lex:DescribeExport")
     combinations = {tuple(candidate) for candidate in sensitive_combinations}

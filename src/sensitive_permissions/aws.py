@@ -420,9 +420,8 @@ sensitive_combinations = [
     ["elasticfilesystem:ModifyMountTargetSecurityGroups"],
     ["elasticfilesystem:CreateAccessPoint"],
 
-    ["elasticbeanstalk:RebuildEnvironment"],
     ["elasticbeanstalk:CreateApplication", "elasticbeanstalk:CreateEnvironment", "elasticbeanstalk:CreateApplicationVersion", "elasticbeanstalk:UpdateEnvironment"],
-    ["elasticbeanstalk:CreateApplicationVersion", "elasticbeanstalk:UpdateEnvironment", "cloudformation:GetTemplate", "cloudformation:DescribeStackResources", "cloudformation:DescribeStackResource", "autoscaling:DescribeAutoScalingGroups", "autoscaling:SuspendProcesses", "autoscaling:SuspendProcesses"],
+    ["elasticbeanstalk:CreateApplicationVersion", "elasticbeanstalk:UpdateEnvironment", "cloudformation:GetTemplate", "cloudformation:DescribeStackResources", "cloudformation:DescribeStackResource", "autoscaling:DescribeAutoScalingGroups", "autoscaling:SuspendProcesses"],
     ["elasticbeanstalk:DescribeConfigurationSettings", "s3:CreateBucket", "s3:GetBucketLocation", "s3:GetObject", "s3:ListBucket"],
 
     ["elasticmapreduce:RunJobFlow"],

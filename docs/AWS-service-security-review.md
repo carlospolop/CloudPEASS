@@ -1238,6 +1238,27 @@ The serverless cache and service-managed endpoint, user group, password user, di
 user, candidate/control roles, inline policy, and any attributable snapshot were deleted. Exact
 inventories and endpoint deltas were empty after teardown.
 
+### AWS Elastic Beanstalk (`elasticbeanstalk`) — 2026-09-09
+
+An all-region inventory queried the 32 Regions exposed by the SDK and found zero live
+environments. The only remaining application is an unrelated, empty `flask-tutorial2` shell from
+the EB CLI in 2023; it has no version, configuration template, or environment and was preserved.
+Without a live environment there is no workload or instance profile on which to validate
+`UpdateEnvironment` environment-hook injection, application-version deployment, or role-credential
+impact, so those paths remain blocked rather than inferred.
+
+The audit did find a separate 2022 `MyApp` security-lab artifact in us-east-1 with six unprocessed
+versions named after the documented Beanstalk privilege-escalation examples. It had no environment
+or template, and its referenced source bucket was already absent. The exact application and all
+six version records were deleted and polled until absent.
+
+The legacy singleton High entry for `elasticbeanstalk:RebuildEnvironment` was removed. Rebuilding
+an unchanged environment is an availability action; the existing documented compromise requires
+separate control of the source bundle plus the permissions needed for Beanstalk, S3, EC2,
+CloudFormation, and Auto Scaling orchestration. A duplicated `autoscaling:SuspendProcesses` token
+in the multi-action legacy chain was also removed. No new attack entry or severity promotion was
+made.
+
 ### AWS KMS (`kms`) — 2026-09-08
 
 The isolated `kms:CreateGrant` self-grant test is blocked by the mandatory cleanup requirement. The
